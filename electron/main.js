@@ -2,7 +2,6 @@
 process.env.ELECTRON_MODE = "1";
 
 import { app, BrowserWindow, shell, Menu, dialog, powerMonitor, ipcMain, session } from "electron";
-import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -71,7 +70,8 @@ if (isFirstLaunch) {
 
 const ALL_SETTINGS_KEYS = [
   "ANTHROPIC_API_KEY", "RELEVANCE_CONTEXT", "SCORING_INSTRUCTIONS",
-  "FEED_REFRESH_INTERVAL", "SUBSTACK_SESSION", "TWITTER_BEARER_TOKEN", "LINKEDIN_SESSION",
+  "FEED_REFRESH_INTERVAL", "SUBSTACK_SESSION", "TWITTER_SESSION",
+  "LINKEDIN_SESSION", "THREADS_SESSION", "YOUTUBE_SESSION",
 ];
 for (const key of ALL_SETTINGS_KEYS) {
   if (settings[key]) process.env[key] = settings[key];
@@ -178,6 +178,8 @@ function showSettingsDialog() {
 }
 
 // ── Service authentication flows ─────────────────────────────────────────────
+// All services use browser login + cookie capture. The user signs into the
+// service normally in a popup window; we detect the session cookie and store it.
 
 // Helper: save a token via the backend settings API
 async function saveServiceToken(envKey, token) {
@@ -190,162 +192,62 @@ async function saveServiceToken(envKey, token) {
   });
 }
 
-// ── Twitter/X: OAuth 2.0 PKCE ──────────────────────────────────────────────
-function generatePKCE() {
-  const verifier = crypto.randomBytes(32).toString("base64url");
-  const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
-  return { verifier, challenge };
-}
-
-async function connectTwitter() {
-  // Read client ID from settings (user must configure this)
-  const currentSettings = loadSettings();
-  const clientId = currentSettings.TWITTER_CLIENT_ID;
-
-  if (!clientId) {
-    const { response } = await dialog.showMessageBox(mainWindow, {
-      type: "info",
-      title: "Twitter/X Setup Required",
-      message: "X Developer App Required",
-      detail: [
-        "To connect X/Twitter, you need an X Developer account with a registered app.",
-        "",
-        "1. Go to developer.x.com and create a project/app",
-        "2. Set the callback URL to: http://localhost/callback",
-        "3. Copy the Client ID",
-        "4. Enter it in the dialog that follows",
-        "",
-        "Note: Reading tweets requires X API Basic tier ($200/mo).",
-      ].join("\n"),
-      buttons: ["Enter Client ID", "Cancel"],
-    });
-
-    if (response === 1) return { ok: false, error: "Cancelled" };
-
-    // Prompt for client ID using a small input window
-    const id = await promptInput("X/Twitter Client ID", "Paste your OAuth 2.0 Client ID:");
-    if (!id) return { ok: false, error: "No Client ID provided" };
-
-    currentSettings.TWITTER_CLIENT_ID = id;
-    saveSettings(currentSettings);
-    return connectTwitter(); // Retry with the client ID now saved
-  }
-
-  const { verifier, challenge } = generatePKCE();
-  const state = crypto.randomBytes(16).toString("hex");
-  const redirectUri = "http://localhost/callback";
-  const scopes = "tweet.read users.read offline.access";
-
-  const authUrl = new URL("https://x.com/i/oauth2/authorize");
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("scope", scopes);
-  authUrl.searchParams.set("state", state);
-  authUrl.searchParams.set("code_challenge", challenge);
-  authUrl.searchParams.set("code_challenge_method", "S256");
-
-  return new Promise((resolve) => {
-    const authWin = new BrowserWindow({
-      parent: mainWindow,
-      width: 600,
-      height: 700,
-      title: "Sign in to X / Twitter",
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
-    });
-
-    authWin.webContents.on("will-redirect", async (event, url) => {
-      if (!url.startsWith(redirectUri)) return;
-      event.preventDefault();
-
-      const params = new URL(url).searchParams;
-      const code = params.get("code");
-      const returnedState = params.get("state");
-
-      if (returnedState !== state || !code) {
-        authWin.close();
-        return resolve({ ok: false, error: "OAuth state mismatch or no code" });
-      }
-
-      // Exchange code for token
-      try {
-        const tokenRes = await fetch("https://api.x.com/2/oauth2/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            code,
-            grant_type: "authorization_code",
-            client_id: clientId,
-            redirect_uri: redirectUri,
-            code_verifier: verifier,
-          }),
-        });
-
-        const tokenData = await tokenRes.json();
-        authWin.close();
-
-        if (tokenData.access_token) {
-          await saveServiceToken("TWITTER_BEARER_TOKEN", tokenData.access_token);
-          // Also save refresh token if available
-          if (tokenData.refresh_token) {
-            await saveServiceToken("TWITTER_REFRESH_TOKEN", tokenData.refresh_token);
-          }
-          resolve({ ok: true });
-        } else {
-          resolve({ ok: false, error: tokenData.error_description || "Token exchange failed" });
-        }
-      } catch (err) {
-        authWin.close();
-        resolve({ ok: false, error: err.message });
-      }
-    });
-
-    // Also handle navigation to the callback (some OAuth flows use navigation instead of redirect)
-    authWin.webContents.on("will-navigate", (event, url) => {
-      if (url.startsWith(redirectUri)) {
-        // Let will-redirect handle it
-      }
-    });
-
-    authWin.on("closed", () => resolve({ ok: false, error: "Window closed" }));
-    authWin.loadURL(authUrl.toString());
-  });
-}
-
-// ── Substack: Cookie capture via browser login ──────────────────────────────
-async function connectSubstack() {
-  return captureCookie({
+// Service definitions: login URL, cookie to capture, and where to store it.
+// Add new services here — the generic captureCookie() handles the flow.
+const SERVICE_AUTH = {
+  twitter: {
+    title: "Sign in to X / Twitter",
+    loginUrl: "https://x.com/i/flow/login",
+    domain: ".x.com",
+    cookieName: "auth_token",
+    envKey: "TWITTER_SESSION",
+  },
+  substack: {
     title: "Sign in to Substack",
     loginUrl: "https://substack.com/sign-in",
     domain: "substack.com",
     cookieName: "substack.sid",
     envKey: "SUBSTACK_SESSION",
-  });
-}
-
-// ── LinkedIn: Cookie capture via browser login ──────────────────────────────
-async function connectLinkedIn() {
-  return captureCookie({
+  },
+  linkedin: {
     title: "Sign in to LinkedIn",
     loginUrl: "https://www.linkedin.com/login",
     domain: ".linkedin.com",
     cookieName: "li_at",
     envKey: "LINKEDIN_SESSION",
-  });
-}
+  },
+  threads: {
+    title: "Sign in to Threads",
+    loginUrl: "https://www.threads.net/login",
+    domain: ".threads.net",
+    cookieName: "sessionid",
+    envKey: "THREADS_SESSION",
+    // Threads login redirects through Instagram — also check that domain
+    altDomain: ".instagram.com",
+    altCookieName: "sessionid",
+  },
+  youtube: {
+    title: "Sign in to YouTube",
+    loginUrl: "https://accounts.google.com/ServiceLogin?service=youtube&continue=https://www.youtube.com/",
+    domain: ".youtube.com",
+    cookieName: "SID",
+    envKey: "YOUTUBE_SESSION",
+    // YouTube uses multiple cookies; capture the key ones as a JSON bundle
+    captureMultiple: ["SID", "HSID", "SSID", "APISID", "SAPISID", "__Secure-1PSID"],
+  },
+};
 
 // ── Generic cookie capture flow ─────────────────────────────────────────────
-function captureCookie({ title, loginUrl, domain, cookieName, envKey }) {
+function captureCookie(config) {
   return new Promise((resolve) => {
-    // Use a separate session partition so we don't pollute the main session
-    const partition = `persist:auth-${envKey}`;
+    const partition = `persist:auth-${config.envKey}`;
     const authSession = session.fromPartition(partition);
 
     const authWin = new BrowserWindow({
       parent: mainWindow,
-      width: 500,
-      height: 700,
-      title,
+      width: 520,
+      height: 720,
+      title: config.title,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -355,24 +257,43 @@ function captureCookie({ title, loginUrl, domain, cookieName, envKey }) {
 
     let resolved = false;
 
-    // Poll for the target cookie after each navigation
     const checkCookie = async () => {
       if (resolved) return;
       try {
-        const cookies = await authSession.cookies.get({ domain, name: cookieName });
-        if (cookies.length > 0) {
-          resolved = true;
-          const token = cookies[0].value;
-          await saveServiceToken(envKey, token);
-          authWin.close();
-          resolve({ ok: true });
+        if (config.captureMultiple) {
+          // Capture multiple cookies as a JSON bundle
+          const allCookies = await authSession.cookies.get({ domain: config.domain });
+          const found = {};
+          for (const name of config.captureMultiple) {
+            const c = allCookies.find(c => c.name === name);
+            if (c) found[name] = c.value;
+          }
+          // Consider connected once we have at least the primary cookie
+          if (found[config.cookieName]) {
+            resolved = true;
+            await saveServiceToken(config.envKey, JSON.stringify(found));
+            authWin.close();
+            resolve({ ok: true });
+          }
+        } else {
+          // Single cookie capture
+          let cookies = await authSession.cookies.get({ domain: config.domain, name: config.cookieName });
+          // Check alternate domain (e.g., Threads via Instagram)
+          if (cookies.length === 0 && config.altDomain) {
+            cookies = await authSession.cookies.get({ domain: config.altDomain, name: config.altCookieName || config.cookieName });
+          }
+          if (cookies.length > 0) {
+            resolved = true;
+            await saveServiceToken(config.envKey, cookies[0].value);
+            authWin.close();
+            resolve({ ok: true });
+          }
         }
       } catch { /* ignore */ }
     };
 
     authWin.webContents.on("did-navigate", checkCookie);
     authWin.webContents.on("did-navigate-in-page", checkCookie);
-    // Also check periodically for SPAs that don't trigger navigation events
     const interval = setInterval(checkCookie, 2000);
 
     authWin.on("closed", () => {
@@ -380,69 +301,16 @@ function captureCookie({ title, loginUrl, domain, cookieName, envKey }) {
       if (!resolved) resolve({ ok: false, error: "Window closed before login completed" });
     });
 
-    authWin.loadURL(loginUrl);
-  });
-}
-
-// ── Input prompt helper ─────────────────────────────────────────────────────
-function promptInput(title, message) {
-  return new Promise((resolve) => {
-    const win = new BrowserWindow({
-      parent: mainWindow,
-      modal: true,
-      width: 480,
-      height: 200,
-      resizable: false,
-      title,
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
-    });
-
-    const html = `<!DOCTYPE html>
-<html><head><style>
-body { font-family: -apple-system, sans-serif; padding: 20px; background: var(--bg, #1e1e2e); color: var(--fg, #cdd6f4); }
-@media (prefers-color-scheme: light) { body { --bg: #fff; --fg: #1f2328; --ibg: #f6f8fa; --border: #d0d7de; --btn: #0969da; } }
-@media (prefers-color-scheme: dark) { body { --bg: #1e1e2e; --fg: #cdd6f4; --ibg: #313244; --border: #45475a; --btn: #89b4fa; } }
-p { margin-bottom: 10px; font-size: 14px; }
-input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border, #45475a); background: var(--ibg, #313244); color: var(--fg); font-size: 14px; outline: none; box-sizing: border-box; }
-.btns { margin-top: 12px; display: flex; gap: 8px; }
-button { padding: 8px 20px; border-radius: 6px; border: none; background: var(--btn, #89b4fa); color: white; font-weight: 600; cursor: pointer; }
-button.cancel { background: var(--border, #45475a); }
-</style></head><body>
-<p>${message}</p>
-<input id="v" placeholder="Paste here..." autofocus />
-<div class="btns"><button onclick="done()">OK</button><button class="cancel" onclick="window.close()">Cancel</button></div>
-<script>
-const input = document.getElementById('v');
-input.addEventListener('keydown', e => { if (e.key === 'Enter') done(); });
-function done() {
-  const v = input.value.trim();
-  document.title = 'RESULT:' + v;
-}
-</script></body></html>`;
-
-    // Watch for title change to get the result
-    win.on("page-title-updated", (e, newTitle) => {
-      if (newTitle.startsWith("RESULT:")) {
-        const value = newTitle.slice(7);
-        win.close();
-        resolve(value || null);
-      }
-    });
-
-    win.on("closed", () => resolve(null));
-    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    authWin.loadURL(config.loginUrl);
   });
 }
 
 // ── IPC handler for service connections ──────────────────────────────────────
 ipcMain.handle("connect-service", async (event, serviceId) => {
+  const config = SERVICE_AUTH[serviceId];
+  if (!config) return { ok: false, error: `Unknown service: ${serviceId}` };
   console.log(`[Electron] Connecting service: ${serviceId}`);
-  switch (serviceId) {
-    case "twitter": return connectTwitter();
-    case "substack": return connectSubstack();
-    case "linkedin": return connectLinkedIn();
-    default: return { ok: false, error: `Unknown service: ${serviceId}` };
-  }
+  return captureCookie(config);
 });
 
 // ── App lifecycle ────────────────────────────────────────────────────────────

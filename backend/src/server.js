@@ -307,8 +307,10 @@ const SETTINGS_KEYS = [
   "SCORING_INSTRUCTIONS",
   "FEED_REFRESH_INTERVAL",
   "SUBSTACK_SESSION",
-  "TWITTER_BEARER_TOKEN",
+  "TWITTER_SESSION",
   "LINKEDIN_SESSION",
+  "THREADS_SESSION",
+  "YOUTUBE_SESSION",
 ];
 
 function getSettingsFile() {
@@ -338,8 +340,10 @@ app.get("/api/settings", (req, res) => {
     scoringInstructions: saved.SCORING_INSTRUCTIONS || process.env.SCORING_INSTRUCTIONS || "",
     refreshInterval: saved.FEED_REFRESH_INTERVAL || process.env.FEED_REFRESH_INTERVAL || "30",
     substackSession: maskKey(saved.SUBSTACK_SESSION || ""),
-    twitterBearerToken: maskKey(saved.TWITTER_BEARER_TOKEN || ""),
+    twitterSession: maskKey(saved.TWITTER_SESSION || ""),
     linkedinSession: maskKey(saved.LINKEDIN_SESSION || ""),
+    threadsSession: maskKey(saved.THREADS_SESSION || ""),
+    youtubeSession: maskKey(saved.YOUTUBE_SESSION || ""),
   });
 });
 
