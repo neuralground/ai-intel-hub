@@ -151,7 +151,9 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const [analysis, setAnalysis] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newFeed, setNewFeed] = useState({ name: "", url: "", type: "rss", category: "research" });
+  const [newFeed, setNewFeed] = useState({ name: "", url: "", category: "research" });
+  const [addingFeed, setAddingFeed] = useState(false);
+  const [addError, setAddError] = useState(null);
   const [expandedFeed, setExpandedFeed] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [showRecs, setShowRecs] = useState(true);
@@ -209,11 +211,20 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   };
 
   const addFeed = async () => {
-    if (!newFeed.name || !newFeed.url) return;
-    await api.addFeed({ ...newFeed, id: `custom-${Date.now()}`, active: 1 });
-    setNewFeed({ name: "", url: "", type: "rss", category: "research" });
-    setShowAddForm(false);
-    onRefresh();
+    if (!newFeed.url) return;
+    setAddingFeed(true);
+    setAddError(null);
+    try {
+      // Name is optional — backend will infer from RSS title, or we derive from URL
+      const name = newFeed.name || new URL(newFeed.url).hostname.replace(/^www\./, "");
+      await api.addFeed({ name, url: newFeed.url, category: newFeed.category, id: `custom-${Date.now()}`, active: 1 });
+      setNewFeed({ name: "", url: "", category: "research" });
+      setShowAddForm(false);
+      onRefresh();
+    } catch (e) {
+      setAddError(e.message);
+    }
+    setAddingFeed(false);
   };
 
   const enriched = (healthData || feeds).filter(f => f.type !== "x-account");
@@ -254,17 +265,17 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
       {showAddForm && (
         <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", background: "var(--bg-form)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <input placeholder="Feed name" value={newFeed.name} onChange={e => setNewFeed(p => ({ ...p, name: e.target.value }))} style={inp} />
-            <input placeholder="URL" value={newFeed.url} onChange={e => setNewFeed(p => ({ ...p, url: e.target.value }))} style={inp} />
+            <input placeholder="Paste a URL — RSS feed, X profile, YouTube channel, blog..." value={newFeed.url} onChange={e => setNewFeed(p => ({ ...p, url: e.target.value }))} style={inp} onKeyDown={e => e.key === "Enter" && addFeed()} autoFocus />
             <div style={{ display: "flex", gap: 8 }}>
-              <select value={newFeed.type} onChange={e => setNewFeed(p => ({ ...p, type: e.target.value }))} style={{ ...inp, flex: 1 }}>
-                <option value="rss">RSS</option><option value="x-account">X Account</option><option value="scrape">Web Scrape</option>
-              </select>
+              <input placeholder="Name (optional — auto-detected)" value={newFeed.name} onChange={e => setNewFeed(p => ({ ...p, name: e.target.value }))} style={{ ...inp, flex: 1 }} />
               <select value={newFeed.category} onChange={e => setNewFeed(p => ({ ...p, category: e.target.value }))} style={{ ...inp, flex: 1 }}>
                 {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             </div>
-            <button onClick={addFeed} style={{ padding: 10, background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontFamily: mono, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Add Feed</button>
+            {addError && <div style={{ color: "#EF4444", fontSize: 11, fontFamily: mono }}>{addError}</div>}
+            <button onClick={addFeed} disabled={addingFeed || !newFeed.url} style={{ padding: 10, background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontFamily: mono, fontSize: 12, cursor: "pointer", fontWeight: 600, opacity: addingFeed ? 0.6 : 1 }}>
+              {addingFeed ? "Adding..." : "Add Feed"}
+            </button>
           </div>
         </div>
       )}

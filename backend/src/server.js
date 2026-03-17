@@ -65,7 +65,29 @@ app.post("/api/feeds", async (req, res) => {
     if (!feed.id) feed.id = `custom-${Date.now()}`;
     if (!feed.active) feed.active = 1;
     feed.userAdded = true;
-    // Validate RSS feeds before adding
+
+    // Infer feed type from URL if not explicitly set
+    if (!feed.type) {
+      const url = (feed.url || "").toLowerCase();
+      if (url.includes("x.com/") || url.includes("twitter.com/")) {
+        feed.type = "x-account";
+      } else if (url.includes("threads.net/")) {
+        feed.type = "threads";
+      } else if (url.includes("youtube.com/") || url.includes("youtu.be/")) {
+        feed.type = "youtube";
+      } else {
+        // Try RSS validation — if it parses, it's RSS; otherwise scrape
+        const check = await validateFeedUrl(feed.url);
+        if (check.valid) {
+          feed.type = "rss";
+          if (!feed.name && check.title) feed.name = check.title;
+        } else {
+          feed.type = "scrape";
+        }
+      }
+    }
+
+    // Validate RSS feeds
     if (feed.type === "rss") {
       const check = await validateFeedUrl(feed.url);
       if (!check.valid) return res.status(400).json({ error: `Invalid feed: ${check.error}` });
