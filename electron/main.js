@@ -50,8 +50,6 @@ function createWindow(port) {
     minHeight: 600,
     title: "AI Intelligence Hub",
     backgroundColor: "#0A0E14",
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
