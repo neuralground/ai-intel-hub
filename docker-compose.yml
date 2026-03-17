@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  ai-intel-hub:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - FEED_REFRESH_INTERVAL=30
+      - RELEVANCE_CONTEXT=${RELEVANCE_CONTEXT:-Senior technology executive at a GSIB focused on AI strategy, architecture, and governance.}
+    volumes:
+      # Persist database across container restarts
+      - intel-hub-data:/app/backend/data
+    restart: unless-stopped
+
+volumes:
+  intel-hub-data:
