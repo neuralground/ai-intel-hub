@@ -184,6 +184,51 @@ app.get("/api/health/feeds", (req, res) => {
   res.json(getFeedHealth());
 });
 
+// SSE endpoint for health analysis with progress updates
+app.get("/api/health/analyze/stream", async (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+
+  const sendEvent = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const health = getFeedHealth();
+    const analysis = await analyzeFeedHealth(health, (progress) => {
+      sendEvent({ type: "progress", ...progress });
+    });
+
+    // Validate and persist suggestions (same logic as POST endpoint)
+    if (analysis.suggestions) {
+      sendEvent({ type: "progress", pct: 95, message: "Validating suggestions..." });
+      const validated = [];
+      const validationResults = await Promise.allSettled(
+        analysis.suggestions.filter(s => s.url).map(async (s) => {
+          const result = await validateFeedUrl(s.url);
+          return { suggestion: s, ...result };
+        })
+      );
+      for (const r of validationResults) {
+        if (r.status === "fulfilled" && r.value.valid) {
+          const s = r.value.suggestion;
+          addSuggestion(s);
+          validated.push(s);
+        }
+      }
+      analysis.suggestions = validated;
+    }
+
+    sendEvent({ type: "result", analysis });
+  } catch (err) {
+    sendEvent({ type: "error", message: err.message });
+  }
+  res.end();
+});
+
 app.post("/api/health/analyze", async (req, res) => {
   try {
     const health = getFeedHealth();

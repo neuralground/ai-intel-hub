@@ -157,6 +157,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const [expandedFeed, setExpandedFeed] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [showRecs, setShowRecs] = useState(true);
+  const [healthProgress, setHealthProgress] = useState(null); // { pct, message }
 
   // Load feed health and any cached suggestions on mount (no expensive analysis)
   useEffect(() => {
@@ -164,18 +165,36 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
     api.getSuggestions().then(setSuggestions).catch(() => {});
   }, []);
 
-  // Full health analysis only on explicit button click
-  const runHealthCheck = async () => {
+  // Full health analysis via SSE with progress updates
+  const runHealthCheck = () => {
     if (analyzing) return;
     setAnalyzing(true);
     setAnalysis(null);
-    try {
-      const result = await api.analyzeFeedHealth();
-      setAnalysis(result);
-      const sug = await api.getSuggestions();
-      setSuggestions(sug);
-    } catch (e) { console.error(e); }
-    setAnalyzing(false);
+    setHealthProgress({ pct: 5, message: "Starting health check..." });
+
+    const evtSource = new EventSource("/api/health/analyze/stream");
+    evtSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "progress") {
+        setHealthProgress({ pct: data.pct, message: data.message });
+      } else if (data.type === "result") {
+        setAnalysis(data.analysis);
+        api.getSuggestions().then(setSuggestions).catch(() => {});
+        setHealthProgress(null);
+        setAnalyzing(false);
+        evtSource.close();
+      } else if (data.type === "error") {
+        console.error("[Health]", data.message);
+        setHealthProgress(null);
+        setAnalyzing(false);
+        evtSource.close();
+      }
+    };
+    evtSource.onerror = () => {
+      setHealthProgress(null);
+      setAnalyzing(false);
+      evtSource.close();
+    };
   };
 
   const refreshHealth = () => api.getFeedHealth().then(setHealthData).catch(() => {});
@@ -248,17 +267,30 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
       </div>
 
       {/* Summary bar */}
-      <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ color: "var(--text-muted)", fontSize: 12, fontFamily: mono }}>
-          Active: <span style={{ color: "#10B981" }}>{activeCount}</span>
-          {mutedCount > 0 && <> · Muted: <span style={{ color: "var(--text-faint)" }}>{mutedCount}</span></>}
-        </span>
-        <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: showAddForm ? "var(--accent-bg)" : "transparent", color: showAddForm ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>+ Add Feed</button>
-          <button onClick={runHealthCheck} disabled={analyzing} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
-            {analyzing ? "Checking..." : "Health Check"}
-          </button>
+      <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ color: "var(--text-muted)", fontSize: 12, fontFamily: mono }}>
+            Active: <span style={{ color: "#10B981" }}>{activeCount}</span>
+            {mutedCount > 0 && <> · Muted: <span style={{ color: "var(--text-faint)" }}>{mutedCount}</span></>}
+          </span>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: showAddForm ? "var(--accent-bg)" : "transparent", color: showAddForm ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>+ Add Feed</button>
+            <button onClick={runHealthCheck} disabled={analyzing} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: analyzing ? "var(--accent-bg)" : "transparent", color: analyzing ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+              {analyzing ? "Checking..." : "Health Check"}
+            </button>
+          </div>
         </div>
+        {healthProgress && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+              <span style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>{healthProgress.message}</span>
+              <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>{healthProgress.pct}%</span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: "var(--border)", overflow: "hidden" }}>
+              <div style={{ height: "100%", borderRadius: 2, background: "var(--accent)", width: `${healthProgress.pct}%`, transition: "width 0.4s ease" }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add feed form */}

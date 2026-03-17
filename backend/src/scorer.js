@@ -254,12 +254,15 @@ const CURATED_FEEDS = [
   { name: "Wired AI", url: "https://www.wired.com/feed/tag/ai/latest/rss", category: "policy" },
 ];
 
-export async function analyzeFeedHealth(feedHealth) {
+export async function analyzeFeedHealth(feedHealth, onProgress = () => {}) {
   // Return cached result if still fresh
   if (_healthCache.result && (Date.now() - _healthCache.ts) < HEALTH_CACHE_TTL) {
     console.log("[Health] Returning cached analysis (< 30 min old)");
+    onProgress({ step: "complete", pct: 100, message: "Using cached results" });
     return _healthCache.result;
   }
+
+  onProgress({ step: "discovery", pct: 10, message: "Scanning feeds for new sources..." });
 
   const context = getRelevanceContext();
   const feedSummary = feedHealth
@@ -272,8 +275,8 @@ export async function analyzeFeedHealth(feedHealth) {
   // Run both discovery strategies in parallel before calling Claude
   console.log("[Health] Running feed discovery...");
   const [linkResults, searchResults] = await Promise.allSettled([
-    discoverFeedsFromContent(),
-    discoverFeedsFromSearch(),
+    discoverFeedsFromContent().then(r => { onProgress({ step: "link-mining", pct: 30, message: "Link mining complete" }); return r; }),
+    discoverFeedsFromSearch().then(r => { onProgress({ step: "web-search", pct: 45, message: "Web search complete" }); return r; }),
   ]);
 
   const linkMined = linkResults.status === "fulfilled" ? linkResults.value : [];
@@ -314,6 +317,7 @@ export async function analyzeFeedHealth(feedHealth) {
   }
 
   console.log(`[Health] ${novelDiscoveries.length} discovered + ${novelCurated.length} curated candidates for Claude`);
+  onProgress({ step: "analyzing", pct: 55, message: `Analyzing ${feedHealth.length} feeds with ${novelDiscoveries.length} candidates...` });
 
   const systemPrompt = `You are a feed curation advisor for: ${context}
 Analyze feed health and suggest new RSS feeds. Respond in JSON format only.`;
@@ -339,10 +343,13 @@ ${curatedSection}
 Current feeds:\n${feedSummary}`;
 
   try {
+    onProgress({ step: "llm", pct: 70, message: "Waiting for LLM analysis..." });
     const result = await callClaude(systemPrompt, userMessage, 3000);
+    onProgress({ step: "parsing", pct: 90, message: "Processing results..." });
     const cleaned = result.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     const parsed = JSON.parse(cleaned);
     _healthCache = { result: parsed, ts: Date.now() };
+    onProgress({ step: "complete", pct: 100, message: "Analysis complete" });
     return parsed;
   } catch (err) {
     console.error(`[Health] Feed health analysis failed: ${err.message}`);
