@@ -108,15 +108,21 @@ function extractTags(entry, category) {
   return [...tags].slice(0, 8);
 }
 
-// ── Validate a feed URL ─────────────────────────────────────────────────────
+// ── Validate a feed URL (cached) ────────────────────────────────────────────
 export async function validateFeedUrl(url) {
+  const cached = cacheGet(`validate:${url}`);
+  if (cached !== undefined) return cached;
+
+  let result;
   try {
     const parsed = await rssParser.parseURL(url);
     const itemCount = (parsed.items || []).length;
-    return { valid: true, title: parsed.title || null, itemCount };
+    result = { valid: true, title: parsed.title || null, itemCount };
   } catch (err) {
-    return { valid: false, error: err.message };
+    result = { valid: false, error: err.message };
   }
+  cacheSet(`validate:${url}`, result);
+  return result;
 }
 
 // ── Fetch all active feeds ──────────────────────────────────────────────────
@@ -203,8 +209,27 @@ export async function fetchSingleFeed(feedId) {
 
 // ── Feed Discovery ──────────────────────────────────────────────────────────
 
-// TODO: Efficiency — add a TTL cache for probeFeedUrls and validateFeedUrl results
-// to avoid re-probing domains/URLs we've already checked recently
+// TTL cache for feed validation and domain probe results.
+// Avoids re-probing the same URLs/domains across repeated health checks.
+const _cache = new Map();
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+function cacheGet(key) {
+  const entry = _cache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.ts > CACHE_TTL) { _cache.delete(key); return undefined; }
+  return entry.value;
+}
+
+function cacheSet(key, value) {
+  _cache.set(key, { value, ts: Date.now() });
+  // Evict old entries periodically
+  if (_cache.size > 500) {
+    const cutoff = Date.now() - CACHE_TTL;
+    for (const [k, v] of _cache) { if (v.ts < cutoff) _cache.delete(k); }
+  }
+}
+
 const COMMON_FEED_PATHS = ["/feed", "/rss", "/feed.xml", "/rss.xml", "/blog/feed", "/atom.xml", "/blog/rss", "/index.xml"];
 const DOMAIN_BLOCKLIST = new Set(["twitter.com", "x.com", "t.co", "github.com", "youtube.com", "reddit.com", "bit.ly", "medium.com", "news.google.com", "google.com", "arxiv.org", "doi.org", "dx.doi.org", "en.wikipedia.org", "linkedin.com", "facebook.com"]);
 const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;
@@ -216,6 +241,9 @@ function extractDomain(url) {
 }
 
 async function probeFeedUrls(domain) {
+  const cached = cacheGet(`probe:${domain}`);
+  if (cached !== undefined) return cached;
+
   // Try all common paths in parallel, return first valid result
   const results = await Promise.allSettled(
     COMMON_FEED_PATHS.map(async (path) => {
@@ -225,10 +253,12 @@ async function probeFeedUrls(domain) {
       return { url, title: result.title };
     })
   );
+  let found = null;
   for (const r of results) {
-    if (r.status === "fulfilled") return r.value;
+    if (r.status === "fulfilled") { found = r.value; break; }
   }
-  return null;
+  cacheSet(`probe:${domain}`, found);
+  return found;
 }
 
 // Run a function with a deadline — returns whatever completed before timeout
@@ -241,8 +271,12 @@ function withDeadline(fn, ms) {
 
 /**
  * Strategy 1: Mine links from existing feed content to discover new sources.
+ * Results are cached for 1 hour to avoid redundant probing.
  */
 export async function discoverFeedsFromContent() {
+  const cached = cacheGet("discovery:content");
+  if (cached !== undefined) { console.log("[Discovery] Link mining: returning cached results"); return cached; }
+
   const items = getItems({ limit: 500 });
   const subscribedDomains = new Set(getActiveFeeds().map(f => extractDomain(f.url)).filter(Boolean));
 
@@ -290,6 +324,7 @@ export async function discoverFeedsFromContent() {
   }, 30000);
 
   console.log(`[Discovery] Link mining: discovered ${results.length} feeds`);
+  cacheSet("discovery:content", results);
   return results;
 }
 
@@ -305,8 +340,11 @@ const PUBLISHER_DOMAINS = {
 /**
  * Strategy 2: Search Google News RSS for emerging AI sources.
  * Uses publisher names from Google News results, maps to domains, probes for RSS.
+ * Results are cached for 1 hour.
  */
 export async function discoverFeedsFromSearch() {
+  const cached = cacheGet("discovery:search");
+  if (cached !== undefined) { console.log("[Discovery] Web search: returning cached results"); return cached; }
   const searchParser = new Parser({
     timeout: 10000,
     customFields: { item: ["source"] },
@@ -386,5 +424,6 @@ export async function discoverFeedsFromSearch() {
   }, 30000);
 
   console.log(`[Discovery] Web search: discovered ${results.length} feeds`);
+  cacheSet("discovery:search", results);
   return results;
 }

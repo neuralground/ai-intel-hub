@@ -226,11 +226,10 @@ Items:\n${itemSummaries}`,
 }
 
 // ── Detect stale/noisy feeds and suggest improvements ───────────────────────
-// TODO: Efficiency — add local caching to reduce redundant external calls:
-//   - Cache discovery results (link mining + web search) with ~1hr TTL
-//   - Cache feed probe results (validateFeedUrl/probeFeedUrls) to avoid re-probing known domains
-//   - Cache analyzeFeedHealth results; only re-run when feeds have changed
-//   - Skip health check auto-trigger if recent results exist (< 30 min old)
+
+// In-memory cache for feed health analysis results (30 min TTL)
+let _healthCache = { result: null, ts: 0 };
+const HEALTH_CACHE_TTL = 30 * 60 * 1000;
 
 // Curated pool of known-good feeds as a baseline
 const CURATED_FEEDS = [
@@ -255,6 +254,12 @@ const CURATED_FEEDS = [
 ];
 
 export async function analyzeFeedHealth(feedHealth) {
+  // Return cached result if still fresh
+  if (_healthCache.result && (Date.now() - _healthCache.ts) < HEALTH_CACHE_TTL) {
+    console.log("[Health] Returning cached analysis (< 30 min old)");
+    return _healthCache.result;
+  }
+
   const context = getRelevanceContext();
   const feedSummary = feedHealth
     .map(
@@ -335,7 +340,9 @@ Current feeds:\n${feedSummary}`;
   try {
     const result = await callClaude(systemPrompt, userMessage, 3000);
     const cleaned = result.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    return JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
+    _healthCache = { result: parsed, ts: Date.now() };
+    return parsed;
   } catch (err) {
     console.error(`[Health] Feed health analysis failed: ${err.message}`);
     return { stale: [], noisy: [], suggestions: [] };

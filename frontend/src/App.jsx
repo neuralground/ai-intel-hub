@@ -156,13 +156,13 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [showRecs, setShowRecs] = useState(true);
 
-  // Load feed health on mount; auto-generate recommendations
+  // Load feed health and any cached suggestions on mount (no expensive analysis)
   useEffect(() => {
     api.getFeedHealth().then(setHealthData).catch(() => {});
-    // Auto-generate fresh recommendations on panel open
-    runHealthCheck();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    api.getSuggestions().then(setSuggestions).catch(() => {});
+  }, []);
 
+  // Full health analysis only on explicit button click
   const runHealthCheck = async () => {
     if (analyzing) return;
     setAnalyzing(true);
@@ -198,7 +198,6 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
       setSuggestions(prev => prev.filter(x => x.id !== s.id));
       onRefresh();
       refreshHealth();
-      api.getSuggestions().then(setSuggestions).catch(() => {});
     } catch (e) { console.error(e); }
   };
 
