@@ -75,10 +75,50 @@ function ThemeToggle({ mode, setMode }) {
   );
 }
 
+// ── Item Popover (used in Analysis Panel) ───────────────────────────────────
+function ItemPopover({ item, onClose, onSave }) {
+  if (!item) return null;
+  const cat = CATEGORIES[item.category] || { color: "#6B7280", label: item.category };
+  return (
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
+      <div onClick={e => e.stopPropagation()} style={{ position: "relative", width: 460, maxHeight: "80vh", overflow: "auto", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.4)", padding: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+          <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: cat.color + "15", color: cat.color, fontFamily: mono, fontWeight: 600 }}>{cat.label}</span>
+          <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: relColor(item.relevance) + "15", color: relColor(item.relevance), fontFamily: mono, fontWeight: 600 }}>{(item.relevance * 100).toFixed(0)}%</span>
+          <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>{item.feed_id} · {timeAgo(item.published)}</span>
+        </div>
+        <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 600, lineHeight: 1.4, marginBottom: 8 }}>{item.title}</div>
+        <div style={{ color: "var(--text-muted)", fontSize: 12.5, lineHeight: 1.6, marginBottom: 10 }}>{item.summary}</div>
+        {item.relevance_reason && (
+          <div style={{ padding: "8px 12px", background: "var(--accent-bg-subtle)", border: "1px solid var(--accent-border)", borderRadius: 6, marginBottom: 10 }}>
+            <div style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, marginBottom: 3, fontWeight: 600 }}>WHY THIS MATTERS</div>
+            <div style={{ color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.5 }}>{item.relevance_reason}</div>
+          </div>
+        )}
+        {item.tags && item.tags.length > 0 && (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
+            {item.tags.map(t => <span key={t} style={{ padding: "2px 8px", background: "var(--tag-bg)", borderRadius: 10, color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>#{t}</span>)}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 6 }}>
+          {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 14px", background: "var(--accent)", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, textDecoration: "none", fontWeight: 600 }}>Open source →</a>}
+          <button onClick={() => { onSave(item); }} style={{ padding: "6px 14px", background: item.saved ? "var(--accent-bg)" : "transparent", border: `1px solid ${item.saved ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, color: item.saved ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+            {item.saved ? "★ Saved" : "☆ Save"}
+          </button>
+          <button onClick={onClose} style={{ padding: "6px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-faint)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Analysis Panel ──────────────────────────────────────────────────────────
 function AnalysisPanel({ category, onClose }) {
   const [mode, setMode] = useState("briefing");
   const [result, setResult] = useState("");
+  const [sourceItems, setSourceItems] = useState({});
+  const [popoverItem, setPopoverItem] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -86,9 +126,12 @@ function AnalysisPanel({ category, onClose }) {
     setLoading(true);
     setError(null);
     setResult("");
+    setSourceItems({});
+    setPopoverItem(null);
     try {
       const data = await api.analyze(mode, category !== "all" ? category : null);
       setResult(data.result);
+      if (data.sourceItems) setSourceItems(data.sourceItems);
     } catch (err) {
       setError(err.message);
     }
@@ -97,12 +140,40 @@ function AnalysisPanel({ category, onClose }) {
 
   useEffect(() => { run(); }, [run]);
 
+  const handleItemLink = (itemId) => {
+    const item = sourceItems[itemId];
+    if (item) setPopoverItem(item);
+  };
+
+  const handleSaveItem = async (item) => {
+    try {
+      await api.toggleSave(item.id, !item.saved);
+      setSourceItems(prev => ({ ...prev, [item.id]: { ...item, saved: !item.saved } }));
+      setPopoverItem(p => p?.id === item.id ? { ...p, saved: !item.saved } : p);
+    } catch (e) { console.error(e); }
+  };
+
   const modes = [
     { key: "briefing", label: "Executive Brief" },
     { key: "risks", label: "Risk Scan" },
     { key: "gaps", label: "Coverage Gaps" },
     { key: "what-so-what-now-what", label: "What / So What / Now What" },
   ];
+
+  // Custom link renderer: item:ID links open popovers, others open externally
+  const renderLink = ({ href, children }) => {
+    const itemMatch = href?.match(/^item:(.+)$/);
+    if (itemMatch) {
+      const itemId = itemMatch[1];
+      const found = sourceItems[itemId];
+      return (
+        <span onClick={() => handleItemLink(itemId)} style={{ color: "var(--accent)", cursor: "pointer", borderBottom: "1px dotted var(--accent)", fontWeight: found ? 500 : 400 }} title={found ? "Click to preview" : "Source item"}>
+          {children}
+        </span>
+      );
+    }
+    return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>;
+  };
 
   return (
     <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 540, background: "var(--bg-surface)", borderLeft: "1px solid var(--border)", zIndex: 100, display: "flex", flexDirection: "column", boxShadow: `-8px 0 32px var(--shadow-panel)` }}>
@@ -137,9 +208,10 @@ function AnalysisPanel({ category, onClose }) {
             ? <code style={{ background: "var(--bg-elevated)", padding: "2px 6px", borderRadius: 4, fontSize: 12, fontFamily: mono, color: "var(--accent)" }}>{children}</code>
             : <pre style={{ background: "var(--bg-elevated)", padding: 12, borderRadius: 6, overflow: "auto", fontSize: 12, fontFamily: mono, color: "var(--text-secondary)", margin: "8px 0" }}><code>{children}</code></pre>,
           blockquote: ({ children }) => <blockquote style={{ borderLeft: "3px solid var(--accent)", paddingLeft: 14, margin: "10px 0", color: "var(--text-muted)" }}>{children}</blockquote>,
-          a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>,
+          a: renderLink,
         }}>{result}</Markdown></div>}
       </div>
+      {popoverItem && <ItemPopover item={popoverItem} onClose={() => setPopoverItem(null)} onSave={handleSaveItem} />}
     </div>
   );
 }

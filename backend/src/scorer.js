@@ -145,7 +145,18 @@ export async function generateAnalysis(mode, category = null) {
   // Check cache first
   const cached = getCachedAnalysis(mode, category, 30);
   if (cached) {
-    return { result: cached.result, cached: true };
+    // Rebuild sourceItems from cached item IDs
+    const allItems = getItems({ limit: 500 });
+    const idSet = new Set(cached.item_ids || []);
+    const sourceItemMap = Object.fromEntries(
+      allItems.filter(it => idSet.has(it.id)).map(it => [it.id, {
+        id: it.id, title: it.title, summary: it.summary, url: it.url,
+        category: it.category, relevance: it.relevance,
+        relevance_reason: it.relevance_reason, feed_id: it.feed_id,
+        published: it.published, tags: it.tags, saved: it.saved,
+      }])
+    );
+    return { result: cached.result, cached: true, sourceItems: sourceItemMap };
   }
 
   const items = getItems({
@@ -163,11 +174,11 @@ export async function generateAnalysis(mode, category = null) {
   const itemSummaries = sourceItems
     .map(
       (it, i) =>
-        `${i + 1}. [${it.category}] ${it.title}\n   URL: ${it.url || "none"}\n   Source: ${it.feed_id} | Relevance: ${(it.relevance * 100).toFixed(0)}%\n   ${(it.summary || "").slice(0, 200)}`
+        `${i + 1}. ID: ${it.id} | [${it.category}] ${it.title}\n   URL: ${it.url || "none"}\n   Source: ${it.feed_id} | Relevance: ${(it.relevance * 100).toFixed(0)}%\n   ${(it.summary || "").slice(0, 200)}`
     )
     .join("\n\n");
 
-  const citationRule = `\nIMPORTANT: For each key insight or claim, cite the source item(s) that inform it using markdown links: [short title](URL). Every bullet point or paragraph that draws on a specific item must include at least one source link.`;
+  const citationRule = `\nIMPORTANT: For each key insight or claim, cite the source item(s) using this exact link format: [short title](item:ITEM_ID) where ITEM_ID is the ID shown next to each item above. Every bullet point or paragraph that draws on a specific item must include at least one such source link. Do NOT use the external URL in links — always use the item:ID format.`;
 
   const prompts = {
     briefing: {
@@ -218,9 +229,16 @@ Items:\n${itemSummaries}`,
 
   try {
     const result = await callClaude(prompt.system, prompt.user, 2000);
-    const itemIds = items.map((i) => i.id);
+    const itemIds = sourceItems.map((i) => i.id);
     cacheAnalysis(mode, category, result, itemIds);
-    return { result, cached: false };
+    // Include source items so the frontend can render item popovers
+    const sourceItemMap = Object.fromEntries(sourceItems.map(it => [it.id, {
+      id: it.id, title: it.title, summary: it.summary, url: it.url,
+      category: it.category, relevance: it.relevance,
+      relevance_reason: it.relevance_reason, feed_id: it.feed_id,
+      published: it.published, tags: it.tags, saved: it.saved,
+    }]));
+    return { result, cached: false, sourceItems: sourceItemMap };
   } catch (err) {
     throw new Error(`Analysis failed: ${err.message}`);
   }
