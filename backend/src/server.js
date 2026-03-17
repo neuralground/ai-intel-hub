@@ -5,12 +5,12 @@ import cron from "node-cron";
 import {
   getAllFeeds, getActiveFeeds, upsertFeed, deleteFeed,
   getItems, getItemCount, markItem, getStats,
-  getFeedHealth, getSuggestions, addSuggestion, updateSuggestionStatus,
+  getFeedHealth, getSuggestions, getSuggestionById, addSuggestion, updateSuggestionStatus,
   cleanupOldItems,
 } from "./db.js";
-import { fetchAllFeeds, fetchSingleFeed } from "./fetcher.js";
+import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
 import { scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
-import { DEFAULT_FEEDS } from "./default-feeds.js";
+import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,17 +20,18 @@ app.use(express.json());
 
 // ── Initialize and sync default feeds ────────────────────────────────────────
 function initializeFeeds() {
+  const defaultFeeds = loadDefaultFeeds();
   const existing = getAllFeeds();
   if (existing.length === 0) {
     console.log("[Init] Loading default feeds...");
-    for (const feed of DEFAULT_FEEDS) {
+    for (const feed of defaultFeeds) {
       upsertFeed({ ...feed, active: 1 });
     }
-    console.log(`[Init] Loaded ${DEFAULT_FEEDS.length} default feeds`);
+    console.log(`[Init] Loaded ${defaultFeeds.length} default feeds`);
   } else {
     // Sync: update URLs for existing feeds, deactivate removed ones
-    const defaultIds = new Set(DEFAULT_FEEDS.map(f => f.id));
-    for (const feed of DEFAULT_FEEDS) {
+    const defaultIds = new Set(defaultFeeds.map(f => f.id));
+    for (const feed of defaultFeeds) {
       upsertFeed({ ...feed, active: 1 });
     }
     for (const feed of existing) {
@@ -38,7 +39,7 @@ function initializeFeeds() {
         upsertFeed({ id: feed.id, active: 0 });
       }
     }
-    console.log(`[Init] Synced ${DEFAULT_FEEDS.length} default feeds`);
+    console.log(`[Init] Synced ${defaultFeeds.length} default feeds`);
   }
 }
 
@@ -54,12 +55,24 @@ app.get("/api/feeds", (req, res) => {
   res.json(getAllFeeds());
 });
 
-app.post("/api/feeds", (req, res) => {
+app.post("/api/feeds", async (req, res) => {
   try {
     const feed = req.body;
     if (!feed.id) feed.id = `custom-${Date.now()}`;
     if (!feed.active) feed.active = 1;
+    feed.userAdded = true;
+    // Validate RSS feeds before adding
+    if (feed.type === "rss") {
+      const check = await validateFeedUrl(feed.url);
+      if (!check.valid) return res.status(400).json({ error: `Invalid feed: ${check.error}` });
+    }
     upsertFeed(feed);
+    // Persist to feeds.json
+    const configFeeds = loadDefaultFeeds();
+    if (!configFeeds.find(f => f.id === feed.id)) {
+      configFeeds.push({ id: feed.id, name: feed.name, url: feed.url, type: feed.type, category: feed.category, userAdded: true });
+      saveDefaultFeeds(configFeeds);
+    }
     res.json({ ok: true, feed });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -79,6 +92,10 @@ app.put("/api/feeds/:id", (req, res) => {
 app.delete("/api/feeds/:id", (req, res) => {
   try {
     deleteFeed(req.params.id);
+    // Remove from feeds.json
+    const configFeeds = loadDefaultFeeds();
+    const filtered = configFeeds.filter(f => f.id !== req.params.id);
+    if (filtered.length !== configFeeds.length) saveDefaultFeeds(filtered);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -133,6 +150,26 @@ app.post("/api/health/analyze", async (req, res) => {
   try {
     const health = getFeedHealth();
     const analysis = await analyzeFeedHealth(health);
+    // Validate and persist new suggestions
+    if (analysis.suggestions) {
+      const validated = [];
+      const validationResults = await Promise.allSettled(
+        analysis.suggestions.filter(s => s.url).map(async (s) => {
+          const result = await validateFeedUrl(s.url);
+          return { suggestion: s, ...result };
+        })
+      );
+      for (const r of validationResults) {
+        if (r.status === "fulfilled" && r.value.valid) {
+          const s = r.value.suggestion;
+          addSuggestion(s);
+          validated.push(s);
+        } else if (r.status === "fulfilled") {
+          console.log(`[Health] Rejected suggestion "${r.value.suggestion.name}": ${r.value.error}`);
+        }
+      }
+      analysis.suggestions = validated;
+    }
     res.json(analysis);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -187,8 +224,36 @@ app.get("/api/suggestions", (req, res) => {
 
 app.post("/api/suggestions/:id/accept", (req, res) => {
   try {
-    updateSuggestionStatus(parseInt(req.params.id), "accepted");
-    res.json({ ok: true });
+    const suggestion = getSuggestionById(parseInt(req.params.id));
+    if (!suggestion) return res.status(404).json({ error: "Suggestion not found" });
+    // Check if a feed with this URL already exists
+    const existingFeed = getAllFeeds().find(f => f.url === suggestion.url);
+    if (existingFeed) {
+      // Just activate it if it exists but is inactive
+      if (!existingFeed.active) upsertFeed({ id: existingFeed.id, active: 1 });
+      updateSuggestionStatus(suggestion.id, "accepted");
+      return res.json({ ok: true, feed: existingFeed });
+    }
+    // Create the feed from the suggestion
+    const feedId = suggestion.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+    const feed = {
+      id: feedId,
+      name: suggestion.name,
+      url: suggestion.url,
+      type: suggestion.type || "rss",
+      category: suggestion.category || "research",
+      active: 1,
+      userAdded: true,
+    };
+    upsertFeed(feed);
+    // Persist to feeds.json (dedup by URL)
+    const configFeeds = loadDefaultFeeds();
+    if (!configFeeds.some(f => f.url === feed.url)) {
+      configFeeds.push({ id: feed.id, name: feed.name, url: feed.url, type: feed.type, category: feed.category, userAdded: true });
+      saveDefaultFeeds(configFeeds);
+    }
+    updateSuggestionStatus(suggestion.id, "accepted");
+    res.json({ ok: true, feed });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

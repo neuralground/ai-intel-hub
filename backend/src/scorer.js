@@ -1,4 +1,5 @@
 import { getItems, upsertItem, cacheAnalysis, getCachedAnalysis } from "./db.js";
+import { discoverFeedsFromContent, discoverFeedsFromSearch } from "./fetcher.js";
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-20250514";
@@ -218,6 +219,34 @@ Items:\n${itemSummaries}`,
 }
 
 // ── Detect stale/noisy feeds and suggest improvements ───────────────────────
+// TODO: Efficiency — add local caching to reduce redundant external calls:
+//   - Cache discovery results (link mining + web search) with ~1hr TTL
+//   - Cache feed probe results (validateFeedUrl/probeFeedUrls) to avoid re-probing known domains
+//   - Cache analyzeFeedHealth results; only re-run when feeds have changed
+//   - Skip health check auto-trigger if recent results exist (< 30 min old)
+
+// Curated pool of known-good feeds as a baseline
+const CURATED_FEEDS = [
+  { name: "JMLR", url: "https://jmlr.org/jmlr.xml", category: "research" },
+  { name: "Berkeley AI Research (BAIR)", url: "https://bair.berkeley.edu/blog/feed.xml", category: "research" },
+  { name: "Alignment Forum", url: "https://www.alignmentforum.org/feed.xml", category: "research" },
+  { name: "LessWrong AI", url: "https://www.lesswrong.com/feed.xml?view=community-rss&karmaThreshold=30", category: "research" },
+  { name: "AWS Machine Learning", url: "https://aws.amazon.com/blogs/machine-learning/feed/", category: "engineering" },
+  { name: "Databricks Blog", url: "https://www.databricks.com/feed", category: "engineering" },
+  { name: "Replicate Blog", url: "https://replicate.com/blog/rss", category: "engineering" },
+  { name: "The Pragmatic Engineer", url: "https://newsletter.pragmaticengineer.com/feed", category: "engineering" },
+  { name: "Not Boring", url: "https://www.notboring.co/feed", category: "industry" },
+  { name: "Newcomer", url: "https://www.newcomer.co/feed", category: "industry" },
+  { name: "Sequoia Capital", url: "https://www.sequoiacap.com/feed/", category: "industry" },
+  { name: "Microsoft Research", url: "https://www.microsoft.com/en-us/research/blog/feed/", category: "labs" },
+  { name: "Apple Machine Learning", url: "https://machinelearning.apple.com/rss.xml", category: "labs" },
+  { name: "EleutherAI", url: "https://blog.eleuther.ai/rss/", category: "labs" },
+  { name: "Brookings AI", url: "https://www.brookings.edu/topic/artificial-intelligence/feed/", category: "policy" },
+  { name: "Ada Lovelace Institute", url: "https://www.adalovelaceinstitute.org/feed/", category: "policy" },
+  { name: "Partnership on AI", url: "https://partnershiponai.org/feed/", category: "policy" },
+  { name: "Wired AI", url: "https://www.wired.com/feed/tag/ai/latest/rss", category: "policy" },
+];
+
 export async function analyzeFeedHealth(feedHealth) {
   const context = getRelevanceContext();
   const feedSummary = feedHealth
@@ -227,20 +256,77 @@ export async function analyzeFeedHealth(feedHealth) {
     )
     .join("\n");
 
-  const systemPrompt = `You are a feed curation advisor for: ${context}
-Analyze feed health and suggest improvements. Respond in JSON format only.`;
+  // Run both discovery strategies in parallel before calling Claude
+  console.log("[Health] Running feed discovery...");
+  const [linkResults, searchResults] = await Promise.allSettled([
+    discoverFeedsFromContent(),
+    discoverFeedsFromSearch(),
+  ]);
 
-  const userMessage = `Analyze these feeds and respond with JSON:
+  const linkMined = linkResults.status === "fulfilled" ? linkResults.value : [];
+  const searchFound = searchResults.status === "fulfilled" ? searchResults.value : [];
+  if (linkResults.status === "rejected") console.error("[Health] Link mining failed:", linkResults.reason?.message);
+  if (searchResults.status === "rejected") console.error("[Health] Web search failed:", searchResults.reason?.message);
+
+  // Merge discovered feeds, dedup by domain
+  const seen = new Set();
+  const discovered = [];
+  for (const d of [...linkMined, ...searchFound]) {
+    const domain = new URL(d.url).hostname.replace(/^www\./, "");
+    if (seen.has(domain)) continue;
+    seen.add(domain);
+    discovered.push(d);
+  }
+
+  // Filter out already-subscribed URLs
+  const subscribedUrls = new Set(feedHealth.map(f => f.url));
+  const novelDiscoveries = discovered.filter(d => !subscribedUrls.has(d.url));
+
+  // Also filter curated feeds against subscribed
+  const novelCurated = CURATED_FEEDS.filter(f => !subscribedUrls.has(f.url));
+
+  // Build candidate sections for the prompt
+  let discoveredSection = "";
+  if (novelDiscoveries.length > 0) {
+    discoveredSection = "\nDISCOVERED FEEDS (automatically found — these are verified working RSS feeds):\n" +
+      novelDiscoveries.map(d =>
+        `  - ${d.title || d.domain} [${d.source}]: ${d.url} (referenced ${d.referenceCount}x)`
+      ).join("\n");
+  }
+
+  let curatedSection = "";
+  if (novelCurated.length > 0) {
+    curatedSection = "\nCURATED FEEDS (verified working RSS URLs):\n" +
+      novelCurated.map(f => `  - ${f.name} [${f.category}]: ${f.url}`).join("\n");
+  }
+
+  console.log(`[Health] ${novelDiscoveries.length} discovered + ${novelCurated.length} curated candidates for Claude`);
+
+  const systemPrompt = `You are a feed curation advisor for: ${context}
+Analyze feed health and suggest new RSS feeds. Respond in JSON format only.`;
+
+  const categories = "research, engineering, industry, policy, labs";
+  const userMessage = `Analyze these feeds and suggest improvements. Respond with JSON:
 {
-  "stale": [{"id": "...", "reason": "..."}],
-  "noisy": [{"id": "...", "reason": "..."}],
-  "suggestions": [{"name": "...", "url": "...", "type": "rss|substack|x-account", "category": "...", "reason": "..."}]
+  "stale": [{"id": "feed-id", "reason": "why it appears stale"}],
+  "noisy": [{"id": "feed-id", "reason": "why it has low relevance"}],
+  "suggestions": [{"name": "...", "url": "...", "type": "rss", "category": "...", "reason": "..."}]
 }
 
-Feeds:\n${feedSummary}`;
+IMPORTANT for suggestions:
+- Pick 2-3 feeds per category (${categories}) from the DISCOVERED FEEDS and CURATED FEEDS lists below — aim for 10-15 total
+- Prefer DISCOVERED FEEDS (they are novel, emerging sources) over curated ones
+- ONLY use exact URLs from the lists below — do NOT invent or guess URLs
+- Do NOT suggest feeds already subscribed (listed under "Current feeds")
+- Each suggestion MUST have a category from: ${categories}
+- Explain why each feed is relevant to the user's context
+${discoveredSection}
+${curatedSection}
+
+Current feeds:\n${feedSummary}`;
 
   try {
-    const result = await callClaude(systemPrompt, userMessage, 1500);
+    const result = await callClaude(systemPrompt, userMessage, 3000);
     const cleaned = result.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
     return JSON.parse(cleaned);
   } catch (err) {

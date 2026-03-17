@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -102,7 +103,43 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
   if (saved) r = r.filter(i => i.saved);
   if (search) { const q = search.toLowerCase(); r = r.filter(i => (i.title||"").toLowerCase().includes(q) || (i.summary||"").toLowerCase().includes(q) || (i.tags||[]).some(t => t.toLowerCase().includes(q))); }
-  r.sort((a, b) => new Date(b.published) - new Date(a.published));
+  // Sort by combined relevance + freshness, then diversify across categories
+  const now = Date.now();
+  const score = (item) => {
+    const ageHours = (now - new Date(item.published).getTime()) / 3600000;
+    const freshness = Math.exp(-ageHours / 48);
+    return item.relevance * 0.5 + freshness * 0.5;
+  };
+  r.sort((a, b) => {
+    const diff = score(b) - score(a);
+    if (Math.abs(diff) < 0.001) return new Date(b.published) - new Date(a.published);
+    return diff;
+  });
+
+  // Diversify: interleave categories so no single category dominates
+  // Round-robin pick from per-category queues, ordered by score
+  if (!category || category === "all") {
+    const queues = {};
+    for (const item of r) {
+      if (!queues[item.category]) queues[item.category] = [];
+      queues[item.category].push(item);
+    }
+    const cats = Object.keys(queues);
+    const diversified = [];
+    const indices = Object.fromEntries(cats.map(c => [c, 0]));
+    while (diversified.length < r.length) {
+      let picked = false;
+      for (const c of cats) {
+        if (indices[c] < queues[c].length) {
+          diversified.push(queues[c][indices[c]++]);
+          picked = true;
+        }
+      }
+      if (!picked) break;
+    }
+    r = diversified;
+  }
+
   return r.slice(offset, offset + limit);
 }
 
@@ -137,14 +174,62 @@ export function getStats() {
 export function getFeedHealth() {
   return store.feeds.map(f => {
     const fi = store.items.filter(i => i.feed_id === f.id && !i.dismissed);
-    const latest = fi.length > 0 ? fi.reduce((a, b) => new Date(a.published) > new Date(b.published) ? a : b).published : null;
     const avgRel = fi.length > 0 ? fi.reduce((s, i) => s + i.relevance, 0) / fi.length : 0;
-    return { ...f, live_items: fi.length, latest_item: latest, computed_avg_relevance: avgRel };
+
+    // Sort by publish date descending to compute cadence
+    const sorted = fi.map(i => new Date(i.published).getTime()).filter(t => !isNaN(t)).sort((a, b) => b - a);
+    const latest = sorted.length > 0 ? new Date(sorted[0]).toISOString() : null;
+
+    // Compute typical posting interval from gaps between consecutive items
+    let avg_interval_hours = null;
+    if (sorted.length >= 2) {
+      const gaps = [];
+      for (let i = 0; i < Math.min(sorted.length - 1, 20); i++) {
+        gaps.push((sorted[i] - sorted[i + 1]) / 3600000);
+      }
+      avg_interval_hours = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    }
+
+    // Determine health status:
+    //   "error"   (red)   — feed has fetch errors
+    //   "delayed" (amber) — unusually long gap since last post relative to cadence
+    //   "ok"      (green) — normal, or last post < 5 days ago regardless
+    //   "unknown" (gray)  — no items yet
+    const hours_since_last = latest ? (Date.now() - new Date(latest).getTime()) / 3600000 : null;
+    let health_status = "ok";
+    if (f.last_error) {
+      health_status = "error";
+    } else if (hours_since_last === null) {
+      health_status = "unknown";
+    } else if (hours_since_last <= 120) {
+      // Last post within 5 days — always green
+      health_status = "ok";
+    } else if (avg_interval_hours !== null) {
+      // Compare gap to typical cadence — only amber, never red for cadence
+      if (hours_since_last > avg_interval_hours * 3) health_status = "delayed";
+    } else {
+      // Only 1 item, fall back to simple threshold
+      if (hours_since_last > 168) health_status = "delayed";
+    }
+
+    return {
+      ...f, live_items: fi.length, latest_item: latest, computed_avg_relevance: avgRel,
+      avg_interval_hours, hours_since_last, health_status,
+    };
   });
 }
 
-export function addSuggestion(s) { store.suggestions.push({ ...s, id: Date.now(), status: "pending", created_at: new Date().toISOString() }); save(); }
+export function addSuggestion(s) {
+  // Dedup: skip if a suggestion with the same URL already exists (any status) or a feed with the same URL exists
+  if (s.url && store.suggestions.some(x => x.url === s.url)) return null;
+  if (s.url && store.feeds.some(f => f.url === s.url)) return null;
+  const id = parseInt(crypto.randomBytes(6).toString("hex"), 16);
+  store.suggestions.push({ ...s, id, status: "pending", created_at: new Date().toISOString() });
+  save();
+  return id;
+}
 export function getSuggestions() { return store.suggestions.filter(s => s.status === "pending"); }
+export function getSuggestionById(id) { return store.suggestions.find(s => s.id === id) || null; }
 export function updateSuggestionStatus(id, status) { const s = store.suggestions.find(s => s.id === id); if (s) { s.status = status; save(); } }
 
 export function cacheAnalysis(mode, category, result, itemIds) {
