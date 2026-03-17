@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Markdown from "react-markdown";
 import { api } from "./api.js";
+import { useTheme } from "./useTheme.js";
 
 const CATEGORIES = {
   research: { label: "AI Research", color: "#4F8EF7", icon: "🔬" },
@@ -52,6 +53,28 @@ function healthLabel(status, avgInterval, hoursSince) {
   return `Healthy — last post ${since}${cadence ? `, ${cadence}` : ""}`;
 }
 
+// ── Theme Toggle ────────────────────────────────────────────────────────────
+function ThemeToggle({ mode, setMode }) {
+  const options = [
+    { key: "system", label: "System" },
+    { key: "light", label: "Light" },
+    { key: "dark", label: "Dark" },
+  ];
+
+  return (
+    <div style={{ display: "flex", borderRadius: 6, border: "1px solid var(--border)", overflow: "hidden" }}>
+      {options.map(o => (
+        <button key={o.key} onClick={() => setMode(o.key)} style={{
+          padding: "4px 10px", border: "none", fontSize: 10, fontFamily: mono, cursor: "pointer",
+          background: mode === o.key ? "var(--accent-bg)" : "transparent",
+          color: mode === o.key ? "var(--accent)" : "var(--text-faint)",
+          borderRight: o.key !== "dark" ? "1px solid var(--border)" : "none",
+        }}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
 // ── Analysis Panel ──────────────────────────────────────────────────────────
 function AnalysisPanel({ category, onClose }) {
   const [mode, setMode] = useState("briefing");
@@ -82,38 +105,38 @@ function AnalysisPanel({ category, onClose }) {
   ];
 
   return (
-    <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 540, background: "#0D1117", borderLeft: "1px solid #1E2A3A", zIndex: 100, display: "flex", flexDirection: "column", boxShadow: "-8px 0 32px rgba(0,0,0,0.6)" }}>
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid #1E2A3A", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ color: "#E6EDF3", fontFamily: mono, fontSize: 14, fontWeight: 600 }}>🧠 LLM ANALYSIS</span>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "#8B949E", cursor: "pointer", fontSize: 18 }}>✕</button>
+    <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 540, background: "var(--bg-surface)", borderLeft: "1px solid var(--border)", zIndex: 100, display: "flex", flexDirection: "column", boxShadow: `-8px 0 32px var(--shadow-panel)` }}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "var(--text-primary)", fontFamily: mono, fontSize: 14, fontWeight: 600 }}>🧠 LLM ANALYSIS</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
       </div>
-      <div style={{ padding: "12px 20px", borderBottom: "1px solid #1E2A3A", display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)", display: "flex", gap: 6, flexWrap: "wrap" }}>
         {modes.map(m => (
           <button key={m.key} onClick={() => setMode(m.key)} style={{
             padding: "5px 12px", borderRadius: 6, border: "1px solid", fontSize: 11, fontFamily: mono,
-            borderColor: mode === m.key ? "#4F8EF7" : "#1E2A3A", cursor: "pointer",
-            background: mode === m.key ? "rgba(79,142,247,0.12)" : "transparent",
-            color: mode === m.key ? "#4F8EF7" : "#8B949E",
+            borderColor: mode === m.key ? "var(--accent)" : "var(--border)", cursor: "pointer",
+            background: mode === m.key ? "var(--accent-bg)" : "transparent",
+            color: mode === m.key ? "var(--accent)" : "var(--text-muted)",
           }}>{m.label}</button>
         ))}
       </div>
       <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-        {loading && <div style={{ color: "#8B949E", fontFamily: mono, fontSize: 13 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#4F8EF7", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing...</div>}
+        {loading && <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 13 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing...</div>}
         {error && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 13 }}>⚠ {error}</div>}
-        {result && <div className="analysis-markdown" style={{ color: "#C9D1D9", fontSize: 13.5, lineHeight: 1.75, fontFamily: sans }}><Markdown components={{
-          h1: ({ children }) => <h1 style={{ color: "#E6EDF3", fontSize: 18, fontWeight: 600, fontFamily: mono, marginTop: 20, marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid #1E2A3A" }}>{children}</h1>,
-          h2: ({ children }) => <h2 style={{ color: "#E6EDF3", fontSize: 15, fontWeight: 600, fontFamily: mono, marginTop: 18, marginBottom: 8 }}>{children}</h2>,
-          h3: ({ children }) => <h3 style={{ color: "#C9D1D9", fontSize: 13.5, fontWeight: 600, fontFamily: mono, marginTop: 14, marginBottom: 6 }}>{children}</h3>,
+        {result && <div className="analysis-markdown" style={{ color: "var(--text-secondary)", fontSize: 13.5, lineHeight: 1.75, fontFamily: sans }}><Markdown components={{
+          h1: ({ children }) => <h1 style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 600, fontFamily: mono, marginTop: 20, marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid var(--border)" }}>{children}</h1>,
+          h2: ({ children }) => <h2 style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: mono, marginTop: 18, marginBottom: 8 }}>{children}</h2>,
+          h3: ({ children }) => <h3 style={{ color: "var(--text-secondary)", fontSize: 13.5, fontWeight: 600, fontFamily: mono, marginTop: 14, marginBottom: 6 }}>{children}</h3>,
           p: ({ children }) => <p style={{ marginTop: 0, marginBottom: 10 }}>{children}</p>,
-          strong: ({ children }) => <strong style={{ color: "#E6EDF3", fontWeight: 600 }}>{children}</strong>,
+          strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
           ul: ({ children }) => <ul style={{ paddingLeft: 20, marginTop: 4, marginBottom: 10 }}>{children}</ul>,
           ol: ({ children }) => <ol style={{ paddingLeft: 20, marginTop: 4, marginBottom: 10 }}>{children}</ol>,
-          li: ({ children }) => <li style={{ marginBottom: 4, color: "#C9D1D9" }}>{children}</li>,
-          hr: () => <hr style={{ border: "none", borderTop: "1px solid #1E2A3A", margin: "14px 0" }} />,
+          li: ({ children }) => <li style={{ marginBottom: 4, color: "var(--text-secondary)" }}>{children}</li>,
+          hr: () => <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "14px 0" }} />,
           code: ({ children, inline }) => inline !== false
-            ? <code style={{ background: "#161B22", padding: "2px 6px", borderRadius: 4, fontSize: 12, fontFamily: mono, color: "#4F8EF7" }}>{children}</code>
-            : <pre style={{ background: "#161B22", padding: 12, borderRadius: 6, overflow: "auto", fontSize: 12, fontFamily: mono, color: "#C9D1D9", margin: "8px 0" }}><code>{children}</code></pre>,
-          blockquote: ({ children }) => <blockquote style={{ borderLeft: "3px solid #4F8EF7", paddingLeft: 14, margin: "10px 0", color: "#8B949E" }}>{children}</blockquote>,
+            ? <code style={{ background: "var(--bg-elevated)", padding: "2px 6px", borderRadius: 4, fontSize: 12, fontFamily: mono, color: "var(--accent)" }}>{children}</code>
+            : <pre style={{ background: "var(--bg-elevated)", padding: 12, borderRadius: 6, overflow: "auto", fontSize: 12, fontFamily: mono, color: "var(--text-secondary)", margin: "8px 0" }}><code>{children}</code></pre>,
+          blockquote: ({ children }) => <blockquote style={{ borderLeft: "3px solid var(--accent)", paddingLeft: 14, margin: "10px 0", color: "var(--text-muted)" }}>{children}</blockquote>,
         }}>{result}</Markdown></div>}
       </div>
     </div>
@@ -198,7 +221,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const mutedCount = enriched.filter(f => !f.active).length;
   const hasSuggestions = suggestions.length > 0;
 
-  const inp = { padding: "8px 12px", background: "#161B22", border: "1px solid #1E2A3A", borderRadius: 6, color: "#E6EDF3", fontSize: 13, fontFamily: sans, outline: "none", width: "100%" };
+  const inp = { padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontSize: 13, fontFamily: sans, outline: "none", width: "100%" };
 
   const staleIds = new Set((analysis?.stale || []).map(s => s.id));
   const noisyIds = new Set((analysis?.noisy || []).map(s => s.id));
@@ -206,22 +229,22 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const noisyMap = Object.fromEntries((analysis?.noisy || []).map(s => [s.id, s.reason]));
 
   return (
-    <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 540, background: "#0D1117", borderLeft: "1px solid #1E2A3A", zIndex: 100, display: "flex", flexDirection: "column", boxShadow: "-8px 0 32px rgba(0,0,0,0.6)" }}>
+    <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 540, background: "var(--bg-surface)", borderLeft: "1px solid var(--border)", zIndex: 100, display: "flex", flexDirection: "column", boxShadow: `-8px 0 32px var(--shadow-panel)` }}>
       {/* Header */}
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid #1E2A3A", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ color: "#E6EDF3", fontFamily: mono, fontSize: 14, fontWeight: 600 }}>📡 SOURCES</span>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "#8B949E", cursor: "pointer", fontSize: 18 }}>✕</button>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "var(--text-primary)", fontFamily: mono, fontSize: 14, fontWeight: 600 }}>📡 SOURCES</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
       </div>
 
       {/* Summary bar */}
-      <div style={{ padding: "12px 20px", borderBottom: "1px solid #1E2A3A", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ color: "#8B949E", fontSize: 12, fontFamily: mono }}>
+      <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ color: "var(--text-muted)", fontSize: 12, fontFamily: mono }}>
           Active: <span style={{ color: "#10B981" }}>{activeCount}</span>
-          {mutedCount > 0 && <> · Muted: <span style={{ color: "#6B7280" }}>{mutedCount}</span></>}
+          {mutedCount > 0 && <> · Muted: <span style={{ color: "var(--text-faint)" }}>{mutedCount}</span></>}
         </span>
         <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #1E2A3A", background: showAddForm ? "rgba(79,142,247,0.12)" : "transparent", color: showAddForm ? "#4F8EF7" : "#8B949E", cursor: "pointer", fontSize: 11, fontFamily: mono }}>+ Add Feed</button>
-          <button onClick={runHealthCheck} disabled={analyzing} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid #1E2A3A", background: "transparent", color: "#8B949E", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+          <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: showAddForm ? "var(--accent-bg)" : "transparent", color: showAddForm ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>+ Add Feed</button>
+          <button onClick={runHealthCheck} disabled={analyzing} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
             {analyzing ? "Checking..." : "Health Check"}
           </button>
         </div>
@@ -229,7 +252,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
 
       {/* Add feed form */}
       {showAddForm && (
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #1E2A3A", background: "#0A0E14" }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", background: "var(--bg-form)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <input placeholder="Feed name" value={newFeed.name} onChange={e => setNewFeed(p => ({ ...p, name: e.target.value }))} style={inp} />
             <input placeholder="URL" value={newFeed.url} onChange={e => setNewFeed(p => ({ ...p, url: e.target.value }))} style={inp} />
@@ -241,20 +264,20 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
                 {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             </div>
-            <button onClick={addFeed} style={{ padding: 10, background: "#4F8EF7", border: "none", borderRadius: 6, color: "white", fontFamily: mono, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Add Feed</button>
+            <button onClick={addFeed} style={{ padding: 10, background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontFamily: mono, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>Add Feed</button>
           </div>
         </div>
       )}
 
       {/* Delete confirmation */}
       {confirmDelete && (
-        <div style={{ padding: "12px 20px", borderBottom: "1px solid #1E2A3A", background: "rgba(239,68,68,0.06)" }}>
-          <div style={{ color: "#E6EDF3", fontSize: 12, fontFamily: sans, marginBottom: 8 }}>
+        <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "var(--error-bg-strong)" }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: sans, marginBottom: 8 }}>
             Delete <strong>{confirmDelete.name}</strong>? This will remove the feed and all its items.
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => removeFeed(confirmDelete)} style={{ padding: "6px 14px", background: "#EF4444", border: "none", borderRadius: 5, color: "white", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>Delete</button>
-            <button onClick={() => setConfirmDelete(null)} style={{ padding: "6px 14px", background: "transparent", border: "1px solid #1E2A3A", borderRadius: 5, color: "#8B949E", fontSize: 11, fontFamily: mono, cursor: "pointer" }}>Cancel</button>
+            <button onClick={() => setConfirmDelete(null)} style={{ padding: "6px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 11, fontFamily: mono, cursor: "pointer" }}>Cancel</button>
           </div>
         </div>
       )}
@@ -270,7 +293,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
           const sorted = [...active, ...muted];
 
           return (
-            <div key={ck} style={{ padding: "12px 20px", borderBottom: "1px solid #1E2A3A" }}>
+            <div key={ck} style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)" }}>
               <div style={{ color: cat.color, fontSize: 10, fontFamily: mono, fontWeight: 600, marginBottom: 8 }}>
                 {cat.icon} {cat.label.toUpperCase()} ({active.length})
               </div>
@@ -285,15 +308,15 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
 
                 return (
                   <div key={f.id}>
-                    <div onClick={() => setExpandedFeed(isExpanded ? null : f.id)} style={{ padding: "8px 10px", marginBottom: 2, borderRadius: 6, background: isExpanded ? "#161B22" : !f.active ? "rgba(107,114,128,0.06)" : status === "error" ? "rgba(239,68,68,0.04)" : "transparent", cursor: "pointer" }}>
+                    <div onClick={() => setExpandedFeed(isExpanded ? null : f.id)} style={{ padding: "8px 10px", marginBottom: 2, borderRadius: 6, background: isExpanded ? "var(--bg-elevated)" : !f.active ? "var(--muted-item-bg)" : status === "error" ? "var(--error-bg)" : "transparent", cursor: "pointer" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div style={{ display: "flex", alignItems: "center", flex: 1, minWidth: 0, gap: 8 }}>
-                          <span title={dotTitle} style={{ width: 7, height: 7, borderRadius: "50%", background: f.active ? dotColor : "#4B5563", flexShrink: 0 }} />
-                          <span style={{ color: f.active ? "#C9D1D9" : "#6B7280", fontSize: 12.5, fontFamily: sans, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-                          <span style={{ color: "#6B7280", fontSize: 10, fontFamily: mono, flexShrink: 0 }}>{f.type}</span>
+                          <span title={dotTitle} style={{ width: 7, height: 7, borderRadius: "50%", background: f.active ? dotColor : "var(--text-disabled)", flexShrink: 0 }} />
+                          <span style={{ color: f.active ? "var(--text-secondary)" : "var(--text-faint)", fontSize: 12.5, fontFamily: sans, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                          <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono, flexShrink: 0 }}>{f.type}</span>
                         </div>
                         <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
-                          {!f.active && <span style={{ color: "#6B7280", fontSize: 9, fontFamily: mono, marginRight: 2 }}>MUTED</span>}
+                          {!f.active && <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, marginRight: 2 }}>MUTED</span>}
                           <button onClick={e => { e.stopPropagation(); toggleMute(f); }} title={f.active ? "Mute feed" : "Unmute feed"}
                             style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: "2px 4px", lineHeight: 1 }}>
                             {f.active
@@ -312,7 +335,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
                         <div style={{ display: "flex", gap: 12, marginTop: 4, paddingLeft: 15 }}>
                           <span style={{ color: relColor(avgRel), fontSize: 10, fontFamily: mono }}>Rel: {(avgRel * 100).toFixed(0)}%</span>
                           <span style={{ color: dotColor, fontSize: 10, fontFamily: mono }}>{timeAgo(f.latest_item)}</span>
-                          <span style={{ color: "#6B7280", fontSize: 10, fontFamily: mono }}>Items: {f.live_items ?? f.item_count ?? 0}</span>
+                          <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>Items: {f.live_items ?? f.item_count ?? 0}</span>
                           {f.last_error && <span style={{ color: "#EF4444", fontSize: 10, fontFamily: mono }} title={f.last_error}>⚠ {f.last_error.slice(0, 30)}</span>}
                         </div>
                       )}
@@ -321,43 +344,43 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
                     </div>
                     {/* Expanded feed detail */}
                     {isExpanded && (
-                      <div style={{ padding: "10px 14px 12px 25px", marginBottom: 4, background: "#161B22", borderRadius: "0 0 6px 6px", borderTop: "1px solid #1E2A3A" }}>
+                      <div style={{ padding: "10px 14px 12px 25px", marginBottom: 4, background: "var(--bg-elevated)", borderRadius: "0 0 6px 6px", borderTop: "1px solid var(--border)" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                           <div>
-                            <div style={{ color: "#6B7280", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>URL</div>
-                            <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: "#4F8EF7", fontSize: 11, fontFamily: mono, wordBreak: "break-all", textDecoration: "none" }}>{f.url}</a>
+                            <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>URL</div>
+                            <a href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", fontSize: 11, fontFamily: mono, wordBreak: "break-all", textDecoration: "none" }}>{f.url}</a>
                           </div>
                           <div style={{ display: "flex", gap: 16 }}>
                             <div>
-                              <div style={{ color: "#6B7280", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>RELEVANCE</div>
+                              <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>RELEVANCE</div>
                               <span style={{ color: relColor(avgRel), fontSize: 12, fontFamily: mono, fontWeight: 600 }}>{(avgRel * 100).toFixed(0)}%</span>
                             </div>
                             <div>
-                              <div style={{ color: "#6B7280", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>HEALTH</div>
+                              <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>HEALTH</div>
                               <span style={{ color: dotColor, fontSize: 12, fontFamily: mono, fontWeight: 600 }}>{dotTitle}</span>
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 16 }}>
                             <div>
-                              <div style={{ color: "#6B7280", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>CADENCE</div>
-                              <span style={{ color: "#C9D1D9", fontSize: 11, fontFamily: mono }}>
+                              <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>CADENCE</div>
+                              <span style={{ color: "var(--text-secondary)", fontSize: 11, fontFamily: mono }}>
                                 {f.avg_interval_hours != null
                                   ? f.avg_interval_hours < 24 ? "~daily" : f.avg_interval_hours < 72 ? "~every few days" : f.avg_interval_hours < 168 ? "~weekly" : `~every ${Math.round(f.avg_interval_hours / 24)}d`
                                   : "—"}
                               </span>
                             </div>
                             <div>
-                              <div style={{ color: "#6B7280", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>ITEMS</div>
-                              <span style={{ color: "#C9D1D9", fontSize: 11, fontFamily: mono }}>{f.live_items ?? f.item_count ?? 0}</span>
+                              <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>ITEMS</div>
+                              <span style={{ color: "var(--text-secondary)", fontSize: 11, fontFamily: mono }}>{f.live_items ?? f.item_count ?? 0}</span>
                             </div>
                             <div>
-                              <div style={{ color: "#6B7280", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>CATEGORY</div>
+                              <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>CATEGORY</div>
                               <span style={{ color: cat.color, fontSize: 11, fontFamily: mono }}>{cat.label}</span>
                             </div>
                           </div>
                           {f.last_error && (
                             <div>
-                              <div style={{ color: "#6B7280", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>ERROR</div>
+                              <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 2 }}>ERROR</div>
                               <span style={{ color: "#EF4444", fontSize: 11, fontFamily: mono }}>{f.last_error}</span>
                             </div>
                           )}
@@ -369,18 +392,18 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
               })}
               {/* Per-category recommendations (top 3) */}
               {showRecs && catSuggestions.length > 0 && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #1E2A3A" }}>
-                  <div style={{ color: "#4F8EF7", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 6, letterSpacing: "0.05em" }}>SUGGESTED</div>
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border-dashed)" }}>
+                  <div style={{ color: "var(--accent)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 6, letterSpacing: "0.05em" }}>SUGGESTED</div>
                   {catSuggestions.map(s => (
-                    <div key={s.id} style={{ padding: "6px 10px", marginBottom: 4, background: "rgba(79,142,247,0.04)", border: "1px solid rgba(79,142,247,0.1)", borderRadius: 5 }}>
+                    <div key={s.id} style={{ padding: "6px 10px", marginBottom: 4, background: "var(--suggestion-bg)", border: "1px solid var(--accent-border-subtle)", borderRadius: 5 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-                        <span style={{ color: "#C9D1D9", fontSize: 12, fontFamily: sans, fontWeight: 500 }}>{s.name}</span>
+                        <span style={{ color: "var(--text-secondary)", fontSize: 12, fontFamily: sans, fontWeight: 500 }}>{s.name}</span>
                         <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                           <button onClick={() => acceptSuggestion(s)} style={{ padding: "2px 8px", background: "#10B981", border: "none", borderRadius: 3, color: "white", fontSize: 9, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>Add</button>
-                          <button onClick={() => dismissSuggestion(s)} style={{ padding: "2px 8px", background: "transparent", border: "1px solid #1E2A3A", borderRadius: 3, color: "#6B7280", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>✕</button>
+                          <button onClick={() => dismissSuggestion(s)} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-faint)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>✕</button>
                         </div>
                       </div>
-                      {s.reason && <div style={{ color: "#8B949E", fontSize: 10, lineHeight: 1.4 }}>{s.reason}</div>}
+                      {s.reason && <div style={{ color: "var(--text-muted)", fontSize: 10, lineHeight: 1.4 }}>{s.reason}</div>}
                     </div>
                   ))}
                 </div>
@@ -391,18 +414,18 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
 
         {/* Uncategorized suggestions */}
         {showRecs && suggestions.filter(s => !CATEGORIES[s.category]).length > 0 && (
-          <div style={{ padding: "12px 20px", borderBottom: "1px solid #1E2A3A" }}>
-            <div style={{ color: "#4F8EF7", fontSize: 10, fontFamily: mono, fontWeight: 600, marginBottom: 8 }}>SUGGESTED</div>
+          <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, fontWeight: 600, marginBottom: 8 }}>SUGGESTED</div>
             {suggestions.filter(s => !CATEGORIES[s.category]).slice(0, 3).map(s => (
-              <div key={s.id} style={{ padding: "6px 10px", marginBottom: 4, background: "rgba(79,142,247,0.04)", border: "1px solid rgba(79,142,247,0.1)", borderRadius: 5 }}>
+              <div key={s.id} style={{ padding: "6px 10px", marginBottom: 4, background: "var(--suggestion-bg)", border: "1px solid var(--accent-border-subtle)", borderRadius: 5 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-                  <span style={{ color: "#C9D1D9", fontSize: 12, fontFamily: sans, fontWeight: 500 }}>{s.name}</span>
+                  <span style={{ color: "var(--text-secondary)", fontSize: 12, fontFamily: sans, fontWeight: 500 }}>{s.name}</span>
                   <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                     <button onClick={() => acceptSuggestion(s)} style={{ padding: "2px 8px", background: "#10B981", border: "none", borderRadius: 3, color: "white", fontSize: 9, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>Add</button>
-                    <button onClick={() => dismissSuggestion(s)} style={{ padding: "2px 8px", background: "transparent", border: "1px solid #1E2A3A", borderRadius: 3, color: "#6B7280", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>✕</button>
+                    <button onClick={() => dismissSuggestion(s)} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-faint)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>✕</button>
                   </div>
                 </div>
-                {s.reason && <div style={{ color: "#8B949E", fontSize: 10, lineHeight: 1.4 }}>{s.reason}</div>}
+                {s.reason && <div style={{ color: "var(--text-muted)", fontSize: 10, lineHeight: 1.4 }}>{s.reason}</div>}
               </div>
             ))}
           </div>
@@ -411,12 +434,12 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
         {/* Recommendations toggle / health check prompt */}
         <div style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {hasSuggestions && (
-            <button onClick={() => setShowRecs(!showRecs)} style={{ background: "none", border: "none", color: "#6B7280", fontSize: 10, fontFamily: mono, cursor: "pointer", padding: 0 }}>
+            <button onClick={() => setShowRecs(!showRecs)} style={{ background: "none", border: "none", color: "var(--text-faint)", fontSize: 10, fontFamily: mono, cursor: "pointer", padding: 0 }}>
               {showRecs ? "▾ Hide recommendations" : "▸ Show recommendations"}
             </button>
           )}
           {!hasSuggestions && !analysis && (
-            <div style={{ color: "#6B7280", fontSize: 11, fontFamily: sans }}>
+            <div style={{ color: "var(--text-faint)", fontSize: 11, fontFamily: sans }}>
               Run a Health Check to get AI-powered feed recommendations.
             </div>
           )}
@@ -428,6 +451,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
 
 // ── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const [items, setItems] = useState([]);
   const [feeds, setFeeds] = useState([]);
   const [stats, setStats] = useState({});
@@ -509,22 +533,22 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, background: "var(--bg-base)" }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: "linear-gradient(135deg, #4F8EF7, #8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontFamily: mono, color: "white", fontWeight: 700 }}>Δ</div>
-        <div style={{ color: "#8B949E", fontFamily: mono, fontSize: 13 }}>Loading feeds...</div>
+        <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 13 }}>Loading feeds...</div>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0A0E14" }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg-base)" }}>
       {/* Header */}
-      <header style={{ padding: "12px 28px", borderBottom: "1px solid #1E2A3A", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50, background: "#0D1117" }}>
+      <header style={{ padding: "12px 28px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50, background: "var(--bg-surface)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #4F8EF7, #8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontFamily: mono, color: "white", fontWeight: 700 }}>Δ</div>
           <div>
-            <div style={{ color: "#E6EDF3", fontSize: 15, fontWeight: 600, fontFamily: mono, letterSpacing: "-0.02em" }}>AI INTELLIGENCE HUB</div>
-            <div style={{ color: "#6B7280", fontSize: 10, fontFamily: mono }}>
+            <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: mono, letterSpacing: "-0.02em" }}>AI INTELLIGENCE HUB</div>
+            <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>
               {feeds.filter(f => f.active).length} feeds · {stats.unread || 0} unread · {stats.critical || 0} critical
               {lastRefresh && ` · refreshed ${timeAgo(lastRefresh.toISOString())}`}
             </div>
@@ -532,15 +556,15 @@ export default function App() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
-            style={{ padding: "7px 14px", background: "#161B22", border: "1px solid #1E2A3A", borderRadius: 8, color: "#E6EDF3", fontSize: 13, width: 220, fontFamily: sans, outline: "none" }} />
+            style={{ padding: "7px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, width: 220, fontFamily: sans, outline: "none" }} />
           {[
             { label: "🧠 Analyze", panel: "analysis", active: showAnalysis },
             { label: "📡 Sources", panel: "sources", active: showSources },
           ].map((b, i) => (
-            <button key={i} onClick={() => openPanel(b.panel)} style={{ padding: "7px 12px", background: b.active ? "rgba(79,142,247,0.12)" : "#161B22", border: `1px solid ${b.active ? "#4F8EF7" : "#1E2A3A"}`, borderRadius: 8, color: b.active ? "#4F8EF7" : "#C9D1D9", cursor: "pointer", fontSize: 13, fontFamily: mono, whiteSpace: "nowrap" }}>{b.label}</button>
+            <button key={i} onClick={() => openPanel(b.panel)} style={{ padding: "7px 12px", background: b.active ? "var(--accent-bg)" : "var(--bg-input)", border: `1px solid ${b.active ? "var(--accent)" : "var(--border)"}`, borderRadius: 8, color: b.active ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", fontSize: 13, fontFamily: mono, whiteSpace: "nowrap" }}>{b.label}</button>
           ))}
           <button onClick={handleRefresh} disabled={refreshing} title="Refresh all feeds and score new items"
-            style={{ padding: "7px 12px", background: refreshing ? "rgba(79,142,247,0.12)" : "#161B22", border: `1px solid ${refreshing ? "#4F8EF7" : "#1E2A3A"}`, borderRadius: 8, color: refreshing ? "#4F8EF7" : "#C9D1D9", cursor: "pointer", fontSize: 13, fontFamily: mono }}>
+            style={{ padding: "7px 12px", background: refreshing ? "var(--accent-bg)" : "var(--bg-input)", border: `1px solid ${refreshing ? "var(--accent)" : "var(--border)"}`, borderRadius: 8, color: refreshing ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", fontSize: 13, fontFamily: mono }}>
             {refreshing ? "⟳" : "🔄"}
           </button>
         </div>
@@ -548,10 +572,10 @@ export default function App() {
 
       <div style={{ display: "flex" }}>
         {/* Sidebar */}
-        <aside style={{ width: 210, borderRight: "1px solid #1E2A3A", padding: "18px 14px", position: "sticky", top: 52, height: "calc(100vh - 52px)", overflow: "auto", flexShrink: 0 }}>
-          <div style={{ color: "#6B7280", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 10, fontWeight: 600 }}>CATEGORIES</div>
+        <aside style={{ width: 210, borderRight: "1px solid var(--border)", padding: "18px 14px", position: "sticky", top: 52, height: "calc(100vh - 52px)", overflow: "auto", flexShrink: 0 }}>
+          <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 10, fontWeight: 600 }}>CATEGORIES</div>
 
-          {[{ key: "all", label: `All Items (${stats.totalItems || 0})`, color: "#C9D1D9" },
+          {[{ key: "all", label: `All Items (${stats.totalItems || 0})`, color: "var(--text-secondary)" },
             ...Object.entries(CATEGORIES).map(([k, v]) => ({
               key: k, label: `${v.icon} ${v.label}`, color: v.color,
               count: (stats.byCategory || []).find(c => c.category === k)?.count || 0,
@@ -559,41 +583,44 @@ export default function App() {
           ].map(c => (
             <button key={c.key} onClick={() => setCategory(c.key)} style={{
               display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", textAlign: "left",
-              padding: "7px 10px", background: category === c.key ? (c.color || "#4F8EF7") + "12" : "transparent",
-              border: "none", borderRadius: 6, color: category === c.key ? c.color : "#C9D1D9",
+              padding: "7px 10px", background: category === c.key ? "var(--accent-bg)" : "transparent",
+              border: "none", borderRadius: 6, color: category === c.key ? c.color : "var(--text-secondary)",
               cursor: "pointer", fontSize: 12, fontFamily: sans, marginBottom: 2,
             }}>
               <span>{c.label}</span>
-              {c.count !== undefined && <span style={{ fontSize: 10, color: "#6B7280", fontFamily: mono }}>{c.count}</span>}
+              {c.count !== undefined && <span style={{ fontSize: 10, color: "var(--text-faint)", fontFamily: mono }}>{c.count}</span>}
             </button>
           ))}
 
-          <div style={{ marginTop: 20, color: "#6B7280", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>RELEVANCE</div>
+          <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>RELEVANCE</div>
           <div style={{ padding: "0 8px" }}>
-            <input type="range" min="0" max="0.9" step="0.05" value={minRelevance} onChange={e => setMinRelevance(parseFloat(e.target.value))} style={{ width: "100%", accentColor: "#4F8EF7" }} />
-            <div style={{ color: "#8B949E", fontSize: 10, fontFamily: mono, textAlign: "center" }}>≥ {(minRelevance * 100).toFixed(0)}%</div>
+            <input type="range" min="0" max="0.9" step="0.05" value={minRelevance} onChange={e => setMinRelevance(parseFloat(e.target.value))} style={{ width: "100%", accentColor: "var(--accent)" }} />
+            <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono, textAlign: "center" }}>≥ {(minRelevance * 100).toFixed(0)}%</div>
           </div>
 
-          <div style={{ marginTop: 20, color: "#6B7280", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>QUICK ACTIONS</div>
-          <button onClick={() => { setCategory("all"); setMinRelevance(0.85); }} style={{ display: "block", width: "100%", padding: "6px 10px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, color: "#EF4444", cursor: "pointer", fontSize: 11, fontFamily: mono, marginBottom: 4, textAlign: "left" }}>
+          <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>QUICK ACTIONS</div>
+          <button onClick={() => { setCategory("all"); setMinRelevance(0.85); }} style={{ display: "block", width: "100%", padding: "6px 10px", background: "var(--critical-bg)", border: "1px solid var(--critical-border)", borderRadius: 6, color: "#EF4444", cursor: "pointer", fontSize: 11, fontFamily: mono, marginBottom: 4, textAlign: "left" }}>
             🔴 Critical Only ({stats.critical || 0})
           </button>
-          <button onClick={() => { setCategory("all"); setMinRelevance(0); setSearch(""); }} style={{ display: "block", width: "100%", padding: "6px 10px", background: "transparent", border: "1px solid #1E2A3A", borderRadius: 6, color: "#8B949E", cursor: "pointer", fontSize: 11, fontFamily: mono, textAlign: "left" }}>
+          <button onClick={() => { setCategory("all"); setMinRelevance(0); setSearch(""); }} style={{ display: "block", width: "100%", padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono, textAlign: "left" }}>
             Reset Filters
           </button>
+
+          <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>THEME</div>
+          <ThemeToggle mode={themeMode} setMode={setThemeMode} />
         </aside>
 
         {/* Main content */}
         <main style={{ flex: 1, padding: "20px 28px", maxWidth: 880 }}>
           <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "#E6EDF3", fontSize: 13, fontFamily: mono, fontWeight: 500 }}>
+            <span style={{ color: "var(--text-primary)", fontSize: 13, fontFamily: mono, fontWeight: 500 }}>
               {category === "all" ? "ALL FEEDS" : CATEGORIES[category]?.label.toUpperCase()}
-              <span style={{ color: "#6B7280", marginLeft: 8 }}>({items.length})</span>
+              <span style={{ color: "var(--text-faint)", marginLeft: 8 }}>({items.length})</span>
             </span>
           </div>
 
           {items.length === 0 && (
-            <div style={{ textAlign: "center", padding: "60px 20px", color: "#6B7280" }}>
+            <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--text-faint)" }}>
               <div style={{ fontSize: 28, marginBottom: 10 }}>⌕</div>
               <div style={{ fontSize: 13, fontFamily: sans }}>No items match your filters. Try lowering the relevance threshold or broadening the category.</div>
             </div>
@@ -606,8 +633,8 @@ export default function App() {
             return (
               <div key={item.id} onClick={() => handleItemClick(item)} style={{
                 padding: "14px 18px", marginBottom: 6,
-                background: isExpanded ? "#161B22" : item.read ? "transparent" : "#0D1117",
-                border: `1px solid ${item.relevance >= 0.85 ? relColor(item.relevance) + "40" : "#1E2A3A"}`,
+                background: isExpanded ? "var(--bg-elevated)" : item.read ? "var(--item-read)" : "var(--item-unread)",
+                border: `1px solid ${item.relevance >= 0.85 ? relColor(item.relevance) + "40" : "var(--border)"}`,
                 borderLeft: `3px solid ${relColor(item.relevance)}`,
                 borderRadius: 8, cursor: "pointer",
                 opacity: item.read && !isExpanded ? 0.65 : 1,
@@ -617,12 +644,12 @@ export default function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, flexWrap: "wrap" }}>
                   <span style={{ padding: "1px 7px", borderRadius: 3, fontSize: 10, background: cat.color + "15", color: cat.color, fontFamily: mono, fontWeight: 600 }}>{cat.label}</span>
                   <span style={{ padding: "1px 7px", borderRadius: 3, fontSize: 10, background: relColor(item.relevance) + "15", color: relColor(item.relevance), fontFamily: mono, fontWeight: 600 }}>{(item.relevance * 100).toFixed(0)}%</span>
-                  <span style={{ color: "#6B7280", fontSize: 10, fontFamily: mono }}>{item.feed_id} · {timeAgo(item.published)}</span>
+                  <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>{item.feed_id} · {timeAgo(item.published)}</span>
                   {item.saved ? <span style={{ fontSize: 10 }}>★</span> : null}
                 </div>
-                <div style={{ color: "#E6EDF3", fontSize: 14, fontWeight: 500, lineHeight: 1.4, marginBottom: 4 }}>{item.title}</div>
+                <div style={{ color: "var(--text-primary)", fontSize: 14, fontWeight: 500, lineHeight: 1.4, marginBottom: 4 }}>{item.title}</div>
                 <div style={{
-                  color: "#8B949E", fontSize: 12.5, lineHeight: 1.6,
+                  color: "var(--text-muted)", fontSize: 12.5, lineHeight: 1.6,
                   display: isExpanded ? "block" : "-webkit-box",
                   WebkitLineClamp: isExpanded ? "unset" : 2, WebkitBoxOrient: "vertical", overflow: "hidden",
                 }}>{item.summary}</div>
@@ -630,22 +657,22 @@ export default function App() {
                 {isExpanded && (
                   <div style={{ marginTop: 10 }}>
                     {item.relevance_reason && (
-                      <div style={{ padding: "8px 12px", background: "rgba(79,142,247,0.06)", border: "1px solid rgba(79,142,247,0.15)", borderRadius: 6, marginBottom: 8 }}>
-                        <div style={{ color: "#4F8EF7", fontSize: 10, fontFamily: mono, marginBottom: 3, fontWeight: 600 }}>WHY THIS MATTERS</div>
-                        <div style={{ color: "#C9D1D9", fontSize: 12, lineHeight: 1.5 }}>{item.relevance_reason}</div>
+                      <div style={{ padding: "8px 12px", background: "var(--accent-bg-subtle)", border: "1px solid var(--accent-border)", borderRadius: 6, marginBottom: 8 }}>
+                        <div style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, marginBottom: 3, fontWeight: 600 }}>WHY THIS MATTERS</div>
+                        <div style={{ color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.5 }}>{item.relevance_reason}</div>
                       </div>
                     )}
                     {item.tags && item.tags.length > 0 && (
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
-                        {item.tags.map(t => <span key={t} style={{ padding: "2px 8px", background: "#1E2A3A", borderRadius: 10, color: "#8B949E", fontSize: 10, fontFamily: mono }}>#{t}</span>)}
+                        {item.tags.map(t => <span key={t} style={{ padding: "2px 8px", background: "var(--tag-bg)", borderRadius: 10, color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>#{t}</span>)}
                       </div>
                     )}
                     <div style={{ display: "flex", gap: 6 }}>
-                      {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ padding: "5px 12px", background: "#4F8EF7", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, textDecoration: "none" }}>Open →</a>}
-                      <button onClick={e => handleSave(e, item)} style={{ padding: "5px 12px", background: item.saved ? "rgba(79,142,247,0.12)" : "transparent", border: `1px solid ${item.saved ? "#4F8EF7" : "#1E2A3A"}`, borderRadius: 6, color: item.saved ? "#4F8EF7" : "#8B949E", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+                      {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ padding: "5px 12px", background: "var(--accent)", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, textDecoration: "none" }}>Open →</a>}
+                      <button onClick={e => handleSave(e, item)} style={{ padding: "5px 12px", background: item.saved ? "var(--accent-bg)" : "transparent", border: `1px solid ${item.saved ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, color: item.saved ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
                         {item.saved ? "★ Saved" : "☆ Save"}
                       </button>
-                      <button onClick={e => handleDismiss(e, item)} style={{ padding: "5px 12px", background: "transparent", border: "1px solid #1E2A3A", borderRadius: 6, color: "#6B7280", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+                      <button onClick={e => handleDismiss(e, item)} style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-faint)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
                         ✕ Dismiss
                       </button>
                     </div>

@@ -1,0 +1,94 @@
+/* ── Theme tokens ─────────────────────────────────────────────────────────── */
+/* Applied via [data-theme="dark"] / [data-theme="light"] on <html> */
+
+[data-theme="dark"] {
+  --bg-base: #0A0E14;
+  --bg-surface: #0D1117;
+  --bg-elevated: #161B22;
+  --bg-input: #161B22;
+  --bg-form: #0A0E14;
+  --border: #1E2A3A;
+  --border-dashed: #1E2A3A;
+  --text-primary: #E6EDF3;
+  --text-secondary: #C9D1D9;
+  --text-muted: #8B949E;
+  --text-faint: #6B7280;
+  --text-disabled: #4B5563;
+  --accent: #4F8EF7;
+  --accent-purple: #8B5CF6;
+  --accent-bg: rgba(79, 142, 247, 0.12);
+  --accent-bg-subtle: rgba(79, 142, 247, 0.06);
+  --accent-border: rgba(79, 142, 247, 0.15);
+  --accent-border-subtle: rgba(79, 142, 247, 0.1);
+  --tag-bg: #1E2A3A;
+  --scrollbar: #1E2A3A;
+  --shadow-panel: rgba(0, 0, 0, 0.6);
+  --item-unread: #0D1117;
+  --item-read: transparent;
+  --muted-item-bg: rgba(107, 114, 128, 0.06);
+  --error-bg: rgba(239, 68, 68, 0.04);
+  --error-bg-strong: rgba(239, 68, 68, 0.06);
+  --critical-bg: rgba(239, 68, 68, 0.08);
+  --critical-border: rgba(239, 68, 68, 0.2);
+  --suggestion-bg: rgba(79, 142, 247, 0.04);
+  --select-option-bg: #161B22;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg-base: #FFFFFF;
+  --bg-surface: #F6F8FA;
+  --bg-elevated: #FFFFFF;
+  --bg-input: #F6F8FA;
+  --bg-form: #F6F8FA;
+  --border: #D0D7DE;
+  --border-dashed: #C0C8D0;
+  --text-primary: #1F2328;
+  --text-secondary: #424A53;
+  --text-muted: #656D76;
+  --text-faint: #8C959F;
+  --text-disabled: #AFB8C1;
+  --accent: #0969DA;
+  --accent-purple: #8250DF;
+  --accent-bg: rgba(9, 105, 218, 0.08);
+  --accent-bg-subtle: rgba(9, 105, 218, 0.04);
+  --accent-border: rgba(9, 105, 218, 0.2);
+  --accent-border-subtle: rgba(9, 105, 218, 0.12);
+  --tag-bg: #EFF1F3;
+  --scrollbar: #C8CCD0;
+  --shadow-panel: rgba(0, 0, 0, 0.12);
+  --item-unread: #FFFFFF;
+  --item-read: transparent;
+  --muted-item-bg: rgba(107, 114, 128, 0.06);
+  --error-bg: rgba(239, 68, 68, 0.04);
+  --error-bg-strong: rgba(239, 68, 68, 0.06);
+  --critical-bg: rgba(239, 68, 68, 0.06);
+  --critical-border: rgba(239, 68, 68, 0.25);
+  --suggestion-bg: rgba(9, 105, 218, 0.04);
+  --select-option-bg: #FFFFFF;
+  color-scheme: light;
+}
+
+/* ── Base styles ─────────────────────────────────────────────────────────── */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'IBM Plex Sans', sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes slideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Select option styling for dark mode */
+select option {
+  background: var(--select-option-bg);
+  color: var(--text-primary);
+}
