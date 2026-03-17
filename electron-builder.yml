@@ -17,14 +17,6 @@ files:
 extraMetadata:
   main: electron/main.js
 
-# Include backend node_modules in the package
-extraResources:
-  - from: backend/node_modules
-    to: backend/node_modules
-    filter:
-      - "**/*"
-      - "!.cache"
-
 asar: true
 
 mac:
