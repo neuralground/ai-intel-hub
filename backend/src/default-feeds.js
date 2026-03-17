@@ -24,27 +24,27 @@ export const DEFAULT_FEEDS = [
 
   // ── AI Labs Official Blogs ────────────────────────────────────────────────
   { id: "openai-blog", name: "OpenAI Blog", url: "https://openai.com/blog/rss.xml", type: "rss", category: "labs" },
-  { id: "anthropic-blog", name: "Anthropic Research", url: "https://www.anthropic.com/feed.xml", type: "rss", category: "labs" },
+  // { id: "anthropic-blog", name: "Anthropic Research", url: "https://www.anthropic.com/feed.xml", type: "rss", category: "labs" },  // no RSS feed available
   { id: "deepmind-blog", name: "Google DeepMind", url: "https://deepmind.google/blog/rss.xml", type: "rss", category: "labs" },
-  { id: "meta-ai", name: "Meta AI", url: "https://ai.meta.com/blog/rss/", type: "rss", category: "labs" },
+  // { id: "meta-ai", name: "Meta AI", url: "https://ai.meta.com/blog/rss/", type: "rss", category: "labs" },  // no RSS feed available
   { id: "google-ai-blog", name: "Google AI Blog", url: "https://blog.research.google/feeds/posts/default", type: "rss", category: "labs" },
-  { id: "mistral-blog", name: "Mistral AI Blog", url: "https://mistral.ai/feed.xml", type: "rss", category: "labs" },
-  { id: "cohere-blog", name: "Cohere Blog", url: "https://cohere.com/blog/rss.xml", type: "rss", category: "labs" },
+  // { id: "mistral-blog", name: "Mistral AI Blog", url: "https://mistral.ai/feed.xml", type: "rss", category: "labs" },  // no RSS feed available
+  // { id: "cohere-blog", name: "Cohere Blog", url: "https://cohere.com/blog/rss.xml", type: "rss", category: "labs" },  // no RSS feed available
   { id: "huggingface", name: "Hugging Face Blog", url: "https://huggingface.co/blog/feed.xml", type: "rss", category: "labs" },
 
   // ── AI Industry & Capital ─────────────────────────────────────────────────
-  { id: "a16z-ai", name: "a16z AI", url: "https://a16z.com/feed/", type: "rss", category: "industry" },
+  // { id: "a16z-ai", name: "a16z AI", url: "https://a16z.com/feed/", type: "rss", category: "industry" },  // no RSS feed available
   { id: "benedictevan", name: "Benedict Evans", url: "https://www.ben-evans.com/benedictevans?format=rss", type: "rss", category: "industry" },
   { id: "stratechery", name: "Stratechery (Ben Thompson)", url: "https://stratechery.com/feed/", type: "rss", category: "industry" },
   { id: "semianalysis", name: "SemiAnalysis", url: "https://www.semianalysis.com/feed", type: "rss", category: "industry" },
-  { id: "thetransc", name: "The Transcript (earnings calls)", url: "https://www.thetranscript.co/feed", type: "rss", category: "industry" },
+  { id: "thetransc", name: "The Transcript (earnings calls)", url: "https://thetranscript.substack.com/feed", type: "rss", category: "industry" },
 
   // ── AI Policy & Governance ────────────────────────────────────────────────
   { id: "importai", name: "Import AI (Jack Clark)", url: "https://importai.substack.com/feed", type: "rss", category: "policy" },
   { id: "chinai", name: "ChinAI Newsletter", url: "https://chinai.substack.com/feed", type: "rss", category: "policy" },
   { id: "aisnakeit", name: "AI Snake Oil (Narayanan & Kapoor)", url: "https://www.aisnakeoil.com/feed", type: "rss", category: "policy" },
-  { id: "lawfareblog", name: "Lawfare (AI & Law)", url: "https://www.lawfaremedia.org/feed", type: "rss", category: "policy" },
-  { id: "iapp-ai", name: "IAPP AI Governance", url: "https://iapp.org/rss/daily-dashboard", type: "rss", category: "policy" },
+  // { id: "lawfareblog", name: "Lawfare (AI & Law)", url: "https://www.lawfaremedia.org/feed", type: "rss", category: "policy" },  // 403 - blocking feed requests
+  // { id: "iapp-ai", name: "IAPP AI Governance", url: "https://iapp.org/rss/daily-dashboard", type: "rss", category: "policy" },  // no RSS feed available
   { id: "cset-georgetown", name: "CSET Georgetown", url: "https://cset.georgetown.edu/feed/", type: "rss", category: "policy" },
 
   // ── X Accounts (tracked, manual or API-based) ─────────────────────────────

@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// ── Initialize default feeds on first run ───────────────────────────────────
+// ── Initialize and sync default feeds ────────────────────────────────────────
 function initializeFeeds() {
   const existing = getAllFeeds();
   if (existing.length === 0) {
@@ -28,7 +28,17 @@ function initializeFeeds() {
     }
     console.log(`[Init] Loaded ${DEFAULT_FEEDS.length} default feeds`);
   } else {
-    console.log(`[Init] ${existing.length} feeds already configured`);
+    // Sync: update URLs for existing feeds, deactivate removed ones
+    const defaultIds = new Set(DEFAULT_FEEDS.map(f => f.id));
+    for (const feed of DEFAULT_FEEDS) {
+      upsertFeed({ ...feed, active: 1 });
+    }
+    for (const feed of existing) {
+      if (feed.type === "rss" && !defaultIds.has(feed.id) && !feed.userAdded) {
+        upsertFeed({ id: feed.id, active: 0 });
+      }
+    }
+    console.log(`[Init] Synced ${DEFAULT_FEEDS.length} default feeds`);
   }
 }
 
