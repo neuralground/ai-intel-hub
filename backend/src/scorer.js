@@ -158,13 +158,15 @@ export async function generateAnalysis(mode, category = null) {
   }
 
   const context = getRelevanceContext();
-  const itemSummaries = items
-    .slice(0, 15)
+  const sourceItems = items.slice(0, 15);
+  const itemSummaries = sourceItems
     .map(
       (it, i) =>
-        `${i + 1}. [${it.category}] ${it.title}\n   Source: ${it.feedId} | Relevance: ${(it.relevance * 100).toFixed(0)}%\n   ${(it.summary || "").slice(0, 200)}`
+        `${i + 1}. [${it.category}] ${it.title}\n   URL: ${it.url || "none"}\n   Source: ${it.feed_id} | Relevance: ${(it.relevance * 100).toFixed(0)}%\n   ${(it.summary || "").slice(0, 200)}`
     )
     .join("\n\n");
+
+  const citationRule = `\nIMPORTANT: For each key insight or claim, cite the source item(s) that inform it using markdown links: [short title](URL). Every bullet point or paragraph that draws on a specific item must include at least one source link.`;
 
   const prompts = {
     briefing: {
@@ -174,7 +176,7 @@ export async function generateAnalysis(mode, category = null) {
 **CRITICAL DEVELOPMENTS** (items requiring immediate attention or action)
 **STRATEGIC SIGNALS** (emerging patterns, shifts, or trends to monitor)
 **ACTION ITEMS** (specific things to investigate, prototype, escalate, or dismiss)
-
+${citationRule}
 Items:\n${itemSummaries}`,
     },
     gaps: {
@@ -184,7 +186,7 @@ Items:\n${itemSummaries}`,
 **COVERAGE GAPS** - Important AI topics NOT represented (hardware/chips, specific jurisdictions, emerging players, technical domains)
 **PERSPECTIVE BIAS** - Is the feed skewed toward particular viewpoints? Missing contrarian or critical voices?
 **SUGGESTED ADDITIONS** - Recommend 5 specific new sources with URLs where possible (substacks, blogs, X accounts, newsletters)
-
+${citationRule}
 Items:\n${itemSummaries}`,
     },
     risks: {
@@ -195,7 +197,7 @@ Items:\n${itemSummaries}`,
 **TECHNOLOGY RISKS** - Capability shifts that could disrupt current architecture decisions or strategy
 **VENDOR RISKS** - Competitive landscape changes affecting platform and model provider decisions
 **OPERATIONAL RISKS** - Workforce, security, process, or organizational implications
-
+${citationRule}
 Items:\n${itemSummaries}`,
     },
     "what-so-what-now-what": {
@@ -205,7 +207,7 @@ Items:\n${itemSummaries}`,
 **WHAT** - What changed? (Factual: new capability, regulation, risk, or market shift)
 **SO WHAT** - Why does it matter? (Implication for architecture, strategy, governance, competitive position)
 **NOW WHAT** - What should be done? (Prototype, escalate, monitor, dismiss — and who should own it)
-
+${citationRule}
 Items:\n${itemSummaries}`,
     },
   };
