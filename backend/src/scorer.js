@@ -192,12 +192,27 @@ ${citationRule}
 Items:\n${itemSummaries}`,
     },
     gaps: {
-      system: `You are an AI intelligence feed curator for: ${context}\nIdentify coverage gaps and suggest improvements.`,
-      user: `Review these feed items and identify:
+      system: `You are an AI intelligence feed curator for: ${context}\nIdentify coverage gaps and suggest concrete sources to fill them. Be specific and actionable.`,
+      user: `Review these feed items and identify coverage gaps. For EACH gap, suggest 1-3 specific sources to fill it.
 
-**COVERAGE GAPS** - Important AI topics NOT represented (hardware/chips, specific jurisdictions, emerging players, technical domains)
-**PERSPECTIVE BIAS** - Is the feed skewed toward particular viewpoints? Missing contrarian or critical voices?
-**SUGGESTED ADDITIONS** - Recommend 5 specific new sources with URLs where possible (substacks, blogs, X accounts, newsletters)
+Use this exact format for each gap:
+
+### [Gap title]
+[1-2 sentence description of what's missing and why it matters]
+
+Suggested sources:
+- [Source Name](feed:URL) — brief reason this source fills the gap
+- [Source Name](feed:URL) — brief reason
+
+After the gaps, add a section:
+
+**PERSPECTIVE BIAS** — Is the feed skewed toward particular viewpoints? Note any missing contrarian, regional, or critical voices.
+
+IMPORTANT:
+- Every gap MUST include at least one suggested source with a real, working URL
+- Use the exact format [Name](feed:URL) for suggested sources — the URL should be an RSS feed, blog, Substack, X account, or YouTube channel
+- Focus on specific, high-quality sources, not generic suggestions
+- Consider gaps in: geographic coverage (Asia, Europe, Global South), technical domains (hardware, robotics, security), emerging players, regulatory jurisdictions, and contrarian viewpoints
 ${citationRule}
 Items:\n${itemSummaries}`,
     },

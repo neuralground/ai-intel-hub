@@ -153,6 +153,19 @@ function AnalysisPanel({ category, onClose }) {
     } catch (e) { console.error(e); }
   };
 
+  // Track feeds added from gap suggestions
+  const [addedFeeds, setAddedFeeds] = useState(new Set());
+  const [addingFeed, setAddingFeed] = useState(null);
+
+  const handleAddFeed = async (url, name) => {
+    setAddingFeed(url);
+    try {
+      await api.addFeed({ name: name || url, url, category: "research", id: `custom-${Date.now()}`, active: 1 });
+      setAddedFeeds(prev => new Set(prev).add(url));
+    } catch (e) { console.error(e); }
+    setAddingFeed(null);
+  };
+
   const modes = [
     { key: "briefing", label: "Executive Brief" },
     { key: "risks", label: "Risk Scan" },
@@ -160,7 +173,10 @@ function AnalysisPanel({ category, onClose }) {
     { key: "what-so-what-now-what", label: "What / So What / Now What" },
   ];
 
-  // Custom link renderer: item:ID links open popovers, others open externally
+  // Custom link renderer:
+  //   item:ID  → opens item popover
+  //   feed:URL → shows source name + inline Add button
+  //   other    → opens externally
   const renderLink = ({ href, children }) => {
     const itemMatch = href?.match(/^item:(.+)$/);
     if (itemMatch) {
@@ -169,6 +185,25 @@ function AnalysisPanel({ category, onClose }) {
       return (
         <span onClick={() => handleItemLink(itemId)} style={{ color: "var(--accent)", cursor: "pointer", borderBottom: "1px dotted var(--accent)", fontWeight: found ? 500 : 400 }} title={found ? "Click to preview" : "Source item"}>
           {children}
+        </span>
+      );
+    }
+    const feedMatch = href?.match(/^feed:(.+)$/);
+    if (feedMatch) {
+      const feedUrl = feedMatch[1];
+      const name = typeof children === "string" ? children : Array.isArray(children) ? children.join("") : "Source";
+      const alreadyAdded = addedFeeds.has(feedUrl);
+      const isAdding = addingFeed === feedUrl;
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <a href={feedUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>
+          {alreadyAdded ? (
+            <span style={{ padding: "1px 6px", borderRadius: 3, background: "rgba(16,185,129,0.15)", color: "#10B981", fontSize: 9, fontFamily: mono, fontWeight: 600 }}>Added</span>
+          ) : (
+            <button onClick={() => handleAddFeed(feedUrl, name)} disabled={isAdding} style={{ padding: "1px 6px", borderRadius: 3, background: "var(--accent)", color: "white", border: "none", fontSize: 9, fontFamily: mono, fontWeight: 600, cursor: "pointer", opacity: isAdding ? 0.6 : 1 }}>
+              {isAdding ? "..." : "+ Add"}
+            </button>
+          )}
         </span>
       );
     }
