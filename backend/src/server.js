@@ -14,6 +14,7 @@ import {
 import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
 import { scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
+import { detectSourceType } from "./source-types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -54,6 +55,11 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString(), feeds: getAllFeeds().length });
 });
 
+// ── Source types (for frontend display) ──────────────────────────────────────
+app.get("/api/source-types", (req, res) => {
+  import("./source-types.js").then(m => res.json(m.default));
+});
+
 // ── Feeds ───────────────────────────────────────────────────────────────────
 app.get("/api/feeds", (req, res) => {
   res.json(getAllFeeds());
@@ -68,15 +74,9 @@ app.post("/api/feeds", async (req, res) => {
 
     // Infer feed type from URL if not explicitly set
     if (!feed.type) {
-      const url = (feed.url || "").toLowerCase();
-      if (url.includes("x.com/") || url.includes("twitter.com/")) {
-        feed.type = "x-account";
-      } else if (url.includes("threads.net/")) {
-        feed.type = "threads";
-      } else if (url.includes("youtube.com/") || url.includes("youtu.be/")) {
-        feed.type = "youtube";
-      } else {
-        // Try RSS validation — if it parses, it's RSS; otherwise scrape
+      feed.type = detectSourceType(feed.url);
+      if (!feed.type) {
+        // Not a known platform — try RSS parse, fall back to scrape
         const check = await validateFeedUrl(feed.url);
         if (check.valid) {
           feed.type = "rss";
