@@ -743,6 +743,98 @@ function SettingsPanel({ onClose }) {
   );
 }
 
+// ── Saved Items Panel ───────────────────────────────────────────────────────
+function SavedItemsPanel({ onClose }) {
+  const [items, setItems] = useState([]);
+  const [category, setCategory] = useState("all");
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  const loadSaved = useCallback(async () => {
+    try {
+      const res = await api.getItems({ saved: true, limit: 500, category: category !== "all" ? category : undefined });
+      setItems(res.items);
+    } catch (e) { console.error(e); }
+  }, [category]);
+
+  useEffect(() => { loadSaved(); }, [loadSaved]);
+
+  const handleUnsave = async (item) => {
+    await api.toggleSave(item.id, false);
+    setItems(prev => prev.filter(i => i.id !== item.id));
+  };
+
+  const handleDelete = async (item) => {
+    await api.deleteItem(item.id);
+    setItems(prev => prev.filter(i => i.id !== item.id));
+    setConfirmDeleteId(null);
+  };
+
+  const catCounts = {};
+  for (const it of items) { catCounts[it.category] = (catCounts[it.category] || 0) + 1; }
+
+  return (
+    <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 540, background: "var(--bg-surface)", borderLeft: "1px solid var(--border)", zIndex: 100, display: "flex", flexDirection: "column", boxShadow: `-8px 0 32px var(--shadow-panel)` }}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "var(--text-primary)", fontFamily: mono, fontSize: 14, fontWeight: 600 }}>★ SAVED ITEMS ({items.length})</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
+      </div>
+
+      {/* Category filter */}
+      <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border)", display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {[{ key: "all", label: `All (${items.length})` },
+          ...Object.entries(CATEGORIES).filter(([k]) => catCounts[k]).map(([k, v]) => ({ key: k, label: `${v.icon} ${catCounts[k]}` }))
+        ].map(c => (
+          <button key={c.key} onClick={() => setCategory(c.key)} style={{
+            padding: "4px 10px", borderRadius: 6, border: "1px solid", fontSize: 10, fontFamily: mono, cursor: "pointer",
+            borderColor: category === c.key ? "var(--accent)" : "var(--border)",
+            background: category === c.key ? "var(--accent-bg)" : "transparent",
+            color: category === c.key ? "var(--accent)" : "var(--text-muted)",
+          }}>{c.label}</button>
+        ))}
+      </div>
+
+      <div style={{ flex: 1, overflow: "auto", padding: "12px 20px" }}>
+        {items.length === 0 && (
+          <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-faint)" }}>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>★</div>
+            <div style={{ fontSize: 13, fontFamily: sans }}>No saved items yet. Click the star on any item to save it here.</div>
+          </div>
+        )}
+        {items.filter(i => category === "all" || i.category === category).map(item => {
+          const cat = CATEGORIES[item.category] || { color: "#6B7280", label: item.category };
+          const isConfirming = confirmDeleteId === item.id;
+          return (
+            <div key={item.id} style={{ padding: "12px 14px", marginBottom: 6, background: "var(--bg-elevated)", border: "1px solid var(--border)", borderLeft: `3px solid ${relColor(item.relevance)}`, borderRadius: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                <span style={{ padding: "1px 7px", borderRadius: 3, fontSize: 10, background: cat.color + "15", color: cat.color, fontFamily: mono, fontWeight: 600 }}>{cat.label}</span>
+                <span style={{ padding: "1px 7px", borderRadius: 3, fontSize: 10, background: relColor(item.relevance) + "15", color: relColor(item.relevance), fontFamily: mono, fontWeight: 600 }}>{(item.relevance * 100).toFixed(0)}%</span>
+                <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>{timeAgo(item.published)}</span>
+              </div>
+              <div style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 500, lineHeight: 1.4, marginBottom: 4 }}>{item.title}</div>
+              {item.relevance_reason && (
+                <div style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, marginBottom: 6 }}>{item.relevance_reason}</div>
+              )}
+              {isConfirming ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0" }}>
+                  <span style={{ color: "var(--text-secondary)", fontSize: 11, fontFamily: sans }}>Delete permanently?</span>
+                  <button onClick={() => handleDelete(item)} style={{ padding: "4px 12px", background: "#EF4444", border: "none", borderRadius: 5, color: "white", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>Delete</button>
+                  <button onClick={() => setConfirmDeleteId(null)} style={{ padding: "4px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 10, fontFamily: mono, cursor: "pointer" }}>Cancel</button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                  {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ padding: "4px 10px", background: "var(--accent)", borderRadius: 5, color: "white", fontSize: 10, fontFamily: mono, textDecoration: "none" }}>Open →</a>}
+                  <button onClick={() => handleUnsave(item)} style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 10, fontFamily: mono, cursor: "pointer" }}>Unsave</button>
+                  <button onClick={() => setConfirmDeleteId(item.id)} style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "#EF4444", fontSize: 10, fontFamily: mono, cursor: "pointer" }}>Delete</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
@@ -756,6 +848,7 @@ export default function App() {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -763,7 +856,7 @@ export default function App() {
   const loadData = useCallback(async () => {
     try {
       const [itemsRes, feedsRes, statsRes] = await Promise.all([
-        api.getItems({ category: category !== "all" ? category : undefined, minRelevance, search, limit: 100 }),
+        api.getItems({ category: category !== "all" ? category : undefined, minRelevance, search, unread: true, limit: 100 }),
         api.getFeeds(),
         api.getStats(),
       ]);
@@ -828,10 +921,28 @@ export default function App() {
     } catch (err) { console.error(err); }
   };
 
+  const handleFeedback = async (e, item, value) => {
+    e.stopPropagation();
+    const newValue = item.feedback === value ? null : value; // toggle
+    try {
+      await api.feedbackItem(item.id, newValue);
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, feedback: newValue } : i));
+    } catch (err) { console.error(err); }
+  };
+
+  const handleMarkRead = async (e, item) => {
+    e.stopPropagation();
+    try {
+      await api.markRead(item.id);
+      setItems(prev => prev.filter(i => i.id !== item.id));
+    } catch (err) { console.error(err); }
+  };
+
   const openPanel = (panel) => {
     setShowAnalysis(panel === "analysis" ? !showAnalysis : false);
     setShowSources(panel === "sources" ? !showSources : false);
     setShowSettings(panel === "settings" ? !showSettings : false);
+    setShowSaved(panel === "saved" ? !showSaved : false);
   };
 
   if (loading) {
@@ -862,6 +973,7 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {[
             { label: "🧠 Intel", panel: "analysis", active: showAnalysis },
+            { label: "★ Saved", panel: "saved", active: showSaved },
             { label: "📡 Sources", panel: "sources", active: showSources },
             { label: "⚙ Settings", panel: "settings", active: showSettings },
           ].map((b, i) => (
@@ -950,6 +1062,8 @@ export default function App() {
                   <span style={{ padding: "1px 7px", borderRadius: 3, fontSize: 10, background: relColor(item.relevance) + "15", color: relColor(item.relevance), fontFamily: mono, fontWeight: 600 }}>{(item.relevance * 100).toFixed(0)}%</span>
                   <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>{item.feed_id} · {timeAgo(item.published)}</span>
                   {item.saved ? <span style={{ fontSize: 10 }}>★</span> : null}
+                  {item.feedback === 1 && <span style={{ fontSize: 10 }}>👍</span>}
+                  {item.feedback === -1 && <span style={{ fontSize: 10 }}>👎</span>}
                 </div>
                 <div style={{ color: "var(--text-primary)", fontSize: 14, fontWeight: 500, lineHeight: 1.4, marginBottom: 4 }}>{item.title}</div>
                 <div style={{
@@ -971,10 +1085,19 @@ export default function App() {
                         {item.tags.map(t => <span key={t} style={{ padding: "2px 8px", background: "var(--tag-bg)", borderRadius: 10, color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>#{t}</span>)}
                       </div>
                     )}
-                    <div style={{ display: "flex", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ padding: "5px 12px", background: "var(--accent)", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, textDecoration: "none" }}>Open →</a>}
+                      <button onClick={e => handleFeedback(e, item, 1)} title="More like this" style={{ padding: "5px 10px", background: item.feedback === 1 ? "rgba(16,185,129,0.15)" : "transparent", border: `1px solid ${item.feedback === 1 ? "#10B981" : "var(--border)"}`, borderRadius: 6, color: item.feedback === 1 ? "#10B981" : "var(--text-faint)", cursor: "pointer", fontSize: 13 }}>
+                        👍
+                      </button>
+                      <button onClick={e => handleFeedback(e, item, -1)} title="Less like this" style={{ padding: "5px 10px", background: item.feedback === -1 ? "rgba(239,68,68,0.15)" : "transparent", border: `1px solid ${item.feedback === -1 ? "#EF4444" : "var(--border)"}`, borderRadius: 6, color: item.feedback === -1 ? "#EF4444" : "var(--text-faint)", cursor: "pointer", fontSize: 13 }}>
+                        👎
+                      </button>
                       <button onClick={e => handleSave(e, item)} style={{ padding: "5px 12px", background: item.saved ? "var(--accent-bg)" : "transparent", border: `1px solid ${item.saved ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, color: item.saved ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
                         {item.saved ? "★ Saved" : "☆ Save"}
+                      </button>
+                      <button onClick={e => handleMarkRead(e, item)} title="Mark read and remove from feed" style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+                        ✓ Read
                       </button>
                       <button onClick={e => handleDismiss(e, item)} style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-faint)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
                         ✕ Dismiss
@@ -992,6 +1115,7 @@ export default function App() {
       {showAnalysis && <AnalysisPanel category={category} onClose={() => setShowAnalysis(false)} />}
       {showSources && <SourcesPanel feeds={feeds} onClose={() => setShowSources(false)} onRefresh={loadData} />}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSaved && <SavedItemsPanel onClose={() => setShowSaved(false)} />}
     </div>
   );
 }

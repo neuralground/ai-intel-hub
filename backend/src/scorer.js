@@ -94,6 +94,7 @@ No other text. Valid JSON only.`;
           ...item,
           relevance: Math.max(0, Math.min(1, score.relevance)),
           relevanceReason: score.reason || null,
+          scored_at: new Date().toISOString(),
           tags: [...new Set([...(item.tags || []), ...(score.tags || [])])].slice(0, 10),
         };
         upsertItem(updatedItem);

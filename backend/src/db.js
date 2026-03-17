@@ -82,14 +82,21 @@ export function upsertItem(item) {
     fetched_at: item.fetched_at || new Date().toISOString(),
     category: item.category || "", relevance: item.relevance ?? 0.5,
     relevance_reason: item.relevanceReason || item.relevance_reason || null,
+    scored_at: item.scored_at || null,
     tags: item.tags || [], read: item.read ?? 0, saved: item.saved ?? 0, dismissed: item.dismissed ?? 0,
+    feedback: item.feedback ?? null, feedback_boost: item.feedback_boost ?? 0,
   };
   const idx = store.items.findIndex(i => i.id === n.id);
   if (idx >= 0) {
     const ex = store.items[idx];
-    store.items[idx] = { ...n, read: ex.read, saved: ex.saved, dismissed: ex.dismissed,
-      relevance: item.relevance !== 0.5 ? n.relevance : ex.relevance,
-      relevance_reason: n.relevance_reason || ex.relevance_reason,
+    // Preserve user state and scoring on re-fetch
+    store.items[idx] = { ...n,
+      read: ex.read, saved: ex.saved, dismissed: ex.dismissed,
+      feedback: ex.feedback, feedback_boost: ex.feedback_boost || 0,
+      fetched_at: ex.fetched_at, // keep original fetch time
+      relevance: (ex.scored_at && item.relevance === 0.5) ? ex.relevance : n.relevance,
+      relevance_reason: ex.relevance_reason || n.relevance_reason,
+      scored_at: ex.scored_at || n.scored_at,
       tags: n.tags.length > 0 ? n.tags : ex.tags,
     };
   } else { store.items.push(n); }
@@ -97,18 +104,20 @@ export function upsertItem(item) {
   return { changes: idx >= 0 ? 0 : 1 };
 }
 
-export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, saved, search }) {
+export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, saved, unread, search }) {
   let r = store.items.filter(i => !i.dismissed);
   if (category && category !== "all") r = r.filter(i => i.category === category);
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
   if (saved) r = r.filter(i => i.saved);
+  if (unread) r = r.filter(i => !i.read);
   if (search) { const q = search.toLowerCase(); r = r.filter(i => (i.title||"").toLowerCase().includes(q) || (i.summary||"").toLowerCase().includes(q) || (i.tags||[]).some(t => t.toLowerCase().includes(q))); }
-  // Sort by combined relevance + freshness, then diversify across categories
+  // Sort by combined relevance + freshness + user feedback
   const now = Date.now();
   const score = (item) => {
     const ageHours = (now - new Date(item.published).getTime()) / 3600000;
     const freshness = Math.exp(-ageHours / 48);
-    return item.relevance * 0.5 + freshness * 0.5;
+    const boostedRelevance = Math.max(0, Math.min(1, item.relevance + (item.feedback_boost || 0)));
+    return boostedRelevance * 0.5 + freshness * 0.5;
   };
   r.sort((a, b) => {
     const diff = score(b) - score(a);
@@ -153,6 +162,21 @@ export function getItemCount({ category, minRelevance = 0 }) {
 export function markItem(itemId, field, value) {
   const item = store.items.find(i => i.id === itemId);
   if (item) { item[field] = value ? 1 : 0; save(); }
+}
+
+export function setItemFeedback(itemId, feedback) {
+  const item = store.items.find(i => i.id === itemId);
+  if (!item) return;
+  item.feedback = feedback; // 1 = thumbs up, -1 = thumbs down, null = clear
+  item.feedback_boost = feedback === 1 ? 0.15 : feedback === -1 ? -0.20 : 0;
+  save();
+}
+
+export function deleteItem(itemId) {
+  const before = store.items.length;
+  store.items = store.items.filter(i => i.id !== itemId);
+  if (before !== store.items.length) save();
+  return { changes: before - store.items.length };
 }
 
 export function getStats() {
@@ -243,7 +267,7 @@ export function getCachedAnalysis(mode, category, maxAgeMinutes = 60) {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
 }
 
-export function cleanupOldItems(daysToKeep = 30) {
+export function cleanupOldItems(daysToKeep = 7) {
   const cutoff = new Date(Date.now() - daysToKeep * 86400000).toISOString();
   const before = store.items.length;
   store.items = store.items.filter(i => i.saved || i.published > cutoff);

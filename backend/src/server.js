@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
   getAllFeeds, getActiveFeeds, upsertFeed, deleteFeed,
-  getItems, getItemCount, markItem, getStats,
+  getItems, getItemCount, markItem, setItemFeedback, deleteItem, getStats,
   getFeedHealth, getSuggestions, getSuggestionById, addSuggestion, updateSuggestionStatus,
   cleanupOldItems,
 } from "./db.js";
@@ -108,13 +108,14 @@ app.delete("/api/feeds/:id", (req, res) => {
 
 // ── Items ───────────────────────────────────────────────────────────────────
 app.get("/api/items", (req, res) => {
-  const { category, minRelevance, limit, offset, saved, search } = req.query;
+  const { category, minRelevance, limit, offset, saved, unread, search } = req.query;
   const items = getItems({
     category,
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
     limit: limit ? parseInt(limit) : 100,
     offset: offset ? parseInt(offset) : 0,
     saved: saved === "true",
+    unread: unread === "true",
     search,
   });
   const count = getItemCount({
@@ -138,6 +139,17 @@ app.post("/api/items/:id/save", (req, res) => {
 app.post("/api/items/:id/dismiss", (req, res) => {
   markItem(req.params.id, "dismissed", true);
   res.json({ ok: true });
+});
+
+app.post("/api/items/:id/feedback", (req, res) => {
+  const { feedback } = req.body; // 1, -1, or null
+  setItemFeedback(req.params.id, feedback);
+  res.json({ ok: true });
+});
+
+app.delete("/api/items/:id", (req, res) => {
+  const result = deleteItem(req.params.id);
+  res.json({ ok: true, ...result });
 });
 
 // ── Stats ───────────────────────────────────────────────────────────────────
@@ -289,10 +301,11 @@ cron.schedule(`*/${refreshInterval} * * * *`, async () => {
   }
 });
 
-// Daily cleanup
+// Daily cleanup (configurable retention, default 7 days, saved items exempt)
 cron.schedule("0 3 * * *", () => {
-  console.log("[Cron] Running daily cleanup...");
-  const result = cleanupOldItems(30);
+  const retentionDays = parseInt(process.env.ITEM_RETENTION_DAYS || "7");
+  console.log(`[Cron] Running daily cleanup (retain ${retentionDays} days)...`);
+  const result = cleanupOldItems(retentionDays);
   console.log(`[Cron] Cleaned up ${result.changes} old items`);
 });
 
@@ -306,6 +319,7 @@ const SETTINGS_KEYS = [
   "RELEVANCE_CONTEXT",
   "SCORING_INSTRUCTIONS",
   "FEED_REFRESH_INTERVAL",
+  "ITEM_RETENTION_DAYS",
   "SUBSTACK_SESSION",
   "TWITTER_SESSION",
   "LINKEDIN_SESSION",
@@ -339,6 +353,7 @@ app.get("/api/settings", (req, res) => {
     relevanceContext: saved.RELEVANCE_CONTEXT || process.env.RELEVANCE_CONTEXT || "",
     scoringInstructions: saved.SCORING_INSTRUCTIONS || process.env.SCORING_INSTRUCTIONS || "",
     refreshInterval: saved.FEED_REFRESH_INTERVAL || process.env.FEED_REFRESH_INTERVAL || "30",
+    retentionDays: saved.ITEM_RETENTION_DAYS || process.env.ITEM_RETENTION_DAYS || "7",
     substackSession: maskKey(saved.SUBSTACK_SESSION || ""),
     twitterSession: maskKey(saved.TWITTER_SESSION || ""),
     linkedinSession: maskKey(saved.LINKEDIN_SESSION || ""),

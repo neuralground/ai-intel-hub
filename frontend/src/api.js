@@ -30,6 +30,8 @@ export const api = {
   markRead: (id) => request(`/items/${id}/read`, { method: "POST" }),
   toggleSave: (id, saved) => request(`/items/${id}/save`, { method: "POST", body: JSON.stringify({ saved }) }),
   dismissItem: (id) => request(`/items/${id}/dismiss`, { method: "POST" }),
+  feedbackItem: (id, feedback) => request(`/items/${id}/feedback`, { method: "POST", body: JSON.stringify({ feedback }) }),
+  deleteItem: (id) => request(`/items/${id}`, { method: "DELETE" }),
 
   // Stats
   getStats: () => request("/stats"),
