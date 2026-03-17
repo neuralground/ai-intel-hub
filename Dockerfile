@@ -20,12 +20,12 @@ COPY backend/src/ ./backend/src/
 # Copy frontend build
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
-# Create data directory for SQLite
+# Create data directory for persistence
 RUN mkdir -p /app/backend/data
 
 ENV NODE_ENV=production
 ENV PORT=3001
-ENV DB_PATH=/app/backend/data/intel-hub.db
+ENV DATA_DIR=/app/backend/data
 
 EXPOSE 3001
 

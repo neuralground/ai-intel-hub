@@ -2,6 +2,9 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import cron from "node-cron";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import {
   getAllFeeds, getActiveFeeds, upsertFeed, deleteFeed,
   getItems, getItemCount, markItem, getStats,
@@ -12,6 +15,7 @@ import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
 import { scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -268,20 +272,6 @@ app.post("/api/suggestions/:id/dismiss", (req, res) => {
   }
 });
 
-// ── Serve frontend in production ────────────────────────────────────────────
-if (process.env.NODE_ENV === "production") {
-  import("path").then(({ default: path }) => {
-    import("url").then(({ fileURLToPath }) => {
-      const __dirname = path.dirname(fileURLToPath(import.meta.url));
-      const frontendPath = path.join(__dirname, "..", "..", "frontend", "dist");
-      app.use(express.static(frontendPath));
-      app.get("*", (req, res) => {
-        res.sendFile(path.join(frontendPath, "index.html"));
-      });
-    });
-  });
-}
-
 // ── Scheduled jobs ──────────────────────────────────────────────────────────
 const refreshInterval = parseInt(process.env.FEED_REFRESH_INTERVAL || "30");
 
@@ -306,31 +296,106 @@ cron.schedule("0 3 * * *", () => {
   console.log(`[Cron] Cleaned up ${result.changes} old items`);
 });
 
-// ── Start ───────────────────────────────────────────────────────────────────
-initializeFeeds();
+// ── Electron settings API ────────────────────────────────────────────────────
+// Allows the Electron app to read/write settings without .env files
+function getSettingsFile() {
+  const dataDir = process.env.DATA_DIR || path.join(__dirname, "..", "data");
+  return path.join(path.dirname(dataDir), "settings.json");
+}
 
-app.listen(PORT, () => {
-  console.log(`
+app.get("/api/electron/settings", (req, res) => {
+  try {
+    const settings = JSON.parse(fs.readFileSync(getSettingsFile(), "utf-8"));
+    res.json({
+      hasApiKey: !!settings.ANTHROPIC_API_KEY,
+      relevanceContext: settings.RELEVANCE_CONTEXT || "",
+      refreshInterval: settings.FEED_REFRESH_INTERVAL || "30",
+    });
+  } catch {
+    res.json({ hasApiKey: false, relevanceContext: "", refreshInterval: "30" });
+  }
+});
+
+app.post("/api/electron/settings", (req, res) => {
+  try {
+    const settingsFile = getSettingsFile();
+    let settings = {};
+    try { settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8")); } catch { /* new file */ }
+    const updates = req.body;
+    if (updates.ANTHROPIC_API_KEY !== undefined) {
+      settings.ANTHROPIC_API_KEY = updates.ANTHROPIC_API_KEY;
+      process.env.ANTHROPIC_API_KEY = updates.ANTHROPIC_API_KEY;
+    }
+    if (updates.RELEVANCE_CONTEXT !== undefined) {
+      settings.RELEVANCE_CONTEXT = updates.RELEVANCE_CONTEXT;
+      process.env.RELEVANCE_CONTEXT = updates.RELEVANCE_CONTEXT;
+    }
+    if (updates.FEED_REFRESH_INTERVAL !== undefined) {
+      settings.FEED_REFRESH_INTERVAL = updates.FEED_REFRESH_INTERVAL;
+    }
+    fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Serve frontend in production / Electron mode ─────────────────────────────
+// Registered after all API routes to avoid catch-all shadowing /api/* endpoints
+if (process.env.NODE_ENV === "production" || process.env.ELECTRON_MODE) {
+  const frontendPath = path.join(__dirname, "..", "..", "frontend", "dist");
+  app.use(express.static(frontendPath));
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(frontendPath, "index.html"));
+  });
+}
+
+// ── Start ───────────────────────────────────────────────────────────────────
+
+/**
+ * Create and start the server. Used by both standalone and Electron modes.
+ * @param {number} port - Port to listen on (0 for random available port)
+ * @returns {Promise<import("http").Server>} The HTTP server instance
+ */
+export function createServer(port) {
+  initializeFeeds();
+
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
+      const actualPort = server.address().port;
+      console.log(`
 ╔══════════════════════════════════════════════╗
 ║         AI INTELLIGENCE HUB - Backend        ║
 ║──────────────────────────────────────────────║
-║  Server:    http://localhost:${PORT}             ║
-║  API:       http://localhost:${PORT}/api         ║
+║  Server:    http://localhost:${actualPort}             ║
+║  API:       http://localhost:${actualPort}/api         ║
 ║  Feeds:     ${getAllFeeds().length} configured                  ║
 ║  Refresh:   every ${refreshInterval} minutes                  ║
 ║  LLM:       ${process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here" ? "configured ✓" : "not configured ✗"}              ║
 ╚══════════════════════════════════════════════╝
-  `);
+      `);
 
-  // Initial fetch on startup
-  console.log("[Startup] Running initial feed fetch...");
-  fetchAllFeeds().then((result) => {
-    console.log(`[Startup] Fetched ${result.totalNew} new items from ${result.feeds.length} feeds`);
-    if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
-      console.log("[Startup] Scoring items...");
-      scoreUnscoredItems().then((r) => console.log(`[Startup] Scored ${r.scored} items`));
-    }
+      // Initial fetch on startup
+      console.log("[Startup] Running initial feed fetch...");
+      fetchAllFeeds().then((result) => {
+        console.log(`[Startup] Fetched ${result.totalNew} new items from ${result.feeds.length} feeds`);
+        if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
+          console.log("[Startup] Scoring items...");
+          scoreUnscoredItems().then((r) => console.log(`[Startup] Scored ${r.scored} items`));
+        }
+      });
+
+      resolve(server);
+    });
+
+    server.on("error", reject);
   });
-});
+}
+
+// When run directly (not imported by Electron), start the server immediately
+if (!process.env.ELECTRON_MODE) {
+  createServer(parseInt(PORT));
+}
 
 export default app;

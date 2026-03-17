@@ -10,9 +10,14 @@ The AI Intelligence Hub is a personalized feed aggregation and analysis platform
 
 ## System Architecture
 
+The app runs in two modes from the same codebase:
+
+- **Client-Server:** Express runs standalone; frontend served by Vite (dev) or Express (prod)
+- **Desktop (Electron):** Express runs inside Electron's main process; React loads in a BrowserWindow
+
 ```
                          ┌─────────────────────────────┐
-                         │     User's Browser           │
+                         │  Browser / Electron Window   │
                          │  React SPA (Vite)            │
                          │  localhost:5173 (dev)         │
                          └──────────┬──────────────────┘
@@ -20,7 +25,7 @@ The AI Intelligence Hub is a personalized feed aggregation and analysis platform
                                     │ served by Express in prod)
                          ┌──────────┴──────────────────┐
                          │     Express Backend          │
-                         │     localhost:3001            │
+                         │     localhost:3001 (or auto)  │
                          │                              │
                          │  ┌────────────────────────┐  │
                          │  │     REST API Layer      │  │
@@ -69,24 +74,44 @@ The AI Intelligence Hub is a personalized feed aggregation and analysis platform
 
 ```
 ai-intel-hub/
-├── package.json                 # Root workspace: npm run dev starts both
+├── package.json                 # Root workspace: npm scripts for dev, build, and Electron
 ├── Dockerfile                   # Multi-stage: builds frontend, serves from Express
 ├── docker-compose.yml           # One-command deployment with persistent volume
-├── README.md                    # User-facing setup and usage guide
+├── electron-builder.yml         # Electron packaging config (macOS, Windows, Linux)
+├── Makefile                     # Convenience targets for all build modes
+├── README.md                    # Installation, configuration, and usage guide
+├── ELECTRON.md                  # Desktop app build, signing, and distribution guide
 ├── ARCHITECTURE.md              # This file
+│
+├── electron/
+│   ├── main.js                  # Electron main process: window, menu, settings, lifecycle
+│   └── preload.js               # Context-isolated preload script
+│
+├── build/
+│   ├── icon.svg                 # Source icon template (gradient + delta symbol)
+│   ├── icon.png                 # Generated 1024x1024 PNG
+│   ├── icon.icns                # Generated macOS icon bundle
+│   └── entitlements.mac.plist   # macOS entitlements for hardened runtime
+│
+├── scripts/
+│   └── generate-icons.js        # SVG → PNG → .icns/.ico icon generator
+│
+├── .github/workflows/
+│   └── build-electron.yml       # CI/CD: builds macOS + Windows, creates GitHub Release
 │
 ├── backend/
 │   ├── package.json             # Express, rss-parser, node-cron, dotenv
 │   ├── .env.example             # Template: ANTHROPIC_API_KEY, RELEVANCE_CONTEXT, etc.
 │   ├── .env                     # Local config (gitignored)
+│   ├── feeds.json               # Default feed configuration (~50 feeds)
 │   ├── data/
 │   │   └── db.json              # Persistent store (gitignored)
 │   └── src/
-│       ├── server.js            # Express app, API routes, cron jobs, startup logic
+│       ├── server.js            # Express app, API routes, cron jobs, createServer()
 │       ├── db.js                # Persistence layer (JSON-file, in-memory with debounced writes)
 │       ├── fetcher.js           # RSS/Atom feed parser, tag extraction, batch fetching
 │       ├── scorer.js            # Claude API integration: scoring, analysis, feed health
-│       └── default-feeds.js     # 50 pre-configured feeds across 5 categories
+│       └── default-feeds.js     # Feed configuration loader/saver
 │
 └── frontend/
     ├── package.json             # React 18, Vite
@@ -95,20 +120,21 @@ ai-intel-hub/
     └── src/
         ├── main.jsx             # React entry point
         ├── api.js               # API client (fetch wrapper, all endpoints)
-        └── App.jsx              # Full dashboard: sidebar, feed list, analysis panel, settings
+        └── App.jsx              # Full dashboard: sidebar, feed list, analysis panel, sources
 ```
 
 **Line counts (approximate):**
 | File | Lines | Role |
 |------|-------|------|
-| `backend/src/server.js` | 261 | API routes, scheduler, startup |
-| `backend/src/scorer.js` | 250 | LLM scoring and analysis |
+| `backend/src/server.js` | 400 | API routes, scheduler, startup, Electron settings |
+| `backend/src/scorer.js` | 337 | LLM scoring and analysis |
 | `backend/src/fetcher.js` | 191 | RSS parsing and ingestion |
-| `backend/src/db.js` | 169 | Persistence layer |
-| `backend/src/default-feeds.js` | 72 | Feed configuration |
-| `frontend/src/App.jsx` | 399 | Dashboard UI |
+| `backend/src/db.js` | 254 | Persistence layer |
+| `backend/src/default-feeds.js` | 17 | Feed configuration loader |
+| `electron/main.js` | 259 | Electron main process |
+| `frontend/src/App.jsx` | 665 | Dashboard UI |
 | `frontend/src/api.js` | 54 | API client |
-| **Total** | **~1,400** | |
+| **Total** | **~2,200** | |
 
 ---
 
@@ -240,7 +266,7 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 | `PORT` | No | 3001 | Backend port |
 | `FEED_REFRESH_INTERVAL` | No | 30 | Minutes between auto-refresh cycles |
 | `RELEVANCE_CONTEXT` | Strongly recommended | Generic | Describes the user's role, focus areas, and priorities. Directly controls relevance scoring quality. |
-| `DB_PATH` / `DATA_DIR` | No | `./data/` | Where persistent data is stored |
+| `DATA_DIR` | No | `./data/` | Where persistent data (db.json) is stored |
 | `NODE_ENV` | No | development | Set to `production` to serve frontend from Express |
 
 ---
@@ -463,11 +489,12 @@ Organized by priority and effort. Items marked `[MVP]` are the most impactful ne
 npm run setup          # Install deps, create .env from template
 nano backend/.env      # Add ANTHROPIC_API_KEY
 npm run dev            # Starts backend (3001) + frontend (5173)
+npm run electron:dev   # Or run as desktop app with HMR
 ```
 
 ### Testing a change
-- Backend changes auto-reload via `node --watch`
-- Frontend changes hot-reload via Vite HMR
+- Backend changes auto-reload via `node --watch` (client-server) or require restart (Electron)
+- Frontend changes hot-reload via Vite HMR in both modes
 - To manually trigger a feed refresh: `curl -X POST http://localhost:3001/api/fetch`
 - To manually trigger scoring: `curl -X POST http://localhost:3001/api/score`
 - To test analysis: `curl -X POST http://localhost:3001/api/analyze -H 'Content-Type: application/json' -d '{"mode":"briefing"}'`
@@ -479,12 +506,14 @@ npm run dev            # Starts backend (3001) + frontend (5173)
 - Item IDs are deterministic hashes (SHA256 of feedId + entry guid) to enable idempotent upserts
 - Relevance of exactly 0.5 with null `relevance_reason` indicates an unscored item
 - The `RELEVANCE_CONTEXT` env var is injected into all LLM prompts as system context — changing it changes scoring behavior globally
+- `server.js` exports `createServer(port)` — called by Electron or auto-invoked in standalone mode
+- `ELECTRON_MODE` env var, when set, prevents auto-start and enables static file serving from built frontend
 
 ### Adding a new feed source type
 1. Add a fetcher function in `fetcher.js` that returns `{items: [...], error: null}`
 2. Items must conform to the shape expected by `db.upsertItem()`
 3. Register the new type in `fetchAllFeeds()` alongside the RSS path
-4. Add the type option to the frontend Settings panel dropdown
+4. Add the type option to the frontend Sources panel dropdown
 
 ### Adding a new analysis mode
 1. Add a prompt template to the `prompts` object in `scorer.js` → `generateAnalysis()`

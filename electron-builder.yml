@@ -1,0 +1,84 @@
+appId: com.ai-intel-hub.app
+productName: AI Intelligence Hub
+copyright: Copyright © 2024
+
+directories:
+  output: dist-electron
+  buildResources: build
+
+files:
+  - electron/**/*
+  - backend/src/**/*
+  - backend/package.json
+  - backend/feeds.json
+  - frontend/dist/**/*
+  - package.json
+
+extraMetadata:
+  main: electron/main.js
+
+# Include backend node_modules in the package
+extraResources:
+  - from: backend/node_modules
+    to: backend/node_modules
+    filter:
+      - "**/*"
+      - "!.cache"
+
+asar: true
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - universal
+    - target: zip
+      arch:
+        - universal
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false  # Set to true and configure credentials for distribution
+
+dmg:
+  title: "${productName}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AI Intelligence Hub
+
+linux:
+  icon: build/icon.png
+  category: Utility
+  target:
+    - target: AppImage
+    - target: deb
+
+publish: null  # Disable auto-update publishing (configure for your own server)

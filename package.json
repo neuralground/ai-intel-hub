@@ -2,7 +2,9 @@
   "name": "ai-intel-hub",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "description": "AI Intelligence Hub - Personalized AI feed aggregation, analysis, and curation",
+  "main": "electron/main.js",
   "scripts": {
     "install:all": "cd backend && npm install && cd ../frontend && npm install",
     "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
@@ -10,9 +12,21 @@
     "dev:frontend": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
     "start": "cd backend && NODE_ENV=production npm start",
-    "setup": "npm run install:all && cp -n backend/.env.example backend/.env 2>/dev/null; echo 'Setup complete. Edit backend/.env to add your Anthropic API key.'"
+    "setup": "npm run install:all && cp -n backend/.env.example backend/.env 2>/dev/null; echo 'Setup complete. Edit backend/.env to add your Anthropic API key.'",
+
+    "electron:dev": "concurrently --kill-others \"cd frontend && npm run dev\" \"sleep 2 && NODE_ENV=development electron .\"",
+    "electron:start": "npm run build && electron .",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:linux": "npm run build && electron-builder --linux",
+    "electron:build:all": "npm run build && electron-builder --mac --win --linux",
+    "electron:icons": "node scripts/generate-icons.js",
+    "postinstall": "electron-builder install-app-deps || true"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0"
   }
 }

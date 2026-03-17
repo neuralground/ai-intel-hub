@@ -4,3 +4,10 @@ backend/data/
 backend/.env
 .DS_Store
 *.log
+
+# Electron build output
+dist-electron/
+build/icon.png
+build/icon.icns
+build/icon.ico
+build/icon.iconset/
