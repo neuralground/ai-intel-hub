@@ -36,11 +36,45 @@ function saveSettings(settings) {
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }
 
-// Apply saved settings to environment
+// Apply saved settings to environment, seeding from .env on first launch
 const settings = loadSettings();
-if (settings.ANTHROPIC_API_KEY) process.env.ANTHROPIC_API_KEY = settings.ANTHROPIC_API_KEY;
-if (settings.RELEVANCE_CONTEXT) process.env.RELEVANCE_CONTEXT = settings.RELEVANCE_CONTEXT;
-if (settings.FEED_REFRESH_INTERVAL) process.env.FEED_REFRESH_INTERVAL = settings.FEED_REFRESH_INTERVAL;
+const isFirstLaunch = Object.keys(settings).length === 0;
+
+if (isFirstLaunch) {
+  // Seed from .env if it exists alongside the source (dev) or in common locations
+  const envPaths = [
+    path.join(__dirname, "..", "backend", ".env"),
+    path.join(__dirname, "..", ".env"),
+  ];
+  for (const envPath of envPaths) {
+    try {
+      if (fs.existsSync(envPath)) {
+        const envContent = fs.readFileSync(envPath, "utf-8");
+        const parsed = {};
+        for (const line of envContent.split("\n")) {
+          const match = line.match(/^([A-Z_]+)\s*=\s*"?(.+?)"?\s*$/);
+          if (match) parsed[match[1]] = match[2];
+        }
+        if (parsed.ANTHROPIC_API_KEY && parsed.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
+          settings.ANTHROPIC_API_KEY = parsed.ANTHROPIC_API_KEY;
+        }
+        if (parsed.RELEVANCE_CONTEXT) settings.RELEVANCE_CONTEXT = parsed.RELEVANCE_CONTEXT;
+        if (parsed.FEED_REFRESH_INTERVAL) settings.FEED_REFRESH_INTERVAL = parsed.FEED_REFRESH_INTERVAL;
+        saveSettings(settings);
+        console.log(`[Electron] Seeded settings from ${envPath}`);
+        break;
+      }
+    } catch { /* ignore */ }
+  }
+}
+
+const ALL_SETTINGS_KEYS = [
+  "ANTHROPIC_API_KEY", "RELEVANCE_CONTEXT", "SCORING_INSTRUCTIONS",
+  "FEED_REFRESH_INTERVAL", "SUBSTACK_SESSION", "TWITTER_BEARER_TOKEN", "LINKEDIN_SESSION",
+];
+for (const key of ALL_SETTINGS_KEYS) {
+  if (settings[key]) process.env[key] = settings[key];
+}
 
 function createWindow(port) {
   mainWindow = new BrowserWindow({
@@ -133,73 +167,12 @@ function buildMenu(port) {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-async function showSettingsDialog() {
-  const current = loadSettings();
-
-  // Use a simple prompt approach via dialog
-  const { response } = await dialog.showMessageBox(mainWindow, {
-    type: "info",
-    title: "Settings",
-    message: "AI Intelligence Hub Settings",
-    detail: [
-      `API Key: ${current.ANTHROPIC_API_KEY ? "configured" : "not set"}`,
-      `Relevance Context: ${current.RELEVANCE_CONTEXT || "(default)"}`,
-      `Refresh Interval: ${current.FEED_REFRESH_INTERVAL || "30"} minutes`,
-      "",
-      "Settings are stored in:",
-      SETTINGS_FILE,
-      "",
-      "To update, edit the settings file directly or use the buttons below.",
-    ].join("\n"),
-    buttons: ["OK", "Open Settings File", "Set API Key"],
-  });
-
-  if (response === 1) {
-    // Open settings file - create if doesn't exist
-    if (!fs.existsSync(SETTINGS_FILE)) {
-      saveSettings({
-        ANTHROPIC_API_KEY: "",
-        RELEVANCE_CONTEXT: "Senior technology executive at a major bank focused on AI strategy, architecture, and governance.",
-        FEED_REFRESH_INTERVAL: "30",
-      });
-    }
-    shell.openPath(SETTINGS_FILE);
-  } else if (response === 2) {
-    // Prompt for API key
-    const win = new BrowserWindow({
-      parent: mainWindow,
-      modal: true,
-      width: 500,
-      height: 200,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      title: "Set Anthropic API Key",
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
-    });
-
-    const html = `<!DOCTYPE html>
-<html><head><style>
-body { font-family: -apple-system, sans-serif; padding: 20px; background: #1e1e2e; color: #cdd6f4; }
-input { width: 100%; padding: 10px; margin: 10px 0; border-radius: 6px; border: 1px solid #45475a; background: #313244; color: #cdd6f4; font-size: 14px; }
-button { padding: 8px 20px; border-radius: 6px; border: none; background: #89b4fa; color: #1e1e2e; font-weight: 600; cursor: pointer; margin-right: 8px; }
-button.cancel { background: #45475a; color: #cdd6f4; }
-</style></head><body>
-<h3>Anthropic API Key</h3>
-<input type="password" id="key" placeholder="sk-ant-..." value="${current.ANTHROPIC_API_KEY || ""}" />
-<div><button onclick="save()">Save</button><button class="cancel" onclick="window.close()">Cancel</button></div>
-<script>
-function save() {
-  const key = document.getElementById('key').value;
-  fetch('http://localhost:${serverInstance?.address?.()?.port || 3001}/api/electron/settings', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ANTHROPIC_API_KEY: key})
-  }).then(() => window.close());
-}
-</script></body></html>`;
-
-    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+function showSettingsDialog() {
+  // Open the in-app settings panel via the renderer
+  if (mainWindow) {
+    mainWindow.webContents.executeJavaScript(
+      'window.dispatchEvent(new CustomEvent("open-settings"))'
+    );
   }
 }
 

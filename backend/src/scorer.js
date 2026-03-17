@@ -15,6 +15,10 @@ function getRelevanceContext() {
   );
 }
 
+function getScoringInstructions() {
+  return process.env.SCORING_INSTRUCTIONS || "";
+}
+
 // ── Call Claude API ─────────────────────────────────────────────────────────
 async function callClaude(systemPrompt, userMessage, maxTokens = 1500) {
   const apiKey = getApiKey();
@@ -51,9 +55,10 @@ export async function scoreItems(items) {
   if (items.length === 0) return [];
 
   const context = getRelevanceContext();
+  const instructions = getScoringInstructions();
   const systemPrompt = `You are a relevance scoring engine for an AI intelligence feed.
 The reader is: ${context}
-
+${instructions ? `\nAdditional scoring instructions: ${instructions}\n` : ""}
 Score each item from 0.0 to 1.0 for relevance to this reader. Also provide a brief reason (one sentence) explaining why it matters to them specifically.
 
 Respond ONLY with a JSON array of objects: [{"id": "...", "relevance": 0.85, "reason": "...", "tags": ["tag1", "tag2"]}]

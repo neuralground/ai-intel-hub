@@ -449,6 +449,131 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   );
 }
 
+// ── Settings Panel ──────────────────────────────────────────────────────────
+function SettingsPanel({ onClose }) {
+  const [settings, setSettings] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [form, setForm] = useState({});
+
+  useEffect(() => {
+    api.getSettings().then(s => {
+      setSettings(s);
+      setForm({
+        apiKey: "",
+        relevanceContext: s.relevanceContext || "",
+        scoringInstructions: s.scoringInstructions || "",
+        refreshInterval: s.refreshInterval || "30",
+        substackSession: "",
+        twitterBearerToken: "",
+        linkedinSession: "",
+      });
+    }).catch(console.error);
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaved(false);
+    const updates = {};
+    if (form.apiKey) updates.ANTHROPIC_API_KEY = form.apiKey;
+    if (form.relevanceContext !== (settings?.relevanceContext || "")) updates.RELEVANCE_CONTEXT = form.relevanceContext;
+    if (form.scoringInstructions !== (settings?.scoringInstructions || "")) updates.SCORING_INSTRUCTIONS = form.scoringInstructions;
+    if (form.refreshInterval !== (settings?.refreshInterval || "30")) updates.FEED_REFRESH_INTERVAL = form.refreshInterval;
+    if (form.substackSession) updates.SUBSTACK_SESSION = form.substackSession;
+    if (form.twitterBearerToken) updates.TWITTER_BEARER_TOKEN = form.twitterBearerToken;
+    if (form.linkedinSession) updates.LINKEDIN_SESSION = form.linkedinSession;
+
+    if (Object.keys(updates).length > 0) {
+      try {
+        await api.saveSettings(updates);
+        const refreshed = await api.getSettings();
+        setSettings(refreshed);
+        setForm(f => ({ ...f, apiKey: "", substackSession: "", twitterBearerToken: "", linkedinSession: "" }));
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+      } catch (e) { console.error(e); }
+    }
+    setSaving(false);
+  };
+
+  const inp = { padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontSize: 13, fontFamily: sans, outline: "none", width: "100%" };
+  const textarea = { ...inp, minHeight: 80, resize: "vertical", fontFamily: sans, lineHeight: 1.5 };
+  const label = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
+  const hint = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
+
+  if (!settings) return null;
+
+  return (
+    <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 540, background: "var(--bg-surface)", borderLeft: "1px solid var(--border)", zIndex: 100, display: "flex", flexDirection: "column", boxShadow: `-8px 0 32px var(--shadow-panel)` }}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ color: "var(--text-primary)", fontFamily: mono, fontSize: 14, fontWeight: 600 }}>⚙ SETTINGS</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18 }}>✕</button>
+      </div>
+
+      <div style={{ flex: 1, overflow: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 18 }}>
+        {/* Your Role */}
+        <div>
+          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>Your Role</div>
+          <label style={label}>RELEVANCE CONTEXT</label>
+          <textarea value={form.relevanceContext} onChange={e => setForm(f => ({ ...f, relevanceContext: e.target.value }))} placeholder="Describe your role, responsibilities, and focus areas..." style={textarea} />
+          <div style={hint}>This tells the LLM who you are so it can score items for your specific needs. Be specific about your role, industry, and focus areas.</div>
+        </div>
+
+        {/* Scoring Instructions */}
+        <div>
+          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>Scoring Instructions</div>
+          <label style={label}>PRIORITIZATION & FILTERING</label>
+          <textarea value={form.scoringInstructions} onChange={e => setForm(f => ({ ...f, scoringInstructions: e.target.value }))} placeholder="E.g., Prioritize agentic AI and MCP protocol developments. Deprioritize general ML benchmarks. Flag anything related to EU AI Act..." style={textarea} />
+          <div style={hint}>Additional instructions for how items should be scored, filtered, or recommended. These are appended to the scoring prompt.</div>
+        </div>
+
+        {/* API Keys */}
+        <div>
+          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>API Keys</div>
+          <label style={label}>ANTHROPIC API KEY {settings.hasApiKey && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
+          <input type="password" value={form.apiKey} onChange={e => setForm(f => ({ ...f, apiKey: e.target.value }))} placeholder={settings.hasApiKey ? settings.anthropicApiKey : "sk-ant-..."} style={inp} />
+          <div style={hint}>Required for relevance scoring and analysis. Leave blank to keep current key.</div>
+        </div>
+
+        {/* Refresh Interval */}
+        <div>
+          <label style={label}>FEED REFRESH INTERVAL (MINUTES)</label>
+          <input type="number" min="5" max="1440" value={form.refreshInterval} onChange={e => setForm(f => ({ ...f, refreshInterval: e.target.value }))} style={{ ...inp, width: 120 }} />
+        </div>
+
+        {/* Third-Party Services */}
+        <div>
+          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>Service Credentials</div>
+          <div style={hint}>Optional. Used for authenticated access to feeds behind login walls.</div>
+
+          <div style={{ marginTop: 10 }}>
+            <label style={label}>TWITTER / X BEARER TOKEN {settings.twitterBearerToken && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
+            <input type="password" value={form.twitterBearerToken} onChange={e => setForm(f => ({ ...f, twitterBearerToken: e.target.value }))} placeholder={settings.twitterBearerToken || "Not set"} style={inp} />
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            <label style={label}>SUBSTACK SESSION TOKEN {settings.substackSession && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
+            <input type="password" value={form.substackSession} onChange={e => setForm(f => ({ ...f, substackSession: e.target.value }))} placeholder={settings.substackSession || "Not set"} style={inp} />
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            <label style={label}>LINKEDIN SESSION TOKEN {settings.linkedinSession && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
+            <input type="password" value={form.linkedinSession} onChange={e => setForm(f => ({ ...f, linkedinSession: e.target.value }))} placeholder={settings.linkedinSession || "Not set"} style={inp} />
+          </div>
+        </div>
+      </div>
+
+      {/* Save bar */}
+      <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={handleSave} disabled={saving} style={{ padding: "8px 20px", background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontFamily: mono, fontSize: 12, cursor: "pointer", fontWeight: 600, opacity: saving ? 0.6 : 1 }}>
+          {saving ? "Saving..." : "Save Settings"}
+        </button>
+        {saved && <span style={{ color: "#10B981", fontSize: 12, fontFamily: mono }}>Saved</span>}
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
@@ -461,6 +586,7 @@ export default function App() {
   const [expandedItem, setExpandedItem] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
@@ -488,6 +614,13 @@ export default function App() {
     const interval = setInterval(loadData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [loadData]);
+
+  // Listen for Electron's Cmd+, settings shortcut
+  useEffect(() => {
+    const handler = () => { setShowSettings(true); setShowAnalysis(false); setShowSources(false); };
+    window.addEventListener("open-settings", handler);
+    return () => window.removeEventListener("open-settings", handler);
+  }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -529,6 +662,7 @@ export default function App() {
   const openPanel = (panel) => {
     setShowAnalysis(panel === "analysis" ? !showAnalysis : false);
     setShowSources(panel === "sources" ? !showSources : false);
+    setShowSettings(panel === "settings" ? !showSettings : false);
   };
 
   if (loading) {
@@ -543,8 +677,8 @@ export default function App() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg-base)" }}>
       {/* Header */}
-      <header style={{ padding: "12px 28px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50, background: "var(--bg-surface)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <header style={{ padding: "12px 28px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 14, position: "sticky", top: 0, zIndex: 50, background: "var(--bg-surface)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #4F8EF7, #8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontFamily: mono, color: "white", fontWeight: 700 }}>Δ</div>
           <div>
             <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: mono, letterSpacing: "-0.02em" }}>AI INTELLIGENCE HUB</div>
@@ -554,12 +688,13 @@ export default function App() {
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
-            style={{ padding: "7px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, width: 220, fontFamily: sans, outline: "none" }} />
+        <input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
+          style={{ padding: "7px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, flex: 1, minWidth: 120, fontFamily: sans, outline: "none" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {[
             { label: "🧠 Analyze", panel: "analysis", active: showAnalysis },
             { label: "📡 Sources", panel: "sources", active: showSources },
+            { label: "⚙ Settings", panel: "settings", active: showSettings },
           ].map((b, i) => (
             <button key={i} onClick={() => openPanel(b.panel)} style={{ padding: "7px 12px", background: b.active ? "var(--accent-bg)" : "var(--bg-input)", border: `1px solid ${b.active ? "var(--accent)" : "var(--border)"}`, borderRadius: 8, color: b.active ? "var(--accent)" : "var(--text-secondary)", cursor: "pointer", fontSize: 13, fontFamily: mono, whiteSpace: "nowrap" }}>{b.label}</button>
           ))}
@@ -687,6 +822,7 @@ export default function App() {
       {/* Panels */}
       {showAnalysis && <AnalysisPanel category={category} onClose={() => setShowAnalysis(false)} />}
       {showSources && <SourcesPanel feeds={feeds} onClose={() => setShowSources(false)} onRefresh={loadData} />}
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
     </div>
   );
 }

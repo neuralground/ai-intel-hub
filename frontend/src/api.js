@@ -51,4 +51,8 @@ export const api = {
   getSuggestions: () => request("/suggestions"),
   acceptSuggestion: (id) => request(`/suggestions/${id}/accept`, { method: "POST" }),
   dismissSuggestion: (id) => request(`/suggestions/${id}/dismiss`, { method: "POST" }),
+
+  // Settings
+  getSettings: () => request("/settings"),
+  saveSettings: (settings) => request("/settings", { method: "POST", body: JSON.stringify(settings) }),
 };

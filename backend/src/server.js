@@ -296,49 +296,81 @@ cron.schedule("0 3 * * *", () => {
   console.log(`[Cron] Cleaned up ${result.changes} old items`);
 });
 
-// ── Electron settings API ────────────────────────────────────────────────────
-// Allows the Electron app to read/write settings without .env files
+// ── Settings API ─────────────────────────────────────────────────────────────
+// Read/write app settings. In Electron mode these persist to settings.json;
+// in server mode they update the running process env (and persist to settings.json
+// in DATA_DIR's parent if writable).
+
+const SETTINGS_KEYS = [
+  "ANTHROPIC_API_KEY",
+  "RELEVANCE_CONTEXT",
+  "SCORING_INSTRUCTIONS",
+  "FEED_REFRESH_INTERVAL",
+  "SUBSTACK_SESSION",
+  "TWITTER_BEARER_TOKEN",
+  "LINKEDIN_SESSION",
+];
+
 function getSettingsFile() {
   const dataDir = process.env.DATA_DIR || path.join(__dirname, "..", "data");
   return path.join(path.dirname(dataDir), "settings.json");
 }
 
-app.get("/api/electron/settings", (req, res) => {
+function loadSettingsFile() {
   try {
-    const settings = JSON.parse(fs.readFileSync(getSettingsFile(), "utf-8"));
-    res.json({
-      hasApiKey: !!settings.ANTHROPIC_API_KEY,
-      relevanceContext: settings.RELEVANCE_CONTEXT || "",
-      refreshInterval: settings.FEED_REFRESH_INTERVAL || "30",
-    });
+    return JSON.parse(fs.readFileSync(getSettingsFile(), "utf-8"));
   } catch {
-    res.json({ hasApiKey: false, relevanceContext: "", refreshInterval: "30" });
+    return {};
   }
+}
+
+function maskKey(key) {
+  if (!key || key.length < 12) return key ? "***" : "";
+  return key.slice(0, 7) + "..." + key.slice(-4);
+}
+
+app.get("/api/settings", (req, res) => {
+  const saved = loadSettingsFile();
+  res.json({
+    anthropicApiKey: maskKey(saved.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ""),
+    hasApiKey: !!(saved.ANTHROPIC_API_KEY || (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here")),
+    relevanceContext: saved.RELEVANCE_CONTEXT || process.env.RELEVANCE_CONTEXT || "",
+    scoringInstructions: saved.SCORING_INSTRUCTIONS || process.env.SCORING_INSTRUCTIONS || "",
+    refreshInterval: saved.FEED_REFRESH_INTERVAL || process.env.FEED_REFRESH_INTERVAL || "30",
+    substackSession: maskKey(saved.SUBSTACK_SESSION || ""),
+    twitterBearerToken: maskKey(saved.TWITTER_BEARER_TOKEN || ""),
+    linkedinSession: maskKey(saved.LINKEDIN_SESSION || ""),
+  });
 });
 
-app.post("/api/electron/settings", (req, res) => {
+app.post("/api/settings", (req, res) => {
   try {
     const settingsFile = getSettingsFile();
-    let settings = {};
-    try { settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8")); } catch { /* new file */ }
+    let settings = loadSettingsFile();
     const updates = req.body;
-    if (updates.ANTHROPIC_API_KEY !== undefined) {
-      settings.ANTHROPIC_API_KEY = updates.ANTHROPIC_API_KEY;
-      process.env.ANTHROPIC_API_KEY = updates.ANTHROPIC_API_KEY;
+
+    for (const key of SETTINGS_KEYS) {
+      if (updates[key] !== undefined) {
+        settings[key] = updates[key];
+        // Apply to running process immediately
+        process.env[key] = updates[key];
+      }
     }
-    if (updates.RELEVANCE_CONTEXT !== undefined) {
-      settings.RELEVANCE_CONTEXT = updates.RELEVANCE_CONTEXT;
-      process.env.RELEVANCE_CONTEXT = updates.RELEVANCE_CONTEXT;
-    }
-    if (updates.FEED_REFRESH_INTERVAL !== undefined) {
-      settings.FEED_REFRESH_INTERVAL = updates.FEED_REFRESH_INTERVAL;
-    }
+
     fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
     fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Keep legacy endpoint for backward compat with Electron settings dialog
+app.get("/api/electron/settings", (req, res) => res.redirect("/api/settings"));
+app.post("/api/electron/settings", (req, res) => {
+  // Forward to /api/settings
+  req.url = "/api/settings";
+  app.handle(req, res);
 });
 
 // ── Serve frontend in production / Electron mode ─────────────────────────────
