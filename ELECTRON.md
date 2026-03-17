@@ -275,23 +275,51 @@ Links clicked in the app (e.g., "Open" on a feed item) open in the system defaul
 ### Application Menu
 
 The app provides a native menu bar with:
-- **Settings...** (Cmd+, / Ctrl+,) — opens settings dialog
+- **Settings...** (Cmd+, / Ctrl+,) — opens the in-app settings panel
 - Standard Edit menu (cut, copy, paste, undo, redo)
 - **View** menu with reload, DevTools toggle, and zoom controls
 - Standard Window menu
 
+### Settings Panel
+
+The settings panel (gear icon in the header, or Cmd+,) provides direct editing of:
+
+- **Your Role** — relevance context that drives all LLM scoring
+- **Scoring Instructions** — additional prioritization, filtering, and recommendation guidance
+- **API Key** — Anthropic key with masked display
+- **Refresh Interval** — feed refresh frequency in minutes
+- **Connected Services** — browser-based login for third-party services
+
+### Service Connections
+
+The desktop app supports browser-based login for five services. Clicking "Sign in" opens the service's login page in a popup window. After you log in normally, the app captures your session cookie and stores it for authenticated feed access.
+
+| Service | What's captured | Used for |
+|---------|----------------|----------|
+| X / Twitter | `auth_token` cookie | Accessing tweets from tracked accounts |
+| Substack | `substack.sid` cookie | Reading paywalled Substack posts |
+| LinkedIn | `li_at` cookie | Monitoring LinkedIn thought leader posts |
+| Threads | `sessionid` cookie | Following Threads conversations |
+| YouTube | Multiple Google cookies (SID, HSID, etc.) | Accessing subscriptions and channel content |
+
+Each service uses an isolated browser session (separate Electron partition) so credentials don't leak between services or into the main app.
+
+In client-server (web) mode, the same panel shows manual token paste fields with instructions for extracting cookies from browser DevTools.
+
 ### Settings API
 
-The backend exposes `/api/electron/settings` endpoints for reading and writing settings programmatically. These endpoints work in all modes but are primarily designed for the Electron settings dialog:
+The backend exposes `/api/settings` endpoints for reading and writing settings programmatically:
 
 ```bash
-# Read (API key is masked — returns hasApiKey: true/false)
-GET /api/electron/settings
+# Read (secrets are masked)
+GET /api/settings
 
-# Write (updates both the settings file and the running process)
-POST /api/electron/settings
-{"ANTHROPIC_API_KEY": "sk-ant-...", "RELEVANCE_CONTEXT": "..."}
+# Write (updates settings file and running process)
+POST /api/settings
+{"RELEVANCE_CONTEXT": "...", "SCORING_INSTRUCTIONS": "..."}
 ```
+
+Accepted keys: `ANTHROPIC_API_KEY`, `RELEVANCE_CONTEXT`, `SCORING_INSTRUCTIONS`, `FEED_REFRESH_INTERVAL`, `TWITTER_SESSION`, `SUBSTACK_SESSION`, `LINKEDIN_SESSION`, `THREADS_SESSION`, `YOUTUBE_SESSION`
 
 ---
 
@@ -302,7 +330,8 @@ POST /api/electron/settings
 | Install | `npm install` + `.env` | Double-click installer |
 | Run | `npm start` or `docker compose up` | Launch app |
 | Access | Browser at localhost:3001 | Native window |
-| Configuration | `backend/.env` file | Settings menu + `settings.json` |
+| Configuration | `backend/.env` file | In-app settings panel + `settings.json` |
+| Service login | Manual token paste | Browser-based sign-in |
 | Data location | `backend/data/` | OS app data directory |
 | Multi-user | Yes (shared server) | Single user |
 | Headless/CLI | Yes | No |

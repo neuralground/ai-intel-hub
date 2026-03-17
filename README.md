@@ -37,8 +37,11 @@ Open the DMG or run the installer. The app launches immediately with ~50 pre-con
 
 1. Open the app
 2. Feeds begin loading automatically
-3. To enable LLM features (relevance scoring, analysis briefings): **App Menu > Settings...** (Cmd+, on macOS) and set your Anthropic API key
-4. Customize your relevance context (see [Configuring Relevance Context](#configuring-relevance-context))
+3. Open **Settings** (gear icon in the header bar, or Cmd+, on macOS) to configure:
+   - **Anthropic API key** — required for relevance scoring and analysis
+   - **Your Role** — describe who you are so the LLM can score items for your needs
+   - **Scoring Instructions** — additional prioritization and filtering guidance
+4. Optionally connect third-party services (X/Twitter, Substack, LinkedIn, Threads, YouTube) via the **Connected Services** section in Settings. In the desktop app, clicking "Sign in" opens a browser login window — no API keys or developer accounts needed.
 
 ### Desktop Data and Settings
 
@@ -53,11 +56,17 @@ The settings file stores your configuration as JSON:
 {
   "ANTHROPIC_API_KEY": "sk-ant-...",
   "RELEVANCE_CONTEXT": "Your role and focus areas...",
-  "FEED_REFRESH_INTERVAL": "30"
+  "SCORING_INSTRUCTIONS": "Prioritize agentic AI developments...",
+  "FEED_REFRESH_INTERVAL": "30",
+  "TWITTER_SESSION": "...",
+  "SUBSTACK_SESSION": "...",
+  "LINKEDIN_SESSION": "...",
+  "THREADS_SESSION": "...",
+  "YOUTUBE_SESSION": "..."
 }
 ```
 
-You can edit this file directly, or use **App Menu > Settings...** to open it.
+You can edit this file directly, or use the in-app Settings panel.
 
 ### Building the Desktop App from Source
 
@@ -217,12 +226,18 @@ The desktop app stores configuration in `settings.json` (see [Desktop Data and S
 |--------------------|--------------------|-------------|
 | `ANTHROPIC_API_KEY` | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `RELEVANCE_CONTEXT` | `RELEVANCE_CONTEXT` | Your role and focus areas |
+| `SCORING_INSTRUCTIONS` | `SCORING_INSTRUCTIONS` | Additional prioritization/filtering guidance |
 | `FEED_REFRESH_INTERVAL` | `FEED_REFRESH_INTERVAL` | Refresh interval in minutes |
+| `TWITTER_SESSION` | `TWITTER_SESSION` | X/Twitter session (set via browser login) |
+| `SUBSTACK_SESSION` | `SUBSTACK_SESSION` | Substack session (set via browser login) |
+| `LINKEDIN_SESSION` | `LINKEDIN_SESSION` | LinkedIn session (set via browser login) |
+| `THREADS_SESSION` | `THREADS_SESSION` | Threads session (set via browser login) |
+| `YOUTUBE_SESSION` | `YOUTUBE_SESSION` | YouTube session (set via browser login) |
 
 Settings can be updated three ways:
-1. **App menu:** Settings... (Cmd+, / Ctrl+,)
+1. **Settings panel:** click the gear icon in the header (or Cmd+, / Ctrl+,)
 2. **Edit the file:** Open `settings.json` in any text editor
-3. **API:** `POST /api/electron/settings` with JSON body (see [API Reference](#api-reference))
+3. **API:** `POST /api/settings` with JSON body (see [API Reference](#api-reference))
 
 ### Configuring Relevance Context
 
@@ -335,11 +350,13 @@ Analysis modes: `briefing`, `risks`, `gaps`, `what-so-what-now-what`
 | `POST` | `/api/suggestions/:id/accept` | Accept a suggestion (creates feed) |
 | `POST` | `/api/suggestions/:id/dismiss` | Dismiss a suggestion |
 
-### Settings (Desktop mode)
+### Settings
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/electron/settings` | Read current settings (API key masked) |
-| `POST` | `/api/electron/settings` | Update settings `{ANTHROPIC_API_KEY?, RELEVANCE_CONTEXT?, FEED_REFRESH_INTERVAL?}` |
+| `GET` | `/api/settings` | Read current settings (secrets masked) |
+| `POST` | `/api/settings` | Update settings (any combination of keys below) |
+
+Accepted keys for `POST /api/settings`: `ANTHROPIC_API_KEY`, `RELEVANCE_CONTEXT`, `SCORING_INSTRUCTIONS`, `FEED_REFRESH_INTERVAL`, `TWITTER_SESSION`, `SUBSTACK_SESSION`, `LINKEDIN_SESSION`, `THREADS_SESSION`, `YOUTUBE_SESSION`
 
 ---
 

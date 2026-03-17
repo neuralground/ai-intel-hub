@@ -449,15 +449,29 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   );
 }
 
+// ── Service brand icons (inline SVG) ────────────────────────────────────────
+const SvcIcon = ({ d, viewBox = "0 0 24 24", size = 16, color }) => (
+  <svg width={size} height={size} viewBox={viewBox} fill={color} xmlns="http://www.w3.org/2000/svg">
+    <path d={d} />
+  </svg>
+);
+
+const SERVICE_ICONS = {
+  twitter: (color) => <SvcIcon color={color} d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />,
+  substack: (color) => <SvcIcon color={color} d="M22.539 8.242H1.46V5.406h21.08zM1.46 10.812V24L12 18.11 22.54 24V10.812zM22.54 0H1.46v2.836h21.08z" />,
+  linkedin: (color) => <SvcIcon color={color} d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0z" />,
+  threads: (color) => <SvcIcon color={color} d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.59 12c.025 3.086.718 5.496 2.057 7.164 1.43 1.783 3.631 2.698 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.96-.065-1.17.408-2.265 1.33-3.084.857-.762 2.058-1.2 3.479-1.269 1.015-.05 1.96.026 2.836.194-.07-.81-.281-1.452-.635-1.924-.506-.672-1.281-1.018-2.303-1.028h-.06c-.774.005-1.758.264-2.353.754l-1.354-1.594C6.908 4.353 8.417 3.9 9.878 3.882h.088c1.595.017 2.856.598 3.742 1.724.783.996 1.208 2.322 1.263 3.94.544.127 1.05.296 1.514.506 1.14.516 2.084 1.29 2.728 2.238.88 1.296 1.07 2.878.547 4.574-.7 2.268-2.593 3.823-5.635 4.626-.892.236-1.883.378-2.967.442-.32.019-.643.03-.968.03l.004.038zM10.14 15.39c.017.305.17.6.43.827.37.318.9.482 1.437.453.907-.05 1.6-.36 2.06-.925.31-.382.555-.906.731-1.562-.66-.14-1.37-.2-2.108-.168-.97.046-1.683.313-2.12.793-.278.306-.419.65-.43.582z" />,
+  youtube: (color) => <SvcIcon color={color} d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12z" />,
+};
+
 // ── Service connection definitions ──────────────────────────────────────────
 // Add new services here. Each entry drives a connect/disconnect card in Settings.
-// In Electron, services with `electronAuth: true` use native OAuth/cookie-capture
+// In Electron, services with `electronAuth: true` use native browser login
 // flows via IPC. In web mode, they fall back to manual token paste.
 const SERVICES = [
   {
     id: "twitter",
     name: "X / Twitter",
-    icon: "𝕏",
     settingsKey: "twitterSession",
     envKey: "TWITTER_SESSION",
     description: "Access tweets and threads from tracked X accounts.",
@@ -468,7 +482,6 @@ const SERVICES = [
   {
     id: "substack",
     name: "Substack",
-    icon: "◉",
     settingsKey: "substackSession",
     envKey: "SUBSTACK_SESSION",
     description: "Access paywalled Substack posts you subscribe to.",
@@ -479,7 +492,6 @@ const SERVICES = [
   {
     id: "linkedin",
     name: "LinkedIn",
-    icon: "in",
     settingsKey: "linkedinSession",
     envKey: "LINKEDIN_SESSION",
     description: "Monitor posts from LinkedIn thought leaders.",
@@ -490,7 +502,6 @@ const SERVICES = [
   {
     id: "threads",
     name: "Threads",
-    icon: "@",
     settingsKey: "threadsSession",
     envKey: "THREADS_SESSION",
     description: "Follow conversations on Threads by Meta.",
@@ -501,7 +512,6 @@ const SERVICES = [
   {
     id: "youtube",
     name: "YouTube",
-    icon: "▶",
     settingsKey: "youtubeSession",
     envKey: "YOUTUBE_SESSION",
     description: "Access subscriptions and channel content on YouTube.",
@@ -550,8 +560,8 @@ function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect 
     <div style={{ padding: "12px 14px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: connected ? "var(--accent-bg)" : "var(--bg-input)", border: `1px solid ${connected ? "var(--accent)" : "var(--border)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: mono, fontWeight: 700, color: connected ? "var(--accent)" : "var(--text-disabled)" }}>
-            {service.icon}
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: connected ? "var(--accent-bg)" : "var(--bg-input)", border: `1px solid ${connected ? "var(--accent)" : "var(--border)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {SERVICE_ICONS[service.id]?.(connected ? "var(--accent)" : "var(--text-disabled)")}
           </div>
           <div>
             <div style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 500, fontFamily: sans }}>{service.name}</div>
