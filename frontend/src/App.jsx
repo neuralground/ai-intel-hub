@@ -449,11 +449,107 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   );
 }
 
+// ── Service connection definitions ──────────────────────────────────────────
+// Add new services here. Each entry drives a connect/disconnect card in Settings.
+const SERVICES = [
+  {
+    id: "twitter",
+    name: "X / Twitter",
+    icon: "𝕏",
+    settingsKey: "twitterBearerToken",
+    envKey: "TWITTER_BEARER_TOKEN",
+    description: "Access tweets and threads from tracked X accounts.",
+    tokenLabel: "Bearer Token",
+    tokenPlaceholder: "AAAA...",
+    helpUrl: "https://developer.x.com/en/portal/dashboard",
+    helpText: "Get a bearer token from the X Developer Portal (Basic tier: $100/mo).",
+  },
+  {
+    id: "substack",
+    name: "Substack",
+    icon: "◉",
+    settingsKey: "substackSession",
+    envKey: "SUBSTACK_SESSION",
+    description: "Access paywalled Substack posts you subscribe to.",
+    tokenLabel: "Session Cookie",
+    tokenPlaceholder: "Paste substack.sid cookie value...",
+    helpText: "Open Substack in your browser, then copy the 'substack.sid' cookie from DevTools > Application > Cookies.",
+  },
+  {
+    id: "linkedin",
+    name: "LinkedIn",
+    icon: "in",
+    settingsKey: "linkedinSession",
+    envKey: "LINKEDIN_SESSION",
+    description: "Monitor posts from LinkedIn thought leaders.",
+    tokenLabel: "Session Cookie",
+    tokenPlaceholder: "Paste li_at cookie value...",
+    helpText: "Open LinkedIn in your browser, then copy the 'li_at' cookie from DevTools > Application > Cookies.",
+  },
+];
+
+// ── Service Connect Card ────────────────────────────────────────────────────
+function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect }) {
+  const [showConnect, setShowConnect] = useState(false);
+  const [token, setToken] = useState("");
+
+  const handleConnect = () => {
+    if (token.trim()) {
+      onConnect(service, token.trim());
+      setToken("");
+      setShowConnect(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: "12px 14px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: connected ? "var(--accent-bg)" : "var(--bg-input)", border: `1px solid ${connected ? "var(--accent)" : "var(--border)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontFamily: mono, fontWeight: 700, color: connected ? "var(--accent)" : "var(--text-disabled)" }}>
+            {service.icon}
+          </div>
+          <div>
+            <div style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 500, fontFamily: sans }}>{service.name}</div>
+            <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: sans }}>{service.description}</div>
+          </div>
+        </div>
+        {connected ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: "#10B981", fontSize: 10, fontFamily: mono }}>Connected</span>
+            <button onClick={() => onDisconnect(service)} style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 10, fontFamily: mono, cursor: "pointer" }}>Disconnect</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowConnect(!showConnect)} style={{ padding: "6px 14px", background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>
+            Connect
+          </button>
+        )}
+      </div>
+
+      {/* Connect flow */}
+      {showConnect && !connected && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, marginBottom: 8 }}>
+            {service.helpText}
+            {service.helpUrl && <> <a href={service.helpUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none" }}>Open portal →</a></>}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="password" value={token} onChange={e => setToken(e.target.value)} placeholder={service.tokenPlaceholder}
+              style={{ padding: "7px 10px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontSize: 12, fontFamily: mono, outline: "none", flex: 1 }}
+              onKeyDown={e => e.key === "Enter" && handleConnect()} />
+            <button onClick={handleConnect} disabled={!token.trim()} style={{ padding: "7px 14px", background: token.trim() ? "var(--accent)" : "var(--bg-input)", border: `1px solid ${token.trim() ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, color: token.trim() ? "white" : "var(--text-disabled)", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Settings Panel ──────────────────────────────────────────────────────────
 function SettingsPanel({ onClose }) {
   const [settings, setSettings] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({});
 
   useEffect(() => {
@@ -464,36 +560,39 @@ function SettingsPanel({ onClose }) {
         relevanceContext: s.relevanceContext || "",
         scoringInstructions: s.scoringInstructions || "",
         refreshInterval: s.refreshInterval || "30",
-        substackSession: "",
-        twitterBearerToken: "",
-        linkedinSession: "",
       });
     }).catch(console.error);
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
-    setSaved(false);
     const updates = {};
     if (form.apiKey) updates.ANTHROPIC_API_KEY = form.apiKey;
     if (form.relevanceContext !== (settings?.relevanceContext || "")) updates.RELEVANCE_CONTEXT = form.relevanceContext;
     if (form.scoringInstructions !== (settings?.scoringInstructions || "")) updates.SCORING_INSTRUCTIONS = form.scoringInstructions;
     if (form.refreshInterval !== (settings?.refreshInterval || "30")) updates.FEED_REFRESH_INTERVAL = form.refreshInterval;
-    if (form.substackSession) updates.SUBSTACK_SESSION = form.substackSession;
-    if (form.twitterBearerToken) updates.TWITTER_BEARER_TOKEN = form.twitterBearerToken;
-    if (form.linkedinSession) updates.LINKEDIN_SESSION = form.linkedinSession;
 
     if (Object.keys(updates).length > 0) {
-      try {
-        await api.saveSettings(updates);
-        const refreshed = await api.getSettings();
-        setSettings(refreshed);
-        setForm(f => ({ ...f, apiKey: "", substackSession: "", twitterBearerToken: "", linkedinSession: "" }));
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
-      } catch (e) { console.error(e); }
+      try { await api.saveSettings(updates); } catch (e) { console.error(e); }
     }
     setSaving(false);
+    onClose();
+  };
+
+  const handleServiceConnect = async (service, token) => {
+    try {
+      await api.saveSettings({ [service.envKey]: token });
+      const refreshed = await api.getSettings();
+      setSettings(refreshed);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleServiceDisconnect = async (service) => {
+    try {
+      await api.saveSettings({ [service.envKey]: "" });
+      const refreshed = await api.getSettings();
+      setSettings(refreshed);
+    } catch (e) { console.error(e); }
   };
 
   const inp = { padding: "8px 12px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontSize: 13, fontFamily: sans, outline: "none", width: "100%" };
@@ -527,7 +626,7 @@ function SettingsPanel({ onClose }) {
           <div style={hint}>Additional instructions for how items should be scored, filtered, or recommended. These are appended to the scoring prompt.</div>
         </div>
 
-        {/* API Keys */}
+        {/* API Key */}
         <div>
           <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>API Keys</div>
           <label style={label}>ANTHROPIC API KEY {settings.hasApiKey && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
@@ -541,24 +640,21 @@ function SettingsPanel({ onClose }) {
           <input type="number" min="5" max="1440" value={form.refreshInterval} onChange={e => setForm(f => ({ ...f, refreshInterval: e.target.value }))} style={{ ...inp, width: 120 }} />
         </div>
 
-        {/* Third-Party Services */}
+        {/* Connected Services */}
         <div>
-          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>Service Credentials</div>
-          <div style={hint}>Optional. Used for authenticated access to feeds behind login walls.</div>
-
+          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 6 }}>Connected Services</div>
+          <div style={hint}>Connect to third-party services for authenticated feed access.</div>
           <div style={{ marginTop: 10 }}>
-            <label style={label}>TWITTER / X BEARER TOKEN {settings.twitterBearerToken && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
-            <input type="password" value={form.twitterBearerToken} onChange={e => setForm(f => ({ ...f, twitterBearerToken: e.target.value }))} placeholder={settings.twitterBearerToken || "Not set"} style={inp} />
-          </div>
-
-          <div style={{ marginTop: 10 }}>
-            <label style={label}>SUBSTACK SESSION TOKEN {settings.substackSession && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
-            <input type="password" value={form.substackSession} onChange={e => setForm(f => ({ ...f, substackSession: e.target.value }))} placeholder={settings.substackSession || "Not set"} style={inp} />
-          </div>
-
-          <div style={{ marginTop: 10 }}>
-            <label style={label}>LINKEDIN SESSION TOKEN {settings.linkedinSession && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
-            <input type="password" value={form.linkedinSession} onChange={e => setForm(f => ({ ...f, linkedinSession: e.target.value }))} placeholder={settings.linkedinSession || "Not set"} style={inp} />
+            {SERVICES.map(svc => (
+              <ServiceCard
+                key={svc.id}
+                service={svc}
+                connected={!!settings[svc.settingsKey]}
+                maskedToken={settings[svc.settingsKey]}
+                onConnect={handleServiceConnect}
+                onDisconnect={handleServiceDisconnect}
+              />
+            ))}
           </div>
         </div>
       </div>
@@ -566,9 +662,11 @@ function SettingsPanel({ onClose }) {
       {/* Save bar */}
       <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
         <button onClick={handleSave} disabled={saving} style={{ padding: "8px 20px", background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontFamily: mono, fontSize: 12, cursor: "pointer", fontWeight: 600, opacity: saving ? 0.6 : 1 }}>
-          {saving ? "Saving..." : "Save Settings"}
+          {saving ? "Saving..." : "Save"}
         </button>
-        {saved && <span style={{ color: "#10B981", fontSize: 12, fontFamily: mono }}>Saved</span>}
+        <button onClick={onClose} style={{ padding: "8px 20px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontFamily: mono, fontSize: 12, cursor: "pointer" }}>
+          Cancel
+        </button>
       </div>
     </div>
   );
