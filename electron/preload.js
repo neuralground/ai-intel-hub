@@ -1,11 +1,9 @@
-// Preload script — runs in renderer context before web content loads.
-// Exposes a minimal API to the renderer via contextBridge if needed.
-// Currently the app communicates entirely via HTTP to the embedded Express
-// server, so no IPC bridge is required.
-
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
   isElectron: true,
   platform: process.platform,
+  // Trigger an OAuth or cookie-capture flow for a third-party service.
+  // Returns a promise that resolves with { ok, token?, error? }.
+  connectService: (serviceId) => ipcRenderer.invoke("connect-service", serviceId),
 });

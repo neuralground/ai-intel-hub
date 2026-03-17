@@ -451,6 +451,8 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
 
 // ── Service connection definitions ──────────────────────────────────────────
 // Add new services here. Each entry drives a connect/disconnect card in Settings.
+// In Electron, services with `electronAuth: true` use native OAuth/cookie-capture
+// flows via IPC. In web mode, they fall back to manual token paste.
 const SERVICES = [
   {
     id: "twitter",
@@ -459,10 +461,11 @@ const SERVICES = [
     settingsKey: "twitterBearerToken",
     envKey: "TWITTER_BEARER_TOKEN",
     description: "Access tweets and threads from tracked X accounts.",
-    tokenLabel: "Bearer Token",
-    tokenPlaceholder: "AAAA...",
-    helpUrl: "https://developer.x.com/en/portal/dashboard",
-    helpText: "Get a bearer token from the X Developer Portal (Basic tier: $100/mo).",
+    electronAuth: true,
+    manualTokenLabel: "Bearer Token",
+    manualPlaceholder: "Paste bearer token...",
+    manualHelpUrl: "https://developer.x.com/en/portal/dashboard",
+    manualHelpText: "Get a bearer token from the X Developer Portal. Requires Basic tier ($200/mo) for read access.",
   },
   {
     id: "substack",
@@ -471,9 +474,10 @@ const SERVICES = [
     settingsKey: "substackSession",
     envKey: "SUBSTACK_SESSION",
     description: "Access paywalled Substack posts you subscribe to.",
-    tokenLabel: "Session Cookie",
-    tokenPlaceholder: "Paste substack.sid cookie value...",
-    helpText: "Open Substack in your browser, then copy the 'substack.sid' cookie from DevTools > Application > Cookies.",
+    electronAuth: true,
+    manualTokenLabel: "Session Cookie",
+    manualPlaceholder: "Paste substack.sid cookie value...",
+    manualHelpText: "In your browser: log in to Substack, then open DevTools (F12) > Application > Cookies > substack.com and copy the 'substack.sid' value.",
   },
   {
     id: "linkedin",
@@ -482,22 +486,45 @@ const SERVICES = [
     settingsKey: "linkedinSession",
     envKey: "LINKEDIN_SESSION",
     description: "Monitor posts from LinkedIn thought leaders.",
-    tokenLabel: "Session Cookie",
-    tokenPlaceholder: "Paste li_at cookie value...",
-    helpText: "Open LinkedIn in your browser, then copy the 'li_at' cookie from DevTools > Application > Cookies.",
+    electronAuth: true,
+    manualTokenLabel: "Session Cookie",
+    manualPlaceholder: "Paste li_at cookie value...",
+    manualHelpText: "In your browser: log in to LinkedIn, then open DevTools (F12) > Application > Cookies > linkedin.com and copy the 'li_at' value.",
   },
 ];
 
+const isElectron = !!(window.electronAPI?.isElectron);
+
 // ── Service Connect Card ────────────────────────────────────────────────────
 function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect }) {
-  const [showConnect, setShowConnect] = useState(false);
+  const [showManual, setShowManual] = useState(false);
   const [token, setToken] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleConnect = () => {
+  const useNativeAuth = isElectron && service.electronAuth;
+
+  const handleNativeConnect = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const result = await window.electronAPI.connectService(service.id);
+      if (result.ok) {
+        onConnect(service, null); // token already saved by Electron
+      } else {
+        setError(result.error || "Connection failed");
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+    setConnecting(false);
+  };
+
+  const handleManualSave = () => {
     if (token.trim()) {
       onConnect(service, token.trim());
       setToken("");
-      setShowConnect(false);
+      setShowManual(false);
     }
   };
 
@@ -519,24 +546,39 @@ function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect 
             <button onClick={() => onDisconnect(service)} style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 10, fontFamily: mono, cursor: "pointer" }}>Disconnect</button>
           </div>
         ) : (
-          <button onClick={() => setShowConnect(!showConnect)} style={{ padding: "6px 14px", background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>
-            Connect
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {useNativeAuth ? (
+              <button onClick={handleNativeConnect} disabled={connecting} style={{ padding: "6px 14px", background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600, opacity: connecting ? 0.6 : 1 }}>
+                {connecting ? "Connecting..." : `Sign in to ${service.name}`}
+              </button>
+            ) : (
+              <button onClick={() => setShowManual(!showManual)} style={{ padding: "6px 14px", background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>
+                Connect
+              </button>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Connect flow */}
-      {showConnect && !connected && (
+      {/* Error message */}
+      {error && (
+        <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--error-bg)", borderRadius: 5, color: "#EF4444", fontSize: 11, fontFamily: mono }}>
+          {error}
+        </div>
+      )}
+
+      {/* Manual token entry (web mode, or as fallback) */}
+      {!connected && (showManual || (useNativeAuth && error)) && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
           <div style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, marginBottom: 8 }}>
-            {service.helpText}
-            {service.helpUrl && <> <a href={service.helpUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none" }}>Open portal →</a></>}
+            {useNativeAuth && error ? "Sign-in didn't work? You can paste the token manually:" : service.manualHelpText}
+            {service.manualHelpUrl && <> <a href={service.manualHelpUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none" }}>Open portal →</a></>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <input type="password" value={token} onChange={e => setToken(e.target.value)} placeholder={service.tokenPlaceholder}
+            <input type="password" value={token} onChange={e => setToken(e.target.value)} placeholder={service.manualPlaceholder}
               style={{ padding: "7px 10px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-primary)", fontSize: 12, fontFamily: mono, outline: "none", flex: 1 }}
-              onKeyDown={e => e.key === "Enter" && handleConnect()} />
-            <button onClick={handleConnect} disabled={!token.trim()} style={{ padding: "7px 14px", background: token.trim() ? "var(--accent)" : "var(--bg-input)", border: `1px solid ${token.trim() ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, color: token.trim() ? "white" : "var(--text-disabled)", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>
+              onKeyDown={e => e.key === "Enter" && handleManualSave()} />
+            <button onClick={handleManualSave} disabled={!token.trim()} style={{ padding: "7px 14px", background: token.trim() ? "var(--accent)" : "var(--bg-input)", border: `1px solid ${token.trim() ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, color: token.trim() ? "white" : "var(--text-disabled)", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>
               Save
             </button>
           </div>
@@ -581,7 +623,8 @@ function SettingsPanel({ onClose }) {
 
   const handleServiceConnect = async (service, token) => {
     try {
-      await api.saveSettings({ [service.envKey]: token });
+      // If token is null, Electron already saved it via IPC — just refresh settings
+      if (token) await api.saveSettings({ [service.envKey]: token });
       const refreshed = await api.getSettings();
       setSettings(refreshed);
     } catch (e) { console.error(e); }
