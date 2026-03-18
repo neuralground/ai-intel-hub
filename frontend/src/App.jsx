@@ -188,7 +188,6 @@ function AnalysisPanel({ category, onClose }) {
   const modes = [
     { key: "briefing", label: "Executive Brief" },
     { key: "risks", label: "Risk Scan" },
-    { key: "gaps", label: "Coverage Gaps" },
     { key: "what-so-what-now-what", label: "What / So What / Now What" },
   ];
 
@@ -296,6 +295,10 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [showRecs, setShowRecs] = useState(true);
   const [healthProgress, setHealthProgress] = useState(null); // { pct, message }
+  const [gapsResult, setGapsResult] = useState(null);
+  const [gapsLoading, setGapsLoading] = useState(false);
+  const [gapsAddedFeeds, setGapsAddedFeeds] = useState(new Set());
+  const [gapsAddingFeed, setGapsAddingFeed] = useState(null);
 
   // Load feed health and any cached suggestions on mount (no expensive analysis)
   useEffect(() => {
@@ -336,6 +339,51 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   };
 
   const refreshHealth = () => api.getFeedHealth().then(setHealthData).catch(() => {});
+
+  const runCoverageGaps = async () => {
+    if (gapsLoading) return;
+    setGapsLoading(true);
+    setGapsResult(null);
+    try {
+      const data = await api.analyze("gaps", null);
+      setGapsResult(data.result);
+    } catch (e) { console.error(e); }
+    setGapsLoading(false);
+  };
+
+  const handleGapsAddFeed = async (url, name) => {
+    setGapsAddingFeed(url);
+    try {
+      await api.addFeed({ name: name || url, url, category: "research", id: `custom-${Date.now()}`, active: 1 });
+      setGapsAddedFeeds(prev => new Set(prev).add(url));
+      onRefresh();
+    } catch (e) { console.error(e); }
+    setGapsAddingFeed(null);
+  };
+
+  // Markdown link renderer for coverage gaps — #feed- links get Add buttons
+  const renderGapsLink = ({ href, children }) => {
+    const feedMatch = href?.match(/^#feed-(.+)$/);
+    if (feedMatch) {
+      const feedUrl = feedMatch[1];
+      const name = typeof children === "string" ? children : Array.isArray(children) ? children.join("") : "Source";
+      const alreadyAdded = gapsAddedFeeds.has(feedUrl);
+      const isAdding = gapsAddingFeed === feedUrl;
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <a href={feedUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>
+          {alreadyAdded ? (
+            <span style={{ padding: "1px 6px", borderRadius: 3, background: "rgba(16,185,129,0.15)", color: "#10B981", fontSize: 9, fontFamily: mono, fontWeight: 600 }}>Added</span>
+          ) : (
+            <button onClick={() => handleGapsAddFeed(feedUrl, name)} disabled={isAdding} style={{ padding: "1px 6px", borderRadius: 3, background: "var(--accent)", color: "white", border: "none", fontSize: 9, fontFamily: mono, fontWeight: 600, cursor: "pointer", opacity: isAdding ? 0.6 : 1 }}>
+              {isAdding ? "..." : "+ Add"}
+            </button>
+          )}
+        </span>
+      );
+    }
+    return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>;
+  };
 
   const toggleMute = async (feed) => {
     await api.updateFeed(feed.id, { active: feed.active ? 0 : 1 });
@@ -415,6 +463,9 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
             <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: showAddForm ? "var(--accent-bg)" : "transparent", color: showAddForm ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>+ Add Feed</button>
             <button onClick={runHealthCheck} disabled={analyzing} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: analyzing ? "var(--accent-bg)" : "transparent", color: analyzing ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
               {analyzing ? "Checking..." : "Health Check"}
+            </button>
+            <button onClick={runCoverageGaps} disabled={gapsLoading} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: gapsLoading ? "var(--accent-bg)" : "transparent", color: gapsLoading ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+              {gapsLoading ? "Analyzing..." : "Coverage Gaps"}
             </button>
           </div>
         </div>
@@ -612,6 +663,27 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
           </div>
         )}
 
+        {/* Coverage Gaps analysis */}
+        {(gapsResult || gapsLoading) && (
+          <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
+            <div style={{ color: "var(--text-primary)", fontSize: 11, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>COVERAGE GAPS</div>
+            {gapsLoading && <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 12 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing coverage...</div>}
+            {gapsResult && (
+              <div style={{ color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7, fontFamily: sans }}>
+                <Markdown components={{
+                  h3: ({ children }) => <h3 style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, fontFamily: mono, marginTop: 14, marginBottom: 6 }}>{children}</h3>,
+                  p: ({ children }) => <p style={{ marginTop: 0, marginBottom: 8 }}>{children}</p>,
+                  strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
+                  ul: ({ children }) => <ul style={{ paddingLeft: 18, marginTop: 4, marginBottom: 8 }}>{children}</ul>,
+                  li: ({ children }) => <li style={{ marginBottom: 4, color: "var(--text-secondary)" }}>{children}</li>,
+                  hr: () => <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "12px 0" }} />,
+                  a: renderGapsLink,
+                }}>{gapsResult}</Markdown>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Recommendations toggle / health check prompt */}
         <div style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {hasSuggestions && (
@@ -619,9 +691,9 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
               {showRecs ? "▾ Hide recommendations" : "▸ Show recommendations"}
             </button>
           )}
-          {!hasSuggestions && !analysis && (
+          {!hasSuggestions && !analysis && !gapsResult && (
             <div style={{ color: "var(--text-faint)", fontSize: 11, fontFamily: sans }}>
-              Run a Health Check to get AI-powered feed recommendations.
+              Run Health Check or Coverage Gaps for AI-powered recommendations.
             </div>
           )}
         </div>
