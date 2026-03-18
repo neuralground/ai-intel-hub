@@ -295,11 +295,15 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [showRecs, setShowRecs] = useState(true);
   const [healthProgress, setHealthProgress] = useState(null); // { pct, message }
+  const [showGaps, setShowGaps] = useState(false);
   const [gapsResult, setGapsResult] = useState(null);
+  const [gapsSourceItems, setGapsSourceItems] = useState({});
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsError, setGapsError] = useState(null);
   const [gapsAddedFeeds, setGapsAddedFeeds] = useState(new Set());
   const [gapsAddingFeed, setGapsAddingFeed] = useState(null);
+  const [gapsHoverItem, setGapsHoverItem] = useState(null);
+  const gapsHoverTimerRef = useRef(null);
 
   // Load feed health and any cached suggestions on mount (no expensive analysis)
   useEffect(() => {
@@ -341,14 +345,16 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
 
   const refreshHealth = () => api.getFeedHealth().then(setHealthData).catch(() => {});
 
-  const runCoverageGaps = async () => {
-    if (gapsLoading) return;
+  const toggleCoverageGaps = async () => {
+    if (showGaps) { setShowGaps(false); return; }
+    setShowGaps(true);
+    if (gapsResult) return; // already have results
     setGapsLoading(true);
-    setGapsResult(null);
     setGapsError(null);
     try {
       const data = await api.analyze("gaps", null);
       setGapsResult(data.result);
+      if (data.sourceItems) setGapsSourceItems(data.sourceItems);
     } catch (e) {
       console.error("[Coverage Gaps]", e);
       setGapsError(e.message || "Analysis failed");
@@ -366,27 +372,74 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
     setGapsAddingFeed(null);
   };
 
-  // Markdown link renderer for coverage gaps — #feed- links get Add buttons
+  const handleGapsDismissFeed = (url) => {
+    setGapsAddedFeeds(prev => { const s = new Set(prev); s.add(url); return s; }); // treat dismissed as "handled"
+  };
+
+  const clearGapsHoverTimer = () => {
+    if (gapsHoverTimerRef.current) { clearTimeout(gapsHoverTimerRef.current); gapsHoverTimerRef.current = null; }
+  };
+  const dismissGapsHover = () => { clearGapsHoverTimer(); setGapsHoverItem(null); };
+
+  const handleGapsSaveItem = async (item) => {
+    try {
+      await api.toggleSave(item.id, !item.saved);
+      const updated = { ...item, saved: !item.saved };
+      setGapsSourceItems(prev => ({ ...prev, [item.id]: updated }));
+      setGapsHoverItem(h => h?.item?.id === item.id ? { ...h, item: updated } : h);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleGapsMarkRead = async (item) => {
+    try { await api.markRead(item.id); dismissGapsHover(); } catch (e) { console.error(e); }
+  };
+
+  // Parse feed suggestions out of the markdown for card-style rendering
+  const parseFeedSuggestions = (md) => {
+    if (!md) return [];
+    const suggestions = [];
+    const regex = /\[([^\]]+)\]\(#feed-([^)]+)\)\s*—?\s*(.*)/g;
+    let m;
+    while ((m = regex.exec(md)) !== null) {
+      suggestions.push({ name: m[1], url: m[2], reason: m[3].trim() });
+    }
+    return suggestions;
+  };
+
+  // Strip #feed- links from markdown (they'll be rendered as cards instead)
+  const stripFeedLinks = (md) => {
+    if (!md) return md;
+    // Remove entire list items that are just feed suggestions
+    return md.replace(/^-\s*\[[^\]]+\]\(#feed-[^)]+\)\s*—?.*$/gm, "").replace(/\n{3,}/g, "\n\n");
+  };
+
+  // Markdown link renderer for coverage gaps — #item- links get hover popovers
   const renderGapsLink = ({ href, children }) => {
-    const feedMatch = href?.match(/^#feed-(.+)$/);
-    if (feedMatch) {
-      const feedUrl = feedMatch[1];
-      const name = typeof children === "string" ? children : Array.isArray(children) ? children.join("") : "Source";
-      const alreadyAdded = gapsAddedFeeds.has(feedUrl);
-      const isAdding = gapsAddingFeed === feedUrl;
+    const itemMatch = href?.match(/^#item-(.+)$/);
+    if (itemMatch) {
+      const itemId = itemMatch[1];
+      const found = gapsSourceItems[itemId];
       return (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <a href={feedUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>
-          {alreadyAdded ? (
-            <span style={{ padding: "1px 6px", borderRadius: 3, background: "rgba(16,185,129,0.15)", color: "#10B981", fontSize: 9, fontFamily: mono, fontWeight: 600 }}>Added</span>
-          ) : (
-            <button onClick={() => handleGapsAddFeed(feedUrl, name)} disabled={isAdding} style={{ padding: "1px 6px", borderRadius: 3, background: "var(--accent)", color: "white", border: "none", fontSize: 9, fontFamily: mono, fontWeight: 600, cursor: "pointer", opacity: isAdding ? 0.6 : 1 }}>
-              {isAdding ? "..." : "+ Add"}
-            </button>
-          )}
-        </span>
+        <a href={found?.url || "#"} target="_blank" rel="noopener noreferrer"
+          style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)", fontWeight: found ? 500 : 400 }}
+          onMouseEnter={e => {
+            const el = e.currentTarget;
+            clearGapsHoverTimer();
+            gapsHoverTimerRef.current = setTimeout(() => {
+              if (found) setGapsHoverItem({ item: found, anchor: el });
+            }, 500);
+          }}
+          onMouseLeave={() => {
+            clearGapsHoverTimer();
+            gapsHoverTimerRef.current = setTimeout(dismissGapsHover, 200);
+          }}>
+          {children}
+        </a>
       );
     }
+    // Don't render #feed- as links — they're rendered as cards separately
+    const feedMatch = href?.match(/^#feed-/);
+    if (feedMatch) return <span style={{ color: "var(--text-secondary)" }}>{children}</span>;
     return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>;
   };
 
@@ -469,8 +522,8 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
             <button onClick={runHealthCheck} disabled={analyzing} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: analyzing ? "var(--accent-bg)" : "transparent", color: analyzing ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
               {analyzing ? "Checking..." : "Health Check"}
             </button>
-            <button onClick={runCoverageGaps} disabled={gapsLoading} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: gapsLoading ? "var(--accent-bg)" : "transparent", color: gapsLoading ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
-              {gapsLoading ? "Analyzing..." : "Coverage Gaps"}
+            <button onClick={toggleCoverageGaps} disabled={gapsLoading} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: (showGaps || gapsLoading) ? "var(--accent-bg)" : "transparent", color: (showGaps || gapsLoading) ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+              {gapsLoading ? "Analyzing..." : showGaps ? "← Sources" : "Coverage Gaps"}
             </button>
           </div>
         </div>
@@ -519,8 +572,56 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
         </div>
       )}
 
-      {/* Scrollable content */}
+      {/* Scrollable content — sources list or coverage gaps */}
       <div style={{ flex: 1, overflow: "auto" }}>
+        {showGaps ? (
+          /* Coverage Gaps view */
+          <div style={{ padding: "16px 20px" }}>
+            {gapsLoading && <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 12, padding: "20px 0" }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing coverage gaps — this may take 30-60 seconds...</div>}
+            {gapsError && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 11, padding: "8px 10px", background: "var(--error-bg)", borderRadius: 5 }}>⚠ {gapsError}</div>}
+            {gapsResult && (
+              <>
+                <div style={{ color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7, fontFamily: sans }}>
+                  <Markdown components={{
+                    h3: ({ children }) => <h3 style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, fontFamily: mono, marginTop: 16, marginBottom: 6 }}>{children}</h3>,
+                    p: ({ children }) => <p style={{ marginTop: 0, marginBottom: 8 }}>{children}</p>,
+                    strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
+                    ul: ({ children }) => <ul style={{ paddingLeft: 18, marginTop: 4, marginBottom: 8 }}>{children}</ul>,
+                    li: ({ children }) => <li style={{ marginBottom: 4, color: "var(--text-secondary)" }}>{children}</li>,
+                    hr: () => <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "12px 0" }} />,
+                    a: renderGapsLink,
+                  }}>{stripFeedLinks(gapsResult)}</Markdown>
+                </div>
+                {/* Suggested sources as cards */}
+                {parseFeedSuggestions(gapsResult).length > 0 && (
+                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                    <div style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, fontWeight: 600, marginBottom: 8, letterSpacing: "0.05em" }}>SUGGESTED SOURCES</div>
+                    {parseFeedSuggestions(gapsResult).filter(s => !gapsAddedFeeds.has(s.url)).map((s, i) => (
+                      <div key={i} style={{ padding: "8px 12px", marginBottom: 6, background: "var(--suggestion-bg)", border: "1px solid var(--accent-border-subtle)", borderRadius: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ color: "var(--text-secondary)", fontSize: 12, fontFamily: sans, fontWeight: 500 }}>{s.name}</span>
+                          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                            <button onClick={() => handleGapsAddFeed(s.url, s.name)} disabled={gapsAddingFeed === s.url}
+                              style={{ padding: "2px 8px", background: "#10B981", border: "none", borderRadius: 3, color: "white", fontSize: 9, fontFamily: mono, cursor: "pointer", fontWeight: 600, opacity: gapsAddingFeed === s.url ? 0.6 : 1 }}>
+                              {gapsAddingFeed === s.url ? "..." : "Add"}
+                            </button>
+                            <button onClick={() => handleGapsDismissFeed(s.url)}
+                              style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-faint)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>✕</button>
+                          </div>
+                        </div>
+                        {s.reason && <div style={{ color: "var(--text-muted)", fontSize: 10, lineHeight: 1.4 }}>{s.reason}</div>}
+                        <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, marginTop: 2 }}>{s.url}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {gapsHoverItem && <ItemHoverPopover item={gapsHoverItem.item} anchor={gapsHoverItem.anchor} onClose={dismissGapsHover} onSave={handleGapsSaveItem} onMarkRead={handleGapsMarkRead} onMouseEnter={clearGapsHoverTimer} />}
+          </div>
+        ) : (
+        /* Sources list view */
+        <>
         {Object.entries(CATEGORIES).map(([ck, cat]) => {
           const catFeeds = enriched.filter(f => f.category === ck);
           const catSuggestions = suggestions.filter(s => s.category === ck).slice(0, 3);
@@ -668,28 +769,6 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
           </div>
         )}
 
-        {/* Coverage Gaps analysis */}
-        {(gapsResult || gapsLoading || gapsError) && (
-          <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
-            <div style={{ color: "var(--text-primary)", fontSize: 11, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>COVERAGE GAPS</div>
-            {gapsLoading && <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 12 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing coverage gaps — this may take 30-60 seconds...</div>}
-            {gapsError && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 11, padding: "8px 10px", background: "var(--error-bg)", borderRadius: 5 }}>⚠ {gapsError}</div>}
-            {gapsResult && (
-              <div style={{ color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7, fontFamily: sans }}>
-                <Markdown components={{
-                  h3: ({ children }) => <h3 style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, fontFamily: mono, marginTop: 14, marginBottom: 6 }}>{children}</h3>,
-                  p: ({ children }) => <p style={{ marginTop: 0, marginBottom: 8 }}>{children}</p>,
-                  strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
-                  ul: ({ children }) => <ul style={{ paddingLeft: 18, marginTop: 4, marginBottom: 8 }}>{children}</ul>,
-                  li: ({ children }) => <li style={{ marginBottom: 4, color: "var(--text-secondary)" }}>{children}</li>,
-                  hr: () => <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "12px 0" }} />,
-                  a: renderGapsLink,
-                }}>{gapsResult}</Markdown>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Recommendations toggle / health check prompt */}
         <div style={{ padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           {hasSuggestions && (
@@ -697,12 +776,14 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
               {showRecs ? "▾ Hide recommendations" : "▸ Show recommendations"}
             </button>
           )}
-          {!hasSuggestions && !analysis && !gapsResult && (
+          {!hasSuggestions && !analysis && (
             <div style={{ color: "var(--text-faint)", fontSize: 11, fontFamily: sans }}>
-              Run Health Check or Coverage Gaps for AI-powered recommendations.
+              Run a Health Check to get AI-powered feed recommendations.
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );
