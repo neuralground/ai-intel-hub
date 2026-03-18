@@ -168,6 +168,8 @@ app.get("/api/items", (req, res) => {
   const count = getItemCount({
     category,
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
+    unread: unread === "true",
+    search,
   });
   res.json({ items, total: count });
 });

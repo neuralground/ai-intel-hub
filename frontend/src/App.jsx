@@ -1212,6 +1212,9 @@ export default function App() {
   const [category, setCategory] = useState("all");
   const [minRelevance, setMinRelevance] = useState(0);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+  const PAGE_SIZE = 25;
   const [expandedItem, setExpandedItem] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showSources, setShowSources] = useState(false);
@@ -1224,11 +1227,12 @@ export default function App() {
   const loadData = useCallback(async () => {
     try {
       const [itemsRes, feedsRes, statsRes] = await Promise.all([
-        api.getItems({ category: category !== "all" ? category : undefined, minRelevance, search, unread: true, limit: 100 }),
+        api.getItems({ category: category !== "all" ? category : undefined, minRelevance, search, unread: true, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
         api.getFeeds(),
         api.getStats(),
       ]);
       setItems(itemsRes.items);
+      setTotalItems(itemsRes.total);
       setFeeds(feedsRes);
       setStats(statsRes);
       setLastRefresh(new Date());
@@ -1236,9 +1240,12 @@ export default function App() {
       console.error("Failed to load data:", err);
     }
     setLoading(false);
-  }, [category, minRelevance, search]);
+  }, [category, minRelevance, search, page]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Reset to page 0 when filters change
+  useEffect(() => { setPage(0); }, [category, minRelevance, search]);
 
   useEffect(() => {
     const interval = setInterval(loadData, 5 * 60 * 1000);
@@ -1391,7 +1398,7 @@ export default function App() {
           <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "var(--text-primary)", fontSize: 13, fontFamily: mono, fontWeight: 500 }}>
               {category === "all" ? "ALL FEEDS" : CATEGORIES[category]?.label.toUpperCase()}
-              <span style={{ color: "var(--text-faint)", marginLeft: 8 }}>({items.length})</span>
+              <span style={{ color: "var(--text-faint)", marginLeft: 8 }}>({totalItems})</span>
             </span>
           </div>
 
@@ -1468,6 +1475,34 @@ export default function App() {
               </div>
             );
           })}
+
+          {/* Pagination */}
+          {totalItems > PAGE_SIZE && (() => {
+            const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+            return (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "20px 0 10px", fontFamily: mono, fontSize: 12 }}>
+                <button onClick={() => setPage(0)} disabled={page === 0}
+                  style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: page === 0 ? "var(--text-disabled)" : "var(--text-muted)", cursor: page === 0 ? "default" : "pointer", fontSize: 11, fontFamily: mono }}>
+                  ««
+                </button>
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                  style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: page === 0 ? "var(--text-disabled)" : "var(--text-muted)", cursor: page === 0 ? "default" : "pointer", fontSize: 11, fontFamily: mono }}>
+                  ‹ Prev
+                </button>
+                <span style={{ color: "var(--text-muted)", padding: "0 8px" }}>
+                  {page + 1} of {totalPages}
+                </span>
+                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                  style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: page >= totalPages - 1 ? "var(--text-disabled)" : "var(--text-muted)", cursor: page >= totalPages - 1 ? "default" : "pointer", fontSize: 11, fontFamily: mono }}>
+                  Next ›
+                </button>
+                <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1}
+                  style={{ padding: "5px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: page >= totalPages - 1 ? "var(--text-disabled)" : "var(--text-muted)", cursor: page >= totalPages - 1 ? "default" : "pointer", fontSize: 11, fontFamily: mono }}>
+                  »»
+                </button>
+              </div>
+            );
+          })()}
         </main>
       </div>
 

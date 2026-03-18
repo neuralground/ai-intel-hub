@@ -182,10 +182,12 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   return r.slice(offset, offset + limit);
 }
 
-export function getItemCount({ category, minRelevance = 0 }) {
+export function getItemCount({ category, minRelevance = 0, unread, search }) {
   let r = store.items.filter(i => !i.dismissed);
   if (category && category !== "all") r = r.filter(i => i.category === category);
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
+  if (unread) r = r.filter(i => !i.read);
+  if (search) { const q = search.toLowerCase(); r = r.filter(i => (i.title||"").toLowerCase().includes(q) || (i.summary||"").toLowerCase().includes(q) || (i.tags||[]).some(t => t.toLowerCase().includes(q))); }
   return r.length;
 }
 
