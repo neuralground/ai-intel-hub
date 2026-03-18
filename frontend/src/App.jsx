@@ -1316,7 +1316,7 @@ export default function App() {
           style={{ padding: "7px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, flex: 1, minWidth: 120, fontFamily: sans, outline: "none" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {[
-            { label: "🧠 Intel", panel: "analysis", active: showAnalysis },
+            { label: "🧠 Brief", panel: "analysis", active: showAnalysis },
             { label: "★ Saved", panel: "saved", active: showSaved },
             { label: "📡 Sources", panel: "sources", active: showSources },
             { label: "⚙ Settings", panel: "settings", active: showSettings },
