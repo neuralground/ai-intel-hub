@@ -414,23 +414,6 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
     return suggestions;
   };
 
-  // Strip feed suggestion links from markdown (they'll be rendered as cards).
-  // Removes list items containing #feed- or https:// links that were parsed as suggestions.
-  const stripFeedLinks = (md) => {
-    if (!md) return md;
-    const feedUrls = new Set(parseFeedSuggestions(md).map(s => s.url));
-    if (feedUrls.size === 0) return md;
-    // Remove list items that contain any of the feed URLs
-    return md.split("\n").filter(line => {
-      if (!line.match(/^-\s*\[/)) return true; // keep non-list-item lines
-      // Check if this list item contains a feed URL
-      const linkMatch = line.match(/\]\((#feed-|https?:\/\/)([^)]+)\)/);
-      if (!linkMatch) return true;
-      const url = linkMatch[1] === "#feed-" ? linkMatch[2] : linkMatch[1] + linkMatch[2];
-      return !feedUrls.has(url);
-    }).join("\n").replace(/\n{3,}/g, "\n\n");
-  };
-
   // Markdown link renderer for coverage gaps
   // #item- links → hover popovers; feed suggestion URLs → plain text (rendered as cards below)
   const gapsFeedUrls = new Set(parseFeedSuggestions(gapsResult).map(s => s.url));
@@ -458,9 +441,24 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
         </a>
       );
     }
-    // If this URL was parsed as a feed suggestion, render as plain text (card is below)
+    // Feed suggestion URLs: render as inline card with Add/dismiss buttons
     if (href?.startsWith("#feed-") || gapsFeedUrls.has(href)) {
-      return <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{children}</span>;
+      const feedUrl = href.startsWith("#feed-") ? href.slice(6) : href;
+      const name = typeof children === "string" ? children : Array.isArray(children) ? children.join("") : "Source";
+      const alreadyAdded = gapsAddedFeeds.has(feedUrl);
+      const isAdding = gapsAddingFeed === feedUrl;
+      if (alreadyAdded) return <span style={{ color: "#10B981", fontSize: 11, fontFamily: mono }}>✓ {name} added</span>;
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", margin: "2px 0", background: "var(--suggestion-bg)", border: "1px solid var(--accent-border-subtle)", borderRadius: 5 }}>
+          <span style={{ color: "var(--text-secondary)", fontSize: 11, fontWeight: 500 }}>{name}</span>
+          <button onClick={() => handleGapsAddFeed(feedUrl, name)} disabled={isAdding}
+            style={{ padding: "1px 8px", background: "#10B981", border: "none", borderRadius: 3, color: "white", fontSize: 9, fontFamily: mono, cursor: "pointer", fontWeight: 600, opacity: isAdding ? 0.6 : 1 }}>
+            {isAdding ? "..." : "Add"}
+          </button>
+          <button onClick={() => handleGapsDismissFeed(feedUrl)}
+            style={{ padding: "1px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-faint)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>✕</button>
+        </span>
+      );
     }
     return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>;
   };
@@ -606,42 +604,17 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
             {gapsLoading && <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 12, padding: "20px 0" }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing coverage gaps — this may take 30-60 seconds...</div>}
             {gapsError && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 11, padding: "8px 10px", background: "var(--error-bg)", borderRadius: 5 }}>⚠ {gapsError}</div>}
             {gapsResult && (
-              <>
-                <div style={{ color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7, fontFamily: sans }}>
-                  <Markdown components={{
-                    h3: ({ children }) => <h3 style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, fontFamily: mono, marginTop: 16, marginBottom: 6 }}>{children}</h3>,
-                    p: ({ children }) => <p style={{ marginTop: 0, marginBottom: 8 }}>{children}</p>,
-                    strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
-                    ul: ({ children }) => <ul style={{ paddingLeft: 18, marginTop: 4, marginBottom: 8 }}>{children}</ul>,
-                    li: ({ children }) => <li style={{ marginBottom: 4, color: "var(--text-secondary)" }}>{children}</li>,
-                    hr: () => <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "12px 0" }} />,
-                    a: renderGapsLink,
-                  }}>{stripFeedLinks(gapsResult)}</Markdown>
-                </div>
-                {/* Suggested sources as cards */}
-                {parseFeedSuggestions(gapsResult).length > 0 && (
-                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
-                    <div style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, fontWeight: 600, marginBottom: 8, letterSpacing: "0.05em" }}>SUGGESTED SOURCES</div>
-                    {parseFeedSuggestions(gapsResult).filter(s => !gapsAddedFeeds.has(s.url)).map((s, i) => (
-                      <div key={i} style={{ padding: "8px 12px", marginBottom: 6, background: "var(--suggestion-bg)", border: "1px solid var(--accent-border-subtle)", borderRadius: 6 }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-                          <span style={{ color: "var(--text-secondary)", fontSize: 12, fontFamily: sans, fontWeight: 500 }}>{s.name}</span>
-                          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-                            <button onClick={() => handleGapsAddFeed(s.url, s.name)} disabled={gapsAddingFeed === s.url}
-                              style={{ padding: "2px 8px", background: "#10B981", border: "none", borderRadius: 3, color: "white", fontSize: 9, fontFamily: mono, cursor: "pointer", fontWeight: 600, opacity: gapsAddingFeed === s.url ? 0.6 : 1 }}>
-                              {gapsAddingFeed === s.url ? "..." : "Add"}
-                            </button>
-                            <button onClick={() => handleGapsDismissFeed(s.url)}
-                              style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 3, color: "var(--text-faint)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>✕</button>
-                          </div>
-                        </div>
-                        {s.reason && <div style={{ color: "var(--text-muted)", fontSize: 10, lineHeight: 1.4 }}>{s.reason}</div>}
-                        <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, marginTop: 2 }}>{s.url}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
+              <div style={{ color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7, fontFamily: sans }}>
+                <Markdown components={{
+                  h3: ({ children }) => <h3 style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, fontFamily: mono, marginTop: 16, marginBottom: 6 }}>{children}</h3>,
+                  p: ({ children }) => <p style={{ marginTop: 0, marginBottom: 8 }}>{children}</p>,
+                  strong: ({ children }) => <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>{children}</strong>,
+                  ul: ({ children }) => <ul style={{ paddingLeft: 18, marginTop: 4, marginBottom: 8 }}>{children}</ul>,
+                  li: ({ children }) => <li style={{ marginBottom: 6, color: "var(--text-secondary)" }}>{children}</li>,
+                  hr: () => <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "12px 0" }} />,
+                  a: renderGapsLink,
+                }}>{gapsResult}</Markdown>
+              </div>
             )}
             {gapsHoverItem && <ItemHoverPopover item={gapsHoverItem.item} anchor={gapsHoverItem.anchor} onClose={dismissGapsHover} onSave={handleGapsSaveItem} onMarkRead={handleGapsMarkRead} onMouseEnter={clearGapsHoverTimer} />}
           </div>
