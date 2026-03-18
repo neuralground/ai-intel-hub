@@ -1,4 +1,6 @@
 // Feed configuration loader — reads/writes backend/feeds.json
+// In Electron packaged mode, feeds.json is inside the read-only asar archive.
+// Writes are skipped — user-added feeds persist via upsertFeed() in db.json.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -12,5 +14,14 @@ export function loadDefaultFeeds() {
 }
 
 export function saveDefaultFeeds(feeds) {
-  fs.writeFileSync(FEEDS_FILE, JSON.stringify(feeds, null, 2) + "\n");
+  try {
+    fs.writeFileSync(FEEDS_FILE, JSON.stringify(feeds, null, 2) + "\n");
+  } catch (e) {
+    // Expected in Electron packaged mode — feeds.json is inside the asar
+    if (e.code === "ENOTDIR" || e.code === "EROFS" || e.code === "EACCES") {
+      // Silently skip — user feeds are persisted in db.json via upsertFeed()
+      return;
+    }
+    throw e;
+  }
 }
