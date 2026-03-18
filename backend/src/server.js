@@ -112,6 +112,19 @@ app.post("/api/feeds", async (req, res) => {
       saveDefaultFeeds(configFeeds);
     }
     res.json({ ok: true, feed });
+
+    // Fetch and score the new feed in the background (don't block the response)
+    if (feed.type === "rss" || feed.type === "youtube") {
+      fetchSingleFeed(feed.id)
+        .then(r => {
+          console.log(`[Auto-fetch] ${feed.name}: ${r.newItems} new items`);
+          if (r.newItems > 0 && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
+            return scoreUnscoredItems();
+          }
+        })
+        .then(r => { if (r) console.log(`[Auto-score] Scored ${r.scored} items`); })
+        .catch(e => console.error(`[Auto-fetch] ${feed.name} failed:`, e.message));
+    }
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
