@@ -1,4 +1,4 @@
-import { getItems, upsertItem, cacheAnalysis, getCachedAnalysis } from "./db.js";
+import { getItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds } from "./db.js";
 import { discoverFeedsFromContent, discoverFeedsFromSearch } from "./fetcher.js";
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
@@ -148,11 +148,13 @@ export async function generateAnalysis(mode, category = null) {
     // Rebuild sourceItems from cached item IDs
     const allItems = getItems({ limit: 500 });
     const idSet = new Set(cached.item_ids || []);
+    const feedNameMap = Object.fromEntries(getAllFeeds().map(f => [f.id, f.name]));
     const sourceItemMap = Object.fromEntries(
       allItems.filter(it => idSet.has(it.id)).map(it => [it.id, {
         id: it.id, title: it.title, summary: it.summary, url: it.url,
         category: it.category, relevance: it.relevance,
         relevance_reason: it.relevance_reason, feed_id: it.feed_id,
+        feed_name: feedNameMap[it.feed_id] || it.feed_id,
         published: it.published, tags: it.tags, saved: it.saved,
       }])
     );
@@ -247,10 +249,12 @@ Items:\n${itemSummaries}`,
     const itemIds = sourceItems.map((i) => i.id);
     cacheAnalysis(mode, category, result, itemIds);
     // Include source items so the frontend can render item popovers
+    const feedNameMap = Object.fromEntries(getAllFeeds().map(f => [f.id, f.name]));
     const sourceItemMap = Object.fromEntries(sourceItems.map(it => [it.id, {
       id: it.id, title: it.title, summary: it.summary, url: it.url,
       category: it.category, relevance: it.relevance,
       relevance_reason: it.relevance_reason, feed_id: it.feed_id,
+      feed_name: feedNameMap[it.feed_id] || it.feed_id,
       published: it.published, tags: it.tags, saved: it.saved,
     }]));
     return { result, cached: false, sourceItems: sourceItemMap };

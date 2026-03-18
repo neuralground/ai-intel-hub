@@ -126,7 +126,18 @@ export async function validateFeedUrl(url) {
 }
 
 // ── YouTube channel fetcher ──────────────────────────────────────────────────
-// Resolves @handle or /channel/ URLs to the channel's RSS feed and parses it.
+
+// Resolve a YouTube @handle URL to { rssUrl, title, channelId }
+export async function resolveYouTubeChannel(url) {
+  const rssUrl = await resolveYouTubeRSS(url);
+  if (!rssUrl) return null;
+  try {
+    const parsed = await rssParser.parseURL(rssUrl);
+    return { rssUrl, title: parsed.title || null, channelId: rssUrl.match(/channel_id=([\w-]+)/)?.[1] };
+  } catch { return { rssUrl, title: null, channelId: null }; }
+}
+
+// Resolves @handle or /channel/ URLs to the channel's RSS feed URL.
 async function resolveYouTubeRSS(url) {
   // Already an RSS feed URL
   if (url.includes("/feeds/videos.xml")) return url;
@@ -154,6 +165,31 @@ async function resolveYouTubeRSS(url) {
   return null;
 }
 
+// Fetch a video description via YouTube's oEmbed endpoint (no API key needed).
+async function fetchVideoDescription(videoUrl) {
+  try {
+    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.title ? `${data.author_name}: ${data.title}` : null;
+  } catch { return null; }
+}
+
+// Scrape a brief description from the video page (first ~200 chars of the description meta tag).
+async function scrapeVideoDescription(videoUrl) {
+  try {
+    const res = await fetch(videoUrl, {
+      headers: { "User-Agent": "AI-Intel-Hub/1.0 (Feed Aggregator)" },
+      signal: AbortSignal.timeout(8000),
+    });
+    const html = await res.text();
+    // Extract og:description or description meta tag
+    const descMatch = html.match(/<meta\s+(?:property="og:description"|name="description")\s+content="([^"]*?)"/i);
+    if (descMatch) return descMatch[1].replace(/&#(\d+);/g, (_, c) => String.fromCharCode(c)).replace(/&amp;/g, "&").replace(/&quot;/g, '"').slice(0, 500);
+  } catch { /* timeout or error */ }
+  return null;
+}
+
 async function fetchYouTubeFeed(feed) {
   const result = { items: [], error: null };
   try {
@@ -163,27 +199,44 @@ async function fetchYouTubeFeed(feed) {
       return result;
     }
 
-    // Cache the resolved RSS URL back to the feed for next time
-    if (rssUrl !== feed.url && !feed._rssResolved) {
-      feed._rssUrl = rssUrl;
-    }
-
     const parsed = await rssParser.parseURL(rssUrl);
     const category = inferCategory(feed);
+    const channelName = parsed.title || feed.name || "YouTube";
+    const entries = (parsed.items || []).slice(0, 20);
 
-    for (const entry of (parsed.items || []).slice(0, 30)) {
+    // Fetch descriptions for the most recent videos (in parallel, with concurrency limit)
+    const descriptions = new Map();
+    const descBatches = entries.slice(0, 10); // only fetch descriptions for top 10
+    const descResults = await Promise.allSettled(
+      descBatches.map(async (entry) => {
+        const videoUrl = entry.link;
+        if (!videoUrl) return null;
+        const desc = await scrapeVideoDescription(videoUrl);
+        return { link: videoUrl, desc };
+      })
+    );
+    for (const r of descResults) {
+      if (r.status === "fulfilled" && r.value?.desc) {
+        descriptions.set(r.value.link, r.value.desc);
+      }
+    }
+
+    for (const entry of entries) {
       const itemId = makeItemId(feed.id, entry);
       const published = entry.isoDate || entry.pubDate || new Date().toISOString();
       const videoId = entry.id?.replace("yt:video:", "") || "";
-      const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "";
+      const videoUrl = entry.link || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : "");
+      const summary = descriptions.get(videoUrl)
+        || extractSummary(entry)
+        || `Video from ${channelName}`;
 
       result.items.push({
         id: itemId,
         feedId: feed.id,
         title: (entry.title || "Untitled").trim(),
-        summary: extractSummary(entry) || entry["media:group"]?.["media:description"]?.[0] || "",
-        url: entry.link || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : ""),
-        author: entry.author || parsed.title || "",
+        summary,
+        url: videoUrl,
+        author: entry.author || channelName,
         published,
         category,
         relevance: 0.5,
@@ -191,6 +244,7 @@ async function fetchYouTubeFeed(feed) {
         tags: [...extractTags(entry, category), "video"],
       });
     }
+    console.log(`[Fetcher] YouTube ${feed.name}: ${result.items.length} videos (${descriptions.size} with descriptions)`);
   } catch (err) {
     result.error = err.message;
     console.error(`[Fetcher] Error fetching YouTube ${feed.name}: ${err.message}`);

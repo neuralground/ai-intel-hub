@@ -77,7 +77,7 @@ function ThemeToggle({ mode, setMode }) {
 
 // ── Item Hover Popover (used in Analysis Panel) ─────────────────────────────
 // Appears on delayed hover over source links. Positioned near the trigger element.
-function ItemHoverPopover({ item, anchor, onClose, onSave, onMarkRead, onMouseEnter }) {
+function ItemHoverPopover({ item, anchor, onClose, onSave, onMarkRead, onMouseEnter, feedLabel }) {
   if (!item || !anchor) return null;
   const cat = CATEGORIES[item.category] || { color: "#6B7280", label: item.category };
 
@@ -96,7 +96,7 @@ function ItemHoverPopover({ item, anchor, onClose, onSave, onMarkRead, onMouseEn
       <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6, flexWrap: "wrap" }}>
         <span style={{ padding: "1px 6px", borderRadius: 3, fontSize: 9, background: cat.color + "15", color: cat.color, fontFamily: mono, fontWeight: 600 }}>{cat.label}</span>
         <span style={{ padding: "1px 6px", borderRadius: 3, fontSize: 9, background: relColor(item.relevance) + "15", color: relColor(item.relevance), fontFamily: mono, fontWeight: 600 }}>{(item.relevance * 100).toFixed(0)}%</span>
-        <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono }}>{item.feed_id} · {timeAgo(item.published)}</span>
+        <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono }}>{feedLabel || item.feed_name || item.feed_id} · {timeAgo(item.published)}</span>
       </div>
       <div style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, lineHeight: 1.35, marginBottom: 5 }}>{item.title}</div>
       <div style={{ color: "var(--text-muted)", fontSize: 11.5, lineHeight: 1.5, marginBottom: 8, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{item.summary}</div>
@@ -1206,6 +1206,8 @@ export default function App() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const [items, setItems] = useState([]);
   const [feeds, setFeeds] = useState([]);
+  const feedNameMap = Object.fromEntries(feeds.map(f => [f.id, f.name]));
+  const feedName = (id) => feedNameMap[id] || id;
   const [stats, setStats] = useState({});
   const [category, setCategory] = useState("all");
   const [minRelevance, setMinRelevance] = useState(0);
@@ -1418,7 +1420,7 @@ export default function App() {
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, flexWrap: "wrap" }}>
                   <span style={{ padding: "1px 7px", borderRadius: 3, fontSize: 10, background: cat.color + "15", color: cat.color, fontFamily: mono, fontWeight: 600 }}>{cat.label}</span>
                   <span style={{ padding: "1px 7px", borderRadius: 3, fontSize: 10, background: relColor(item.relevance) + "15", color: relColor(item.relevance), fontFamily: mono, fontWeight: 600 }}>{(item.relevance * 100).toFixed(0)}%</span>
-                  <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>{item.feed_id} · {timeAgo(item.published)}</span>
+                  <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>{feedName(item.feed_id)} · {timeAgo(item.published)}</span>
                   {item.saved ? <span style={{ fontSize: 10 }}>★</span> : null}
                   {item.feedback === 1 && <span style={{ fontSize: 10 }}>👍</span>}
                   {item.feedback === -1 && <span style={{ fontSize: 10 }}>👎</span>}

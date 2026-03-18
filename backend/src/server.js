@@ -87,6 +87,18 @@ app.post("/api/feeds", async (req, res) => {
       }
     }
 
+    // For YouTube, resolve channel name and generate a readable ID
+    if (feed.type === "youtube" && (!feed.name || feed.name === new URL(feed.url).hostname.replace(/^www\./, ""))) {
+      try {
+        const { resolveYouTubeChannel } = await import("./fetcher.js");
+        const meta = await resolveYouTubeChannel(feed.url);
+        if (meta) {
+          if (!feed.name || feed.name.includes("youtube")) feed.name = meta.title;
+          feed.id = meta.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+        }
+      } catch { /* use defaults */ }
+    }
+
     // Validate RSS feeds
     if (feed.type === "rss") {
       const check = await validateFeedUrl(feed.url);
