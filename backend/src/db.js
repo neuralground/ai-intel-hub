@@ -112,12 +112,14 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   if (unread) r = r.filter(i => !i.read);
   if (search) { const q = search.toLowerCase(); r = r.filter(i => (i.title||"").toLowerCase().includes(q) || (i.summary||"").toLowerCase().includes(q) || (i.tags||[]).some(t => t.toLowerCase().includes(q))); }
   // Sort by combined relevance + freshness + user feedback
+  // Relevance weighted 70%, freshness 30%. Freshness decays with 72h half-life
+  // so a highly relevant item stays near the top for days.
   const now = Date.now();
   const score = (item) => {
     const ageHours = (now - new Date(item.published).getTime()) / 3600000;
-    const freshness = Math.exp(-ageHours / 48);
+    const freshness = Math.exp(-ageHours / 72);
     const boostedRelevance = Math.max(0, Math.min(1, item.relevance + (item.feedback_boost || 0)));
-    return boostedRelevance * 0.5 + freshness * 0.5;
+    return boostedRelevance * 0.7 + freshness * 0.3;
   };
   r.sort((a, b) => {
     const diff = score(b) - score(a);
