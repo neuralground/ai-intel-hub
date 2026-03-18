@@ -111,15 +111,16 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   if (saved) r = r.filter(i => i.saved);
   if (unread) r = r.filter(i => !i.read);
   if (search) { const q = search.toLowerCase(); r = r.filter(i => (i.title||"").toLowerCase().includes(q) || (i.summary||"").toLowerCase().includes(q) || (i.tags||[]).some(t => t.toLowerCase().includes(q))); }
-  // Sort by combined relevance + freshness + user feedback
-  // Relevance weighted 70%, freshness 30%. Freshness decays with 72h half-life
-  // so a highly relevant item stays near the top for days.
+  // Sort by relevance (80%) + freshness (20%) with sigmoid decay.
+  // Freshness is ~1.0 for first 3 days, drops to 0.5 at 14 days, near 0 at 90 days.
+  // This means relevance almost entirely determines rank for recent items,
+  // with age only becoming a factor after a week or more.
   const now = Date.now();
   const score = (item) => {
     const ageHours = (now - new Date(item.published).getTime()) / 3600000;
-    const freshness = Math.exp(-ageHours / 72);
+    const freshness = 1 / (1 + Math.pow(ageHours / 336, 3)); // midpoint 14d, steepness 3
     const boostedRelevance = Math.max(0, Math.min(1, item.relevance + (item.feedback_boost || 0)));
-    return boostedRelevance * 0.7 + freshness * 0.3;
+    return boostedRelevance * 0.8 + freshness * 0.2;
   };
   r.sort((a, b) => {
     const diff = score(b) - score(a);
