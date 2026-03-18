@@ -394,26 +394,47 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
     try { await api.markRead(item.id); dismissGapsHover(); } catch (e) { console.error(e); }
   };
 
-  // Parse feed suggestions out of the markdown for card-style rendering
+  // Parse feed suggestions out of the markdown for card-style rendering.
+  // Catches both #feed-URL and plain https:// URLs in markdown links.
   const parseFeedSuggestions = (md) => {
     if (!md) return [];
     const suggestions = [];
-    const regex = /\[([^\]]+)\]\(#feed-([^)]+)\)\s*—?\s*(.*)/g;
+    const seen = new Set();
+    // Match [Name](#feed-URL) — reason  OR  [Name](https://...) — reason
+    const regex = /\[([^\]]+)\]\((#feed-|https?:\/\/)([^)]+)\)\s*—?\s*(.*)/g;
     let m;
     while ((m = regex.exec(md)) !== null) {
-      suggestions.push({ name: m[1], url: m[2], reason: m[3].trim() });
+      const url = m[2] === "#feed-" ? m[3] : m[2] + m[3];
+      // Skip item references and non-feed URLs
+      if (url.startsWith("#item-")) continue;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      suggestions.push({ name: m[1], url, reason: m[4].trim() });
     }
     return suggestions;
   };
 
-  // Strip #feed- links from markdown (they'll be rendered as cards instead)
+  // Strip feed suggestion links from markdown (they'll be rendered as cards).
+  // Removes list items containing #feed- or https:// links that were parsed as suggestions.
   const stripFeedLinks = (md) => {
     if (!md) return md;
-    // Remove entire list items that are just feed suggestions
-    return md.replace(/^-\s*\[[^\]]+\]\(#feed-[^)]+\)\s*—?.*$/gm, "").replace(/\n{3,}/g, "\n\n");
+    const feedUrls = new Set(parseFeedSuggestions(md).map(s => s.url));
+    if (feedUrls.size === 0) return md;
+    // Remove list items that contain any of the feed URLs
+    return md.split("\n").filter(line => {
+      if (!line.match(/^-\s*\[/)) return true; // keep non-list-item lines
+      // Check if this list item contains a feed URL
+      const linkMatch = line.match(/\]\((#feed-|https?:\/\/)([^)]+)\)/);
+      if (!linkMatch) return true;
+      const url = linkMatch[1] === "#feed-" ? linkMatch[2] : linkMatch[1] + linkMatch[2];
+      return !feedUrls.has(url);
+    }).join("\n").replace(/\n{3,}/g, "\n\n");
   };
 
-  // Markdown link renderer for coverage gaps — #item- links get hover popovers
+  // Markdown link renderer for coverage gaps
+  // #item- links → hover popovers; feed suggestion URLs → plain text (rendered as cards below)
+  const gapsFeedUrls = new Set(parseFeedSuggestions(gapsResult).map(s => s.url));
+
   const renderGapsLink = ({ href, children }) => {
     const itemMatch = href?.match(/^#item-(.+)$/);
     if (itemMatch) {
@@ -437,9 +458,10 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
         </a>
       );
     }
-    // Don't render #feed- as links — they're rendered as cards separately
-    const feedMatch = href?.match(/^#feed-/);
-    if (feedMatch) return <span style={{ color: "var(--text-secondary)" }}>{children}</span>;
+    // If this URL was parsed as a feed suggestion, render as plain text (card is below)
+    if (href?.startsWith("#feed-") || gapsFeedUrls.has(href)) {
+      return <span style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{children}</span>;
+    }
     return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)" }}>{children}</a>;
   };
 
