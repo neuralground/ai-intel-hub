@@ -197,7 +197,7 @@ function AnalysisPanel({ category, onClose }) {
   //   feed:URL → shows source name + inline Add button
   //   other    → opens externally
   const renderLink = ({ href, children }) => {
-    const itemMatch = href?.match(/^item:(.+)$/);
+    const itemMatch = href?.match(/^#item-(.+)$/);
     if (itemMatch) {
       const itemId = itemMatch[1];
       const found = sourceItems[itemId];
@@ -219,7 +219,7 @@ function AnalysisPanel({ category, onClose }) {
         </a>
       );
     }
-    const feedMatch = href?.match(/^feed:(.+)$/);
+    const feedMatch = href?.match(/^#feed-(.+)$/);
     if (feedMatch) {
       const feedUrl = feedMatch[1];
       const name = typeof children === "string" ? children : Array.isArray(children) ? children.join("") : "Source";

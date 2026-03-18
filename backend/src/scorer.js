@@ -178,7 +178,7 @@ export async function generateAnalysis(mode, category = null) {
     )
     .join("\n\n");
 
-  const citationRule = `\nIMPORTANT: For each key insight or claim, cite the source item(s) using this exact link format: [short title](item:ITEM_ID) where ITEM_ID is the ID shown next to each item above. Every bullet point or paragraph that draws on a specific item must include at least one such source link. Do NOT use the external URL in links — always use the item:ID format.`;
+  const citationRule = `\nIMPORTANT: For each key insight or claim, cite the source item(s) using this exact link format: [short title](#item-ITEM_ID) where ITEM_ID is the ID shown next to each item above. Every bullet point or paragraph that draws on a specific item must include at least one such source link. Do NOT use the external URL in links — always use the #item-ID format.`;
 
   const prompts = {
     briefing: {
@@ -201,8 +201,8 @@ Use this exact format for each gap:
 [1-2 sentence description of what's missing and why it matters]
 
 Suggested sources:
-- [Source Name](feed:URL) — brief reason this source fills the gap
-- [Source Name](feed:URL) — brief reason
+- [Source Name](#feed-URL) — brief reason this source fills the gap
+- [Source Name](#feed-URL) — brief reason
 
 After the gaps, add a section:
 
@@ -210,7 +210,7 @@ After the gaps, add a section:
 
 IMPORTANT:
 - Every gap MUST include at least one suggested source with a real, working URL
-- Use the exact format [Name](feed:URL) for suggested sources — the URL should be an RSS feed, blog, Substack, X account, or YouTube channel
+- Use the exact format [Name](#feed-URL) for suggested sources — the URL should be an RSS feed, blog, Substack, X account, or YouTube channel
 - Focus on specific, high-quality sources, not generic suggestions
 - Consider gaps in: geographic coverage (Asia, Europe, Global South), technical domains (hardware, robotics, security), emerging players, regulatory jurisdictions, and contrarian viewpoints
 ${citationRule}
