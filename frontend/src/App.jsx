@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Markdown from "react-markdown";
 import { api } from "./api.js";
 import { useTheme } from "./useTheme.js";
@@ -75,39 +75,43 @@ function ThemeToggle({ mode, setMode }) {
   );
 }
 
-// ── Item Popover (used in Analysis Panel) ───────────────────────────────────
-function ItemPopover({ item, onClose, onSave }) {
-  if (!item) return null;
+// ── Item Hover Popover (used in Analysis Panel) ─────────────────────────────
+// Appears on delayed hover over source links. Positioned near the trigger element.
+function ItemHoverPopover({ item, anchor, onClose, onSave, onMarkRead, onMouseEnter }) {
+  if (!item || !anchor) return null;
   const cat = CATEGORIES[item.category] || { color: "#6B7280", label: item.category };
+
+  // Position below the anchor element, clamped to viewport
+  const rect = anchor.getBoundingClientRect();
+  const popoverWidth = 380;
+  let left = Math.max(8, Math.min(rect.left, window.innerWidth - popoverWidth - 8));
+  let top = rect.bottom + 6;
+  const fitsBelow = top + 300 < window.innerHeight;
+  if (!fitsBelow) top = Math.max(8, rect.top - 310);
+
   return (
-    <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} />
-      <div onClick={e => e.stopPropagation()} style={{ position: "relative", width: 460, maxHeight: "80vh", overflow: "auto", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.4)", padding: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-          <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: cat.color + "15", color: cat.color, fontFamily: mono, fontWeight: 600 }}>{cat.label}</span>
-          <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: relColor(item.relevance) + "15", color: relColor(item.relevance), fontFamily: mono, fontWeight: 600 }}>{(item.relevance * 100).toFixed(0)}%</span>
-          <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>{item.feed_id} · {timeAgo(item.published)}</span>
+    <div style={{ position: "fixed", top, left, width: popoverWidth, maxHeight: 340, overflow: "auto", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 10, boxShadow: "0 12px 40px rgba(0,0,0,0.35)", padding: 14, zIndex: 210 }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6, flexWrap: "wrap" }}>
+        <span style={{ padding: "1px 6px", borderRadius: 3, fontSize: 9, background: cat.color + "15", color: cat.color, fontFamily: mono, fontWeight: 600 }}>{cat.label}</span>
+        <span style={{ padding: "1px 6px", borderRadius: 3, fontSize: 9, background: relColor(item.relevance) + "15", color: relColor(item.relevance), fontFamily: mono, fontWeight: 600 }}>{(item.relevance * 100).toFixed(0)}%</span>
+        <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono }}>{item.feed_id} · {timeAgo(item.published)}</span>
+      </div>
+      <div style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, lineHeight: 1.35, marginBottom: 5 }}>{item.title}</div>
+      <div style={{ color: "var(--text-muted)", fontSize: 11.5, lineHeight: 1.5, marginBottom: 8, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{item.summary}</div>
+      {item.relevance_reason && (
+        <div style={{ padding: "6px 10px", background: "var(--accent-bg-subtle)", border: "1px solid var(--accent-border)", borderRadius: 5, marginBottom: 8 }}>
+          <div style={{ color: "var(--accent)", fontSize: 9, fontFamily: mono, marginBottom: 2, fontWeight: 600 }}>WHY THIS MATTERS</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: 11, lineHeight: 1.4 }}>{item.relevance_reason}</div>
         </div>
-        <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 600, lineHeight: 1.4, marginBottom: 8 }}>{item.title}</div>
-        <div style={{ color: "var(--text-muted)", fontSize: 12.5, lineHeight: 1.6, marginBottom: 10 }}>{item.summary}</div>
-        {item.relevance_reason && (
-          <div style={{ padding: "8px 12px", background: "var(--accent-bg-subtle)", border: "1px solid var(--accent-border)", borderRadius: 6, marginBottom: 10 }}>
-            <div style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, marginBottom: 3, fontWeight: 600 }}>WHY THIS MATTERS</div>
-            <div style={{ color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.5 }}>{item.relevance_reason}</div>
-          </div>
-        )}
-        {item.tags && item.tags.length > 0 && (
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 10 }}>
-            {item.tags.map(t => <span key={t} style={{ padding: "2px 8px", background: "var(--tag-bg)", borderRadius: 10, color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>#{t}</span>)}
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 6 }}>
-          {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 14px", background: "var(--accent)", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, textDecoration: "none", fontWeight: 600 }}>Open source →</a>}
-          <button onClick={() => { onSave(item); }} style={{ padding: "6px 14px", background: item.saved ? "var(--accent-bg)" : "transparent", border: `1px solid ${item.saved ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, color: item.saved ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
-            {item.saved ? "★ Saved" : "☆ Save"}
-          </button>
-          <button onClick={onClose} style={{ padding: "6px 14px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-faint)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>Close</button>
-        </div>
+      )}
+      <div style={{ display: "flex", gap: 5 }}>
+        {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ padding: "4px 10px", background: "var(--accent)", borderRadius: 5, color: "white", fontSize: 10, fontFamily: mono, textDecoration: "none", fontWeight: 600 }}>Open →</a>}
+        <button onClick={e => { e.stopPropagation(); onMarkRead(item); }} style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", cursor: "pointer", fontSize: 10, fontFamily: mono }}>✓ Read</button>
+        <button onClick={e => { e.stopPropagation(); onSave(item); }} style={{ padding: "4px 10px", background: item.saved ? "var(--accent-bg)" : "transparent", border: `1px solid ${item.saved ? "var(--accent)" : "var(--border)"}`, borderRadius: 5, color: item.saved ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 10, fontFamily: mono }}>
+          {item.saved ? "★ Saved" : "☆ Save"}
+        </button>
       </div>
     </div>
   );
@@ -118,7 +122,8 @@ function AnalysisPanel({ category, onClose }) {
   const [mode, setMode] = useState("briefing");
   const [result, setResult] = useState("");
   const [sourceItems, setSourceItems] = useState({});
-  const [popoverItem, setPopoverItem] = useState(null);
+  const [hoverItem, setHoverItem] = useState(null); // { item, anchor }
+  const hoverTimerRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -127,7 +132,7 @@ function AnalysisPanel({ category, onClose }) {
     setError(null);
     setResult("");
     setSourceItems({});
-    setPopoverItem(null);
+    setHoverItem(null);
     try {
       const data = await api.analyze(mode, category !== "all" ? category : null);
       setResult(data.result);
@@ -140,16 +145,30 @@ function AnalysisPanel({ category, onClose }) {
 
   useEffect(() => { run(); }, [run]);
 
-  const handleItemLink = (itemId) => {
+  const showItemHover = (itemId, anchorEl) => {
     const item = sourceItems[itemId];
-    if (item) setPopoverItem(item);
+    if (item) setHoverItem({ item, anchor: anchorEl });
   };
+
+  const clearHoverTimer = () => {
+    if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
+  };
+
+  const dismissHover = () => { clearHoverTimer(); setHoverItem(null); };
 
   const handleSaveItem = async (item) => {
     try {
       await api.toggleSave(item.id, !item.saved);
-      setSourceItems(prev => ({ ...prev, [item.id]: { ...item, saved: !item.saved } }));
-      setPopoverItem(p => p?.id === item.id ? { ...p, saved: !item.saved } : p);
+      const updated = { ...item, saved: !item.saved };
+      setSourceItems(prev => ({ ...prev, [item.id]: updated }));
+      setHoverItem(h => h?.item?.id === item.id ? { ...h, item: updated } : h);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleMarkReadFromHover = async (item) => {
+    try {
+      await api.markRead(item.id);
+      dismissHover();
     } catch (e) { console.error(e); }
   };
 
@@ -182,10 +201,22 @@ function AnalysisPanel({ category, onClose }) {
     if (itemMatch) {
       const itemId = itemMatch[1];
       const found = sourceItems[itemId];
+      // Click goes to source URL; hover-delay shows popover
       return (
-        <span onClick={() => handleItemLink(itemId)} style={{ color: "var(--accent)", cursor: "pointer", borderBottom: "1px dotted var(--accent)", fontWeight: found ? 500 : 400 }} title={found ? "Click to preview" : "Source item"}>
+        <a href={found?.url || "#"} target="_blank" rel="noopener noreferrer"
+          style={{ color: "var(--accent)", textDecoration: "none", borderBottom: "1px dotted var(--accent)", fontWeight: found ? 500 : 400 }}
+          onMouseEnter={e => {
+            const el = e.currentTarget;
+            clearHoverTimer();
+            hoverTimerRef.current = setTimeout(() => showItemHover(itemId, el), 500);
+          }}
+          onMouseLeave={() => {
+            clearHoverTimer();
+            // Delay dismiss so user can move mouse into the popover
+            hoverTimerRef.current = setTimeout(dismissHover, 200);
+          }}>
           {children}
-        </span>
+        </a>
       );
     }
     const feedMatch = href?.match(/^feed:(.+)$/);
@@ -246,7 +277,7 @@ function AnalysisPanel({ category, onClose }) {
           a: renderLink,
         }}>{result}</Markdown></div>}
       </div>
-      {popoverItem && <ItemPopover item={popoverItem} onClose={() => setPopoverItem(null)} onSave={handleSaveItem} />}
+      {hoverItem && <ItemHoverPopover item={hoverItem.item} anchor={hoverItem.anchor} onClose={dismissHover} onSave={handleSaveItem} onMarkRead={handleMarkReadFromHover} onMouseEnter={clearHoverTimer} />}
     </div>
   );
 }
