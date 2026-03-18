@@ -21,7 +21,8 @@ function inferCategory(feed) {
 
 // ── Generate stable item ID ─────────────────────────────────────────────────
 function makeItemId(feedId, item) {
-  const raw = item.guid || item.link || item.title || "";
+  // guid can be a string or an object like {$: {isPermaLink: "false"}} — use link/title as fallback
+  const raw = (typeof item.guid === "string" ? item.guid : null) || item.link || item.title || "";
   return crypto.createHash("sha256").update(`${feedId}:${raw}`).digest("hex").slice(0, 16);
 }
 
