@@ -251,6 +251,13 @@ export function getFeedHealth() {
   });
 }
 
+export function getUnscoredItems(limit = 200) {
+  return store.items
+    .filter(i => !i.dismissed && i.relevance === 0.5 && !i.scored_at && !i.relevance_reason)
+    .sort((a, b) => new Date(b.published) - new Date(a.published))
+    .slice(0, limit);
+}
+
 export function addSuggestion(s) {
   // Dedup: skip if a suggestion with the same URL already exists (any status) or a feed with the same URL exists
   if (s.url && store.suggestions.some(x => x.url === s.url)) return null;

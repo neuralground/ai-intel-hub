@@ -1,4 +1,4 @@
-import { getItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds } from "./db.js";
+import { getItems, getUnscoredItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds } from "./db.js";
 import { discoverFeedsFromContent, discoverFeedsFromSearch } from "./fetcher.js";
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
@@ -112,11 +112,8 @@ No other text. Valid JSON only.`;
 
 // ── Score unscored items in batches ─────────────────────────────────────────
 export async function scoreUnscoredItems(batchSize = 15) {
-  // Get items with default relevance (0.5 = unscored)
-  const items = getItems({ minRelevance: 0, limit: 200 });
-  const unscored = items.filter(
-    (i) => i.relevance === 0.5 && !i.relevanceReason
-  );
+  // Get unscored items directly (bypasses sorting/diversification/limit)
+  const unscored = getUnscoredItems(200);
 
   if (unscored.length === 0) {
     console.log("[Scorer] No unscored items found");
