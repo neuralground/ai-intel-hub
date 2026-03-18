@@ -285,7 +285,7 @@ async function fetchYouTubeFeed(feed) {
         tags,
       });
     }
-    console.log(`[Fetcher] YouTube ${feed.name}: ${result.items.length} videos (${descriptions.size} with descriptions)`);
+    console.log(`[Fetcher] YouTube ${feed.name}: ${result.items.length} videos (${metadataMap.size} with metadata)`);
   } catch (err) {
     result.error = err.message;
     console.error(`[Fetcher] Error fetching YouTube ${feed.name}: ${err.message}`);
