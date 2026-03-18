@@ -1195,14 +1195,6 @@ export default function App() {
             <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono, textAlign: "center" }}>≥ {(minRelevance * 100).toFixed(0)}%</div>
           </div>
 
-          <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>QUICK ACTIONS</div>
-          <button onClick={() => { setCategory("all"); setMinRelevance(0.85); }} style={{ display: "block", width: "100%", padding: "6px 10px", background: "var(--critical-bg)", border: "1px solid var(--critical-border)", borderRadius: 6, color: "#EF4444", cursor: "pointer", fontSize: 11, fontFamily: mono, marginBottom: 4, textAlign: "left" }}>
-            🔴 Critical Only ({stats.critical || 0})
-          </button>
-          <button onClick={() => { setCategory("all"); setMinRelevance(0); setSearch(""); }} style={{ display: "block", width: "100%", padding: "6px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono, textAlign: "left" }}>
-            Reset Filters
-          </button>
-
           <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>THEME</div>
           <ThemeToggle mode={themeMode} setMode={setThemeMode} />
         </aside>
