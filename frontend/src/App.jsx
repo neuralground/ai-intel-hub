@@ -1126,7 +1126,7 @@ function SavedItemsPanel({ onClose }) {
       {/* Category filter */}
       <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border)", display: "flex", gap: 6, flexWrap: "wrap" }}>
         {[{ key: "all", label: `All (${items.length})` },
-          ...Object.entries(CATEGORIES).filter(([k]) => catCounts[k]).map(([k, v]) => ({ key: k, label: `${v.icon} ${catCounts[k]}` }))
+          ...Object.entries(CATEGORIES).filter(([k]) => catCounts[k]).map(([k, v]) => ({ key: k, label: `${v.label} (${catCounts[k]})` }))
         ].map(c => (
           <button key={c.key} onClick={() => setCategory(c.key)} style={{
             padding: "4px 10px", borderRadius: 6, border: "1px solid", fontSize: 10, fontFamily: mono, cursor: "pointer",
