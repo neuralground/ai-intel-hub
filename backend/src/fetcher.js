@@ -165,29 +165,55 @@ async function resolveYouTubeRSS(url) {
   return null;
 }
 
-// Fetch a video description via YouTube's oEmbed endpoint (no API key needed).
-async function fetchVideoDescription(videoUrl) {
-  try {
-    const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(videoUrl)}&format=json`, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.title ? `${data.author_name}: ${data.title}` : null;
-  } catch { return null; }
-}
-
-// Scrape a brief description from the video page (first ~200 chars of the description meta tag).
-async function scrapeVideoDescription(videoUrl) {
+// Scrape rich metadata from a YouTube video page: description, duration, views, keywords.
+// No API key needed — extracts from the page's embedded JSON.
+async function scrapeVideoMetadata(videoUrl) {
   try {
     const res = await fetch(videoUrl, {
-      headers: { "User-Agent": "AI-Intel-Hub/1.0 (Feed Aggregator)" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
       signal: AbortSignal.timeout(8000),
     });
     const html = await res.text();
-    // Extract og:description or description meta tag
-    const descMatch = html.match(/<meta\s+(?:property="og:description"|name="description")\s+content="([^"]*?)"/i);
-    if (descMatch) return descMatch[1].replace(/&#(\d+);/g, (_, c) => String.fromCharCode(c)).replace(/&amp;/g, "&").replace(/&quot;/g, '"').slice(0, 500);
-  } catch { /* timeout or error */ }
-  return null;
+
+    // Extract full description from YouTube's embedded JSON
+    let description = "";
+    const sdMatch = html.match(/"shortDescription":"(.*?(?:\\.|[^"])*)"/);
+    if (sdMatch) {
+      description = sdMatch[1]
+        .replace(/\\n/g, " ")
+        .replace(/\\u0026/g, "&")
+        .replace(/\\'/g, "'")
+        .replace(/\\"/g, '"')
+        .replace(/https?:\/\/\S+/g, "") // strip URLs
+        .replace(/_{3,}/g, " ")          // strip separators
+        .replace(/\s{2,}/g, " ")
+        .trim()
+        .slice(0, 500);
+    }
+    // Fallback to og:description
+    if (!description) {
+      const ogMatch = html.match(/<meta\s+(?:property="og:description"|name="description")\s+content="([^"]*?)"/i);
+      if (ogMatch) description = ogMatch[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").slice(0, 500);
+    }
+
+    // Duration
+    const durMatch = html.match(/"lengthSeconds":"(\d+)"/);
+    const durationMin = durMatch ? Math.round(parseInt(durMatch[1]) / 60) : null;
+
+    // View count
+    const viewsMatch = html.match(/"viewCount":"(\d+)"/);
+    const views = viewsMatch ? parseInt(viewsMatch[1]) : null;
+
+    // Keywords/tags
+    const kwMatch = html.match(/"keywords":\[(.*?)\]/);
+    const keywords = kwMatch
+      ? kwMatch[1].replace(/"/g, "").split(",").map(k => k.trim().toLowerCase()).filter(Boolean).slice(0, 8)
+      : [];
+
+    return { description, durationMin, views, keywords };
+  } catch {
+    return { description: "", durationMin: null, views: null, keywords: [] };
+  }
 }
 
 async function fetchYouTubeFeed(feed) {
@@ -204,20 +230,20 @@ async function fetchYouTubeFeed(feed) {
     const channelName = parsed.title || feed.name || "YouTube";
     const entries = (parsed.items || []).slice(0, 20);
 
-    // Fetch descriptions for the most recent videos (in parallel, with concurrency limit)
-    const descriptions = new Map();
-    const descBatches = entries.slice(0, 10); // only fetch descriptions for top 10
-    const descResults = await Promise.allSettled(
-      descBatches.map(async (entry) => {
+    // Scrape rich metadata from video pages (top 10, concurrent)
+    const metadataMap = new Map();
+    const toScrape = entries.slice(0, 10);
+    const scrapeResults = await Promise.allSettled(
+      toScrape.map(async (entry) => {
         const videoUrl = entry.link;
         if (!videoUrl) return null;
-        const desc = await scrapeVideoDescription(videoUrl);
-        return { link: videoUrl, desc };
+        const meta = await scrapeVideoMetadata(videoUrl);
+        return { link: videoUrl, meta };
       })
     );
-    for (const r of descResults) {
-      if (r.status === "fulfilled" && r.value?.desc) {
-        descriptions.set(r.value.link, r.value.desc);
+    for (const r of scrapeResults) {
+      if (r.status === "fulfilled" && r.value?.meta) {
+        metadataMap.set(r.value.link, r.value.meta);
       }
     }
 
@@ -226,9 +252,24 @@ async function fetchYouTubeFeed(feed) {
       const published = entry.isoDate || entry.pubDate || new Date().toISOString();
       const videoId = entry.id?.replace("yt:video:", "") || "";
       const videoUrl = entry.link || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : "");
-      const summary = descriptions.get(videoUrl)
-        || extractSummary(entry)
-        || `Video from ${channelName}`;
+      const meta = metadataMap.get(videoUrl) || {};
+
+      // Build a rich summary: duration + views + description
+      const parts = [];
+      if (meta.durationMin) parts.push(`${meta.durationMin} min`);
+      if (meta.views) parts.push(`${meta.views.toLocaleString()} views`);
+      const prefix = parts.length > 0 ? `[${parts.join(" · ")}] ` : "";
+      const description = meta.description || extractSummary(entry) || "";
+      const summary = description
+        ? `${prefix}${description}`
+        : `${prefix}Video from ${channelName}`;
+
+      // Merge scraped keywords with tag extraction
+      const tags = [...new Set([
+        ...extractTags(entry, category),
+        ...(meta.keywords || []),
+        "video",
+      ])].slice(0, 10);
 
       result.items.push({
         id: itemId,
@@ -241,7 +282,7 @@ async function fetchYouTubeFeed(feed) {
         category,
         relevance: 0.5,
         relevanceReason: null,
-        tags: [...extractTags(entry, category), "video"],
+        tags,
       });
     }
     console.log(`[Fetcher] YouTube ${feed.name}: ${result.items.length} videos (${descriptions.size} with descriptions)`);
