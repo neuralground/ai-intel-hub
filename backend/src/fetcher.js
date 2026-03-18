@@ -125,10 +125,83 @@ export async function validateFeedUrl(url) {
   return result;
 }
 
+// ── YouTube channel fetcher ──────────────────────────────────────────────────
+// Resolves @handle or /channel/ URLs to the channel's RSS feed and parses it.
+async function resolveYouTubeRSS(url) {
+  // Already an RSS feed URL
+  if (url.includes("/feeds/videos.xml")) return url;
+
+  // Extract channel ID from /channel/UCXXXX format
+  const channelMatch = url.match(/\/channel\/(UC[\w-]+)/);
+  if (channelMatch) return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelMatch[1]}`;
+
+  // For @handle URLs, fetch the page and extract the channel ID from metadata
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "AI-Intel-Hub/1.0 (Feed Aggregator)" },
+      redirect: "follow",
+    });
+    const html = await res.text();
+    // Look for channel ID in the page source
+    const cidMatch = html.match(/(?:"channelId"|"externalChannelId"|channel_id=)([":])(UC[\w-]+)/);
+    if (cidMatch) return `https://www.youtube.com/feeds/videos.xml?channel_id=${cidMatch[2]}`;
+    // Fallback: look for canonical URL with channel ID
+    const canonMatch = html.match(/\/channel\/(UC[\w-]+)/);
+    if (canonMatch) return `https://www.youtube.com/feeds/videos.xml?channel_id=${canonMatch[1]}`;
+  } catch (e) {
+    console.error(`[Fetcher] YouTube resolve failed for ${url}: ${e.message}`);
+  }
+  return null;
+}
+
+async function fetchYouTubeFeed(feed) {
+  const result = { items: [], error: null };
+  try {
+    const rssUrl = await resolveYouTubeRSS(feed.url);
+    if (!rssUrl) {
+      result.error = "Could not resolve YouTube channel RSS feed";
+      return result;
+    }
+
+    // Cache the resolved RSS URL back to the feed for next time
+    if (rssUrl !== feed.url && !feed._rssResolved) {
+      feed._rssUrl = rssUrl;
+    }
+
+    const parsed = await rssParser.parseURL(rssUrl);
+    const category = inferCategory(feed);
+
+    for (const entry of (parsed.items || []).slice(0, 30)) {
+      const itemId = makeItemId(feed.id, entry);
+      const published = entry.isoDate || entry.pubDate || new Date().toISOString();
+      const videoId = entry.id?.replace("yt:video:", "") || "";
+      const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "";
+
+      result.items.push({
+        id: itemId,
+        feedId: feed.id,
+        title: (entry.title || "Untitled").trim(),
+        summary: extractSummary(entry) || entry["media:group"]?.["media:description"]?.[0] || "",
+        url: entry.link || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : ""),
+        author: entry.author || parsed.title || "",
+        published,
+        category,
+        relevance: 0.5,
+        relevanceReason: null,
+        tags: [...extractTags(entry, category), "video"],
+      });
+    }
+  } catch (err) {
+    result.error = err.message;
+    console.error(`[Fetcher] Error fetching YouTube ${feed.name}: ${err.message}`);
+  }
+  return result;
+}
+
 // ── Fetch all active feeds ──────────────────────────────────────────────────
 export async function fetchAllFeeds() {
-  const feeds = getActiveFeeds().filter((f) => f.type === "rss");
-  console.log(`[Fetcher] Refreshing ${feeds.length} RSS feeds...`);
+  const feeds = getActiveFeeds().filter((f) => f.type === "rss" || f.type === "youtube");
+  console.log(`[Fetcher] Refreshing ${feeds.length} feeds...`);
 
   const results = { totalNew: 0, totalErrors: 0, feeds: [] };
 
@@ -138,7 +211,9 @@ export async function fetchAllFeeds() {
     const batch = feeds.slice(i, i + CONCURRENCY);
     const batchResults = await Promise.allSettled(
       batch.map(async (feed) => {
-        const { items, error } = await fetchRSSFeed(feed);
+        const { items, error } = feed.type === "youtube"
+          ? await fetchYouTubeFeed(feed)
+          : await fetchRSSFeed(feed);
 
         let newCount = 0;
         for (const item of items) {
@@ -187,9 +262,11 @@ export async function fetchSingleFeed(feedId) {
   const feeds = getActiveFeeds();
   const feed = feeds.find((f) => f.id === feedId);
   if (!feed) throw new Error(`Feed not found: ${feedId}`);
-  if (feed.type !== "rss") throw new Error(`Feed type ${feed.type} not supported for auto-fetch`);
+  if (feed.type !== "rss" && feed.type !== "youtube") throw new Error(`Feed type ${feed.type} not supported for auto-fetch`);
 
-  const { items, error } = await fetchRSSFeed(feed);
+  const { items, error } = feed.type === "youtube"
+    ? await fetchYouTubeFeed(feed)
+    : await fetchRSSFeed(feed);
   let newCount = 0;
   for (const item of items) {
     try {
