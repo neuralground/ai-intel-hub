@@ -297,6 +297,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const [healthProgress, setHealthProgress] = useState(null); // { pct, message }
   const [gapsResult, setGapsResult] = useState(null);
   const [gapsLoading, setGapsLoading] = useState(false);
+  const [gapsError, setGapsError] = useState(null);
   const [gapsAddedFeeds, setGapsAddedFeeds] = useState(new Set());
   const [gapsAddingFeed, setGapsAddingFeed] = useState(null);
 
@@ -344,10 +345,14 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
     if (gapsLoading) return;
     setGapsLoading(true);
     setGapsResult(null);
+    setGapsError(null);
     try {
       const data = await api.analyze("gaps", null);
       setGapsResult(data.result);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("[Coverage Gaps]", e);
+      setGapsError(e.message || "Analysis failed");
+    }
     setGapsLoading(false);
   };
 
@@ -664,10 +669,11 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
         )}
 
         {/* Coverage Gaps analysis */}
-        {(gapsResult || gapsLoading) && (
+        {(gapsResult || gapsLoading || gapsError) && (
           <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)" }}>
             <div style={{ color: "var(--text-primary)", fontSize: 11, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>COVERAGE GAPS</div>
-            {gapsLoading && <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 12 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing coverage...</div>}
+            {gapsLoading && <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 12 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing coverage gaps — this may take 30-60 seconds...</div>}
+            {gapsError && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 11, padding: "8px 10px", background: "var(--error-bg)", borderRadius: 5 }}>⚠ {gapsError}</div>}
             {gapsResult && (
               <div style={{ color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7, fontFamily: sans }}>
                 <Markdown components={{
