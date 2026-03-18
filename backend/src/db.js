@@ -111,10 +111,9 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   if (saved) r = r.filter(i => i.saved);
   if (unread) r = r.filter(i => !i.read);
   if (search) { const q = search.toLowerCase(); r = r.filter(i => (i.title||"").toLowerCase().includes(q) || (i.summary||"").toLowerCase().includes(q) || (i.tags||[]).some(t => t.toLowerCase().includes(q))); }
-  // Sort by relevance (80%) + freshness (20%) with sigmoid decay.
-  // Freshness is ~1.0 for first 3 days, drops to 0.5 at 14 days, near 0 at 90 days.
-  // Unscored items (relevance 0.5, no scored_at) are penalized so they rank below
-  // scored items — prevents a flood of fresh unscored papers crowding out older gems.
+  // ── Scoring ─────────────────────────────────────────────────────────────────
+  // Relevance (80%) + sigmoid freshness (20%). Unscored items penalized.
+  // Freshness: ~1.0 for 0-3 days, 0.5 at 14 days, ~0 at 90+ days.
   const now = Date.now();
   const score = (item) => {
     const ageHours = (now - new Date(item.published).getTime()) / 3600000;
@@ -122,41 +121,64 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
     const boostedRelevance = Math.max(0, Math.min(1, item.relevance + (item.feedback_boost || 0)));
     const isUnscored = item.relevance === 0.5 && !item.scored_at;
     const base = boostedRelevance * 0.8 + freshness * 0.2;
-    return isUnscored ? base - 0.3 : base; // push unscored below scored
+    return isUnscored ? base - 0.3 : base;
   };
-  r.sort((a, b) => {
-    const diff = score(b) - score(a);
-    if (Math.abs(diff) < 0.001) return new Date(b.published) - new Date(a.published);
+
+  // Pre-compute scores and sort strictly by score (primary sort)
+  const scored = r.map(item => ({ item, score: score(item) }));
+  scored.sort((a, b) => {
+    const diff = b.score - a.score;
+    if (Math.abs(diff) < 0.001) return new Date(b.item.published) - new Date(a.item.published);
     return diff;
   });
 
-  // Diversify by source: interleave feeds so no single high-volume feed
-  // (e.g., arxiv) dominates the list. Applies both within categories and across all.
-  // Round-robin pick from per-feed queues, each already sorted by score.
+  // ── Soft diversification ───────────────────────────────────────────────────
+  // Prevent long runs of the same category (all view) or feed (category view).
+  // If the next item has the same key as the last N items, look ahead for a
+  // different-key item that's within 15% score of the current position and
+  // swap it in. This preserves score ordering while breaking up monotony.
   const diversifyKey = (!category || category === "all") ? "category" : "feed_id";
-  const queues = {};
-  for (const item of r) {
-    const key = item[diversifyKey] || "other";
-    if (!queues[key]) queues[key] = [];
-    queues[key].push(item);
-  }
-  const keys = Object.keys(queues);
-  if (keys.length > 1) {
-    const diversified = [];
-    const indices = Object.fromEntries(keys.map(k => [k, 0]));
-    while (diversified.length < r.length) {
-      let picked = false;
-      for (const k of keys) {
-        if (indices[k] < queues[k].length) {
-          diversified.push(queues[k][indices[k]++]);
-          picked = true;
+  const MAX_CONSECUTIVE = (!category || category === "all") ? 2 : 3;
+  const SCORE_TOLERANCE = 0.15; // only swap if scores are within 15%
+
+  const result = [];
+  const remaining = [...scored];
+
+  while (remaining.length > 0) {
+    // Count how many consecutive items of the same key we've placed
+    let consecutiveCount = 0;
+    if (result.length > 0) {
+      const lastKey = result[result.length - 1].item[diversifyKey];
+      for (let j = result.length - 1; j >= 0 && j >= result.length - MAX_CONSECUTIVE; j--) {
+        if (result[j].item[diversifyKey] === lastKey) consecutiveCount++;
+        else break;
+      }
+    }
+
+    if (consecutiveCount >= MAX_CONSECUTIVE) {
+      // Try to find a different-key item within score tolerance
+      const topScore = remaining[0].score;
+      let swapIdx = -1;
+      const lastKey = result[result.length - 1].item[diversifyKey];
+      for (let j = 1; j < remaining.length; j++) {
+        if (remaining[j].item[diversifyKey] !== lastKey) {
+          if (topScore - remaining[j].score <= SCORE_TOLERANCE) {
+            swapIdx = j;
+          }
+          break; // only check the first different-key item
         }
       }
-      if (!picked) break;
+      if (swapIdx >= 0) {
+        result.push(remaining.splice(swapIdx, 1)[0]);
+        continue;
+      }
     }
-    r = diversified;
+
+    // Default: take the highest-scoring remaining item
+    result.push(remaining.shift());
   }
 
+  r = result.map(s => s.item);
   return r.slice(offset, offset + limit);
 }
 
