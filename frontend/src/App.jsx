@@ -450,11 +450,15 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   };
 
   const removeFeed = async (feed) => {
-    await api.deleteFeed(feed.id);
-    setConfirmDelete(null);
-    setExpandedFeed(null);
-    onRefresh();
-    refreshHealth();
+    try {
+      await api.deleteFeed(feed.id);
+      // Optimistically remove from local state so UI updates immediately
+      setHealthData(prev => prev ? prev.filter(f => f.id !== feed.id) : prev);
+      setConfirmDelete(null);
+      setExpandedFeed(null);
+      onRefresh();
+      refreshHealth();
+    } catch (e) { console.error("Delete failed:", e); }
   };
 
   const acceptSuggestion = async (s) => {
