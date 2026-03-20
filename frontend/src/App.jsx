@@ -222,7 +222,7 @@ function AnalysisPanel({ category, onClose }) {
   };
 
   const modes = [
-    { key: "briefing", label: "Executive Brief" },
+    { key: "briefing", label: "Daily Summary" },
     { key: "risks", label: "Risk Scan" },
     { key: "what-so-what-now-what", label: "What / So What / Now What" },
   ];
@@ -293,7 +293,17 @@ function AnalysisPanel({ category, onClose }) {
         ))}
       </div>
       <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-        {loading && <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 13 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", animation: "pulse 1.5s infinite", marginRight: 8 }} />Analyzing...</div>}
+        {loading && (
+          <div>
+            <div style={{ height: 2, background: "var(--border)", borderRadius: 1, marginBottom: 10 }}>
+              <div style={{ height: "100%", width: "60%", background: "var(--accent)", borderRadius: 1, animation: "analyzeProgress 2s ease-in-out infinite" }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontFamily: mono, fontSize: 11 }}>
+              <span style={{ color: "var(--accent)", fontWeight: 600 }}>Generating {modes.find(m => m.key === mode)?.label || "analysis"}...</span>
+              <span>This may take 10-20 seconds</span>
+            </div>
+          </div>
+        )}
         {error && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 13 }}>⚠ {error}</div>}
         {result && <div className="analysis-markdown" style={{ color: "var(--text-secondary)", fontSize: 13.5, lineHeight: 1.75, fontFamily: sans }}><Markdown components={{
           h1: ({ children }) => <h1 style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 600, fontFamily: mono, marginTop: 20, marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid var(--border)" }}>{children}</h1>,
@@ -1710,7 +1720,8 @@ export default function App() {
     try {
       const [itemsRes, feedsRes, statsRes, affRes] = await Promise.all([
         api.getItems({
-          category: category !== "all" ? category : undefined, minRelevance, search, unread: true,
+          category: category !== "all" ? category : undefined, minRelevance, search,
+          unread: criticalOnly ? undefined : true,
           critical: criticalOnly || undefined,
           orgs: selectedOrgs.length > 0 ? selectedOrgs.join(",") : undefined,
           limit: PAGE_SIZE, offset: page * PAGE_SIZE,
@@ -1883,7 +1894,7 @@ export default function App() {
 
       {/* Refresh progress bar — thin strip below header */}
       {refreshStatus && (
-        <div style={{ position: "sticky", top: 52, zIndex: 49, height: 0 }}>
+        <div style={{ position: "sticky", top: 52, zIndex: 49 }}>
           <div style={{ height: 2, background: "var(--border)" }}>
             <div style={{
               height: "100%",

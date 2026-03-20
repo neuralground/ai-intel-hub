@@ -278,10 +278,18 @@ export async function generateAnalysis(mode, category = null) {
     return { result: cached.result, cached: true, sourceItems: sourceItemMap };
   }
 
+  // Each mode uses a different item pool to reduce redundancy
+  const modeItemConfig = {
+    briefing: { minRelevance: 0.2, limit: 30, sliceCount: 20 },  // wider net, more items, longer view
+    risks:    { minRelevance: 0.3, limit: 20, sliceCount: 15 },  // focused on recent, moderate relevance
+    "what-so-what-now-what": { minRelevance: 0.5, limit: 15, sliceCount: 10 },  // only highest-signal items
+  };
+  const cfg = modeItemConfig[mode] || modeItemConfig.risks;
+
   const items = getItems({
     category: category || "all",
-    minRelevance: 0.3,
-    limit: 20,
+    minRelevance: cfg.minRelevance,
+    limit: cfg.limit,
   });
 
   if (items.length === 0) {
@@ -289,11 +297,26 @@ export async function generateAnalysis(mode, category = null) {
   }
 
   const context = getRelevanceContext();
-  const sourceItems = items.slice(0, 15);
+
+  // For briefing/daily summary: mix the freshest items with the most significant older ones
+  let sourceItems;
+  if (mode === "briefing") {
+    const now = Date.now();
+    const fresh = items.filter(it => (now - new Date(it.published).getTime()) < 48 * 3600000);
+    const older = items.filter(it => (now - new Date(it.published).getTime()) >= 48 * 3600000 && it.relevance >= 0.6);
+    // Take up to 12 fresh + up to 8 high-relevance older items
+    sourceItems = [...fresh.slice(0, 12), ...older.slice(0, 8)].slice(0, cfg.sliceCount);
+  } else {
+    sourceItems = items.slice(0, cfg.sliceCount);
+  }
+
   const itemSummaries = sourceItems
     .map(
-      (it, i) =>
-        `${i + 1}. ID: ${it.id} | [${it.category}] ${it.title}\n   URL: ${it.url || "none"}\n   Source: ${it.feed_id} | Relevance: ${(it.relevance * 100).toFixed(0)}%\n   ${(it.summary || "").slice(0, 200)}`
+      (it, i) => {
+        const ageHours = (Date.now() - new Date(it.published).getTime()) / 3600000;
+        const ageLabel = ageHours < 24 ? `${Math.round(ageHours)}h ago` : `${Math.round(ageHours / 24)}d ago`;
+        return `${i + 1}. ID: ${it.id} | [${it.category}] ${it.title}\n   URL: ${it.url || "none"}\n   Source: ${it.feed_id} | Relevance: ${(it.relevance * 100).toFixed(0)}% | Published: ${ageLabel}\n   Affiliations: ${(it.affiliations || []).join(", ") || "none"}\n   ${(it.summary || "").slice(0, 200)}`;
+      }
     )
     .join("\n\n");
 
@@ -301,12 +324,15 @@ export async function generateAnalysis(mode, category = null) {
 
   const prompts = {
     briefing: {
-      system: `You are an AI intelligence analyst for: ${context}\nProduce concise, actionable briefings. No preamble.`,
-      user: `Produce an executive briefing (300-400 words) from these recent items. Structure as:
+      system: `You are an AI intelligence analyst producing a daily summary for: ${context}\nProduce a comprehensive daily intelligence summary. Include both breaking developments AND significant items from the past few days that deserve attention. No preamble.`,
+      user: `Produce a daily intelligence summary (400-500 words) from these items. The items span from the last few hours to the past week — give weight to significance, not just recency. Structure as:
 
-**CRITICAL DEVELOPMENTS** (items requiring immediate attention or action)
-**STRATEGIC SIGNALS** (emerging patterns, shifts, or trends to monitor)
-**ACTION ITEMS** (specific things to investigate, prototype, escalate, or dismiss)
+**TODAY'S HEADLINES** (the 2-3 most important developments right now, regardless of age)
+**DEVELOPING STORIES** (items that represent evolving situations, ongoing shifts, or emerging patterns worth tracking over time)
+**STRATEGIC CONTEXT** (connect the dots: what do these items collectively signal about the direction of the field? what should the reader be thinking about?)
+**ACTION ITEMS** (specific things to investigate, prototype, escalate, or plan for — with suggested priority and urgency)
+
+Avoid redundancy with a risk assessment or what/so-what/now-what analysis — focus on the narrative and strategic picture.
 ${citationRule}
 Items:\n${itemSummaries}`,
     },
@@ -336,23 +362,33 @@ ${citationRule}
 Items:\n${itemSummaries}`,
     },
     risks: {
-      system: `You are an AI risk analyst for: ${context}\nFocus on actionable risk intelligence.`,
-      user: `Produce a focused risk assessment from these items:
+      system: `You are an AI risk analyst for: ${context}\nFocus exclusively on risks, threats, and vulnerabilities — not opportunities or positive developments. Be specific about timeframes and impact. No preamble.`,
+      user: `Produce a focused risk assessment from these items. Only discuss items that present a genuine risk, threat, or vulnerability — skip items that are purely positive developments.
 
-**REGULATORY RISKS** - Upcoming deadlines, new guidance, enforcement actions, compliance implications
-**TECHNOLOGY RISKS** - Capability shifts that could disrupt current architecture decisions or strategy
-**VENDOR RISKS** - Competitive landscape changes affecting platform and model provider decisions
-**OPERATIONAL RISKS** - Workforce, security, process, or organizational implications
+**IMMEDIATE RISKS** (next 30 days) - What requires urgent attention or could catch us off-guard?
+**REGULATORY & COMPLIANCE** - New rules, guidance, deadlines, enforcement actions, or jurisdictional changes
+**TECHNOLOGY & ARCHITECTURE** - Capability shifts that could disrupt current technical decisions, deprecation risks, security vulnerabilities
+**VENDOR & COMPETITIVE** - Platform lock-in risks, pricing changes, competitive moves that affect our position
+**OPERATIONAL** - Workforce, security, process, reputational, or organizational risks
+
+For each risk, assess: **Likelihood** (high/medium/low) and **Impact** (high/medium/low).
+
+Do NOT duplicate content from a daily summary — focus purely on the risk lens. If an item poses no meaningful risk, omit it.
 ${citationRule}
 Items:\n${itemSummaries}`,
     },
     "what-so-what-now-what": {
-      system: `You are a strategic advisor for: ${context}\nUse the What/So What/Now What framework.`,
-      user: `For each of the 3-5 most significant items, provide:
+      system: `You are a strategic advisor for: ${context}\nUse the What/So What/Now What decision framework. Be concrete and specific about actions. No preamble.`,
+      user: `Select the 3-5 MOST ACTIONABLE items — ones that require a decision or response — and analyze each through this framework:
 
-**WHAT** - What changed? (Factual: new capability, regulation, risk, or market shift)
-**SO WHAT** - Why does it matter? (Implication for architecture, strategy, governance, competitive position)
-**NOW WHAT** - What should be done? (Prototype, escalate, monitor, dismiss — and who should own it)
+For each item:
+**WHAT** — What specifically changed? (One factual sentence: a new capability, regulation, risk, or market shift)
+**SO WHAT** — Why should we care? (Direct implication for our strategy, architecture, competitive position, or compliance posture. Be specific, not generic.)
+**NOW WHAT** — What should we do? (A concrete action: prototype X, escalate to Y, monitor Z, deprioritize W. Include who should own it and a rough timeframe.)
+
+Selection criteria: choose items where inaction has a cost. Skip items that are merely interesting — focus on items that demand a response.
+
+Do NOT overlap with a daily summary or risk assessment. This view is about decision-making and accountability.
 ${citationRule}
 Items:\n${itemSummaries}`,
     },

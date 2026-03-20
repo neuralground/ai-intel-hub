@@ -87,6 +87,7 @@ body {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 @keyframes slideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes analyzeProgress { 0% { width: 5%; opacity: 0.6; } 50% { width: 75%; opacity: 1; } 100% { width: 5%; opacity: 0.6; } }
 
 /* Select option styling for dark mode */
 select option {
