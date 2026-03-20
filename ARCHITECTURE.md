@@ -108,6 +108,15 @@ An item is flagged as critical based on a composite score from three factors:
 
 The critical item count is displayed in the dashboard header and is clickable to filter the item list.
 
+### Client-Side vs Server-Side Filtering
+
+The dashboard uses a split filtering architecture for responsiveness:
+
+- **Server-side (coarse) filters:** Category, search, and critical item toggling are sent as query params to `GET /api/items`. These filters reduce the data set before it reaches the client.
+- **Client-side (fine) filters:** Relevance threshold, recency, organizations, and sources are applied instantly in the browser with no network round-trip. This makes slider and multi-select interactions feel immediate.
+
+The server API supports all filter params (including `minRelevance`, `maxAgeDays`, and `orgs`) so that headless and API consumers can filter entirely server-side without a browser.
+
 ---
 
 ## File Structure
@@ -332,7 +341,7 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 ### Items
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/items?category=&minRelevance=&search=&limit=&offset=&saved=&orgs=` | Filtered item list (use `orgs` to filter by organization) |
+| GET | `/api/items?category=&minRelevance=&search=&limit=&offset=&saved=&orgs=&maxAgeDays=` | Filtered item list (`orgs` filters by organization, `maxAgeDays` limits by recency) |
 | POST | `/api/items/:id/read` | Mark as read |
 | POST | `/api/items/:id/save` | Toggle saved `{saved: bool}` |
 | POST | `/api/items/:id/dismiss` | Soft-delete from feed |

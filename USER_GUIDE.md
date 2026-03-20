@@ -49,7 +49,7 @@ The main area of the dashboard displays items as a vertical list of cards. Each 
 - **Title** -- the headline of the article, paper, or post.
 - **Category badge** -- color-coded label indicating the feed category (e.g., "AI Research" in blue, "Policy & Governance" in red).
 - **Relevance percentage** -- a numeric score (0-100%) indicating how relevant the item is to your configured role and priorities. Color shifts from gray (low) through yellow (medium) to green (high).
-- **Feed name** -- which feed the item came from.
+- **Source name** -- which source the item came from.
 - **Time** -- relative timestamp (e.g., "2h ago", "yesterday").
 - **Organization badges** -- small text-only badges showing affiliated organizations detected in the content (see [Organization Affiliations](#organization-affiliations)).
 - **Summary snippet** -- a brief preview of the item content.
@@ -80,7 +80,7 @@ Each expanded item provides these action buttons:
 - **Thumbs up / Thumbs down** -- provide relevance feedback. Thumbs up signals "more like this" and thumbs down signals "less like this." This feedback is used to improve future scoring. See [Tips and Best Practices](#tips-and-best-practices) for more on feedback.
 - **Save** (star icon) -- bookmarks the item to your Saved collection. Saved items are preserved during daily cleanup and can be accessed from the Saved panel.
 - **Mark read** -- marks the item as read, dimming it in the list.
-- **Dismiss** -- soft-deletes the item from your feed. Dismissed items no longer appear in the list but are not permanently deleted.
+- **Dismiss** -- soft-deletes the item from your view. Dismissed items no longer appear in the list but are not permanently deleted.
 
 ---
 
@@ -90,7 +90,7 @@ Each expanded item provides these action buttons:
 
 Clicking the Refresh button in the header bar triggers a multi-stage process:
 
-1. **Fetch feeds** -- all active RSS feeds are fetched concurrently (up to 5 at a time).
+1. **Fetch sources** -- all active RSS sources are fetched concurrently (up to 5 at a time).
 2. **Score items** -- newly fetched items that have not been scored are sent to the configured LLM in batches of 15 for relevance scoring.
 3. **Update** -- the item list refreshes with new items and updated scores.
 
@@ -100,11 +100,11 @@ During a refresh, a progress bar appears below the header showing the current st
 
 ### Cancel Button
 
-You can cancel a refresh in progress by clicking the Cancel button that appears alongside the progress bar. Feeds already fetched and items already scored are retained; only the remaining work is canceled.
+You can cancel a refresh in progress by clicking the Cancel button that appears alongside the progress bar. Sources already fetched and items already scored are retained; only the remaining work is canceled.
 
 ### Auto-Refresh
 
-Feeds are automatically refreshed on a configurable interval (default: every 30 minutes). New items are scored automatically after each refresh. The interval can be changed in Settings under "Feed Refresh Interval."
+Sources are automatically refreshed on a configurable interval (default: every 30 minutes). New items are scored automatically after each refresh. The interval can be changed in Settings under "Source Refresh Interval."
 
 ---
 
@@ -192,56 +192,56 @@ Analysis results are cached for 30 minutes. Running the same analysis mode and c
 
 ### The Sources Panel
 
-Click the Sources button in the header bar to open feed management. The panel lists all configured feeds with their status.
+Click the Sources button in the header bar to open source management. The panel lists all configured sources with their status.
 
-### Feed Health Indicators
+### Source Health Indicators
 
-Each feed shows a colored dot indicating its health:
+Each source shows a colored dot indicating its health:
 
-- **Green** -- feed is active and fetching successfully.
-- **Yellow** -- feed has not returned new items recently or has intermittent errors.
-- **Red** -- feed is failing to fetch (network errors, invalid URL, feed removed).
+- **Green** -- source is active and fetching successfully.
+- **Yellow** -- source has not returned new items recently or has intermittent errors.
+- **Red** -- source is failing to fetch (network errors, invalid URL, source removed).
 
 The status text next to the dot provides specifics (e.g., "12 items, updated 2h ago" or "Error: 404 Not Found").
 
-### Adding New Feeds
+### Adding New Sources
 
-Click "Add Feed" at the top of the Sources panel. Provide:
+Click "Add Source" at the top of the Sources panel. Provide:
 
-- **Name** -- a display label for the feed.
+- **Name** -- a display label for the source.
 - **URL** -- the RSS/Atom feed URL.
 - **Category** -- which category to file items under (Research, Engineering, Industry, Policy, or Labs).
-- **Type** -- typically "rss" for standard feeds.
+- **Type** -- typically "rss" for standard sources.
 
-The feed begins fetching immediately after being added.
+The source begins fetching immediately after being added.
 
-### Muting and Deleting Feeds
+### Muting and Deleting Sources
 
-- **Mute** -- toggles a feed's active status. Muted feeds are not fetched during refresh cycles but their existing items remain in the database.
-- **Delete** -- permanently removes the feed and all its items from the database.
+- **Mute** -- toggles a source's active status. Muted sources are not fetched during refresh cycles but their existing items remain in the database.
+- **Delete** -- permanently removes the source and all its items from the database.
 
 ### Authoritative Source Checkbox
 
-Each feed has an "Authoritative" checkbox. When checked, the feed is treated as an authoritative source, which means:
+Each source has an "Authoritative" checkbox. When checked, the source is treated as authoritative, which means:
 
-- Items from this feed receive a boost when calculating critical item status.
-- The feed is weighted more heavily in analysis and briefing generation.
+- Items from this source receive a boost when calculating critical item status.
+- The source is weighted more heavily in analysis and briefing generation.
 
-Mark feeds as authoritative when they represent primary sources you trust for accuracy and significance -- official lab blogs, major research institutions, key regulatory bodies.
+Mark sources as authoritative when they represent primary publications you trust for accuracy and significance -- official lab blogs, major research institutions, key regulatory bodies.
 
-### Feed Health Analysis and Suggestions
+### Source Health Analysis and Suggestions
 
-At the bottom of the Sources panel, you can run a feed health analysis. This uses the LLM to evaluate all your feeds and identify:
+At the bottom of the Sources panel, you can run a source health analysis. This uses the LLM to evaluate all your sources and identify:
 
-- **Stale feeds** -- feeds that have not produced new content recently.
-- **Noisy feeds** -- feeds with high volume but consistently low relevance scores.
-- **Suggested new feeds** -- recommendations for feeds that would fill gaps in your coverage.
+- **Stale sources** -- sources that have not produced new content recently.
+- **Noisy sources** -- sources with high volume but consistently low relevance scores.
+- **Suggested new sources** -- recommendations for sources that would fill gaps in your coverage.
 
-Suggestions can be accepted (which adds the feed automatically) or dismissed.
+Suggestions can be accepted (which adds the source automatically) or dismissed.
 
 ### Coverage Gap Detection
 
-The coverage gap analysis (available both in the Sources panel and in the Analysis panel under "Coverage Gaps") examines your current feed set and identifies topic areas, geographies, or perspectives that are underrepresented. Suggested feeds to fill those gaps appear inline within each identified gap.
+The coverage gap analysis (available both in the Sources panel and in the Analysis panel under "Coverage Gaps") examines your current source set and identifies topic areas, geographies, or perspectives that are underrepresented. Suggested sources to fill those gaps appear inline within each identified gap.
 
 ---
 
@@ -251,7 +251,7 @@ Open Settings by clicking the gear icon in the header bar or pressing Cmd+, (mac
 
 ### Your Role (Relevance Context)
 
-The most impactful setting. Describe who you are, what you do, and what topics matter to you. This context is injected into every LLM prompt -- for relevance scoring, briefings, risk analysis, and feed suggestions.
+The most impactful setting. Describe who you are, what you do, and what topics matter to you. This context is injected into every LLM prompt -- for relevance scoring, briefings, risk analysis, and source suggestions.
 
 Be specific. A vague description like "I work in tech" produces generic scoring. A detailed description like "Senior technology executive at a Global Systemically Important Bank, focused on agentic AI architecture, EU AI Act compliance, and sovereign AI risk" produces highly targeted results.
 
@@ -287,9 +287,9 @@ To add a custom organization, click "Add Organization" and provide an ID, label,
 
 To remove a user-added organization, click the delete button next to it. A confirmation dialog appears before the deletion proceeds. Built-in organizations cannot be removed.
 
-### Feed Refresh Interval
+### Source Refresh Interval
 
-Set how often feeds are automatically refreshed, in minutes. The default is 30 minutes. Lower values mean fresher content but more API calls for scoring.
+Set how often sources are automatically refreshed, in minutes. The default is 30 minutes. Lower values mean fresher content but more API calls for scoring.
 
 ### Connected Services
 
@@ -361,13 +361,13 @@ Scoring instructions supplement your relevance context with tactical guidance:
 
 ### When to Mark Authoritative Sources
 
-Mark a feed as authoritative when:
+Mark a source as authoritative when:
 
-- It is the primary/official source for a major AI lab or institution (e.g., the OpenAI blog, not a news site reporting on OpenAI).
+- It is the primary/official publication for a major AI lab or institution (e.g., the OpenAI blog, not a news site reporting on OpenAI).
 - It consistently produces content that is accurate and significant.
-- You want items from that feed to be weighted more heavily in critical item detection and briefings.
+- You want items from that source to be weighted more heavily in critical item detection and briefings.
 
-Do not mark every feed as authoritative -- the designation loses its value if overused.
+Do not mark every source as authoritative -- the designation loses its value if overused.
 
 ### Using Feedback to Improve Scoring
 
