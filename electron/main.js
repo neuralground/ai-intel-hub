@@ -313,6 +313,77 @@ ipcMain.handle("connect-service", async (event, serviceId) => {
   return captureCookie(config);
 });
 
+// Dynamic auth for paywalled feeds — opens the site, captures any session cookie
+ipcMain.handle("connect-feed", async (event, { feedId, siteUrl, envKey }) => {
+  let domain;
+  try { domain = "." + new URL(siteUrl).hostname.replace(/^www\./, ""); } catch {
+    return { ok: false, error: "Invalid URL" };
+  }
+  console.log(`[Electron] Feed auth: ${feedId} → ${siteUrl} (domain: ${domain})`);
+
+  // Open login page and capture the most likely session cookie
+  const SESSION_COOKIE_NAMES = ["session", "sessionid", "session_id", "sid", "auth_token", "token",
+    "connect.sid", "substack.sid", "li_at", "__Secure-1PSID", "_session", "user_session"];
+
+  const config = {
+    title: `Sign in — ${domain.replace(/^\./, "")}`,
+    loginUrl: siteUrl,
+    domain,
+    cookieName: null, // will check all candidates
+    envKey: envKey || feedId.toUpperCase().replace(/-/g, "_") + "_SESSION",
+  };
+
+  return new Promise((resolve) => {
+    const partition = `persist:auth-${config.envKey}`;
+    const authSession = session.fromPartition(partition);
+
+    const authWin = new BrowserWindow({
+      parent: mainWindow, width: 520, height: 720, title: config.title,
+      webPreferences: { nodeIntegration: false, contextIsolation: true, partition },
+    });
+
+    let resolved = false;
+
+    const checkCookie = async () => {
+      if (resolved) return;
+      try {
+        const allCookies = await authSession.cookies.get({ domain: config.domain });
+        // Look for any known session cookie name
+        for (const name of SESSION_COOKIE_NAMES) {
+          const c = allCookies.find(ck => ck.name === name);
+          if (c) {
+            resolved = true;
+            await saveServiceToken(config.envKey, c.value);
+            authWin.close();
+            resolve({ ok: true, cookieName: name });
+            return;
+          }
+        }
+        // Fallback: if we find any cookie with "session" or "token" in the name
+        const fallback = allCookies.find(c => /session|token|auth|sid/i.test(c.name) && c.value.length > 10);
+        if (fallback) {
+          resolved = true;
+          await saveServiceToken(config.envKey, fallback.value);
+          authWin.close();
+          resolve({ ok: true, cookieName: fallback.name });
+          return;
+        }
+      } catch { /* ignore */ }
+    };
+
+    authWin.webContents.on("did-navigate", checkCookie);
+    authWin.webContents.on("did-navigate-in-page", checkCookie);
+    const interval = setInterval(checkCookie, 2000);
+
+    authWin.on("closed", () => {
+      clearInterval(interval);
+      if (!resolved) resolve({ ok: false, error: "Window closed before login completed" });
+    });
+
+    authWin.loadURL(config.loginUrl);
+  });
+});
+
 // ── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {

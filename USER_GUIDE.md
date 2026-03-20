@@ -156,7 +156,7 @@ The list of recognized organizations can be viewed and customized in Settings.
 
 ---
 
-## Analysis and Briefings
+## Analysis and Summaries
 
 ### The Analysis Panel
 

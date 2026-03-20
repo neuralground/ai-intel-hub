@@ -177,8 +177,9 @@ app.delete("/api/feeds/:id", (req, res) => {
 
 // ── Items ───────────────────────────────────────────────────────────────────
 app.get("/api/items", (req, res) => {
-  const { category, minRelevance, limit, offset, saved, unread, search, critical, orgs } = req.query;
+  const { category, minRelevance, limit, offset, saved, unread, search, critical, orgs, feedIds } = req.query;
   const orgsList = orgs ? orgs.split(",").filter(Boolean) : undefined;
+  const feedIdsList = feedIds ? feedIds.split(",").filter(Boolean) : undefined;
   const items = getItems({
     category,
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
@@ -188,6 +189,7 @@ app.get("/api/items", (req, res) => {
     unread: unread === "true",
     critical: critical === "true",
     orgs: orgsList,
+    feedIds: feedIdsList,
     search,
   });
   const count = getItemCount({
@@ -196,6 +198,7 @@ app.get("/api/items", (req, res) => {
     unread: unread === "true",
     critical: critical === "true",
     orgs: orgsList,
+    feedIds: feedIdsList,
     search,
   });
   res.json({ items, total: count });
@@ -553,8 +556,9 @@ app.post("/api/settings", (req, res) => {
     let settings = loadSettingsFile();
     const updates = req.body;
 
-    for (const key of SETTINGS_KEYS) {
-      if (updates[key] !== undefined) {
+    for (const key of Object.keys(updates)) {
+      // Allow known settings keys + any *_SESSION key (for dynamic service auth)
+      if (SETTINGS_KEYS.includes(key) || key.endsWith("_SESSION")) {
         settings[key] = updates[key];
         // Apply to running process immediately
         process.env[key] = updates[key];

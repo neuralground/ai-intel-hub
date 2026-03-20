@@ -42,7 +42,7 @@ function healthColor(status) {
 }
 
 function healthLabel(status, avgInterval, hoursSince) {
-  if (status === "error") return "Feed error";
+  if (status === "error") return "Source error";
   if (status === "unknown") return "No items yet";
   const cadence = avgInterval != null
     ? avgInterval < 24 ? "~daily" : avgInterval < 72 ? "~every few days" : avgInterval < 168 ? "~weekly" : "~monthly"
@@ -595,7 +595,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
             {mutedCount > 0 && <> · Muted: <span style={{ color: "var(--text-faint)" }}>{mutedCount}</span></>}
           </span>
           <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: showAddForm ? "var(--accent-bg)" : "transparent", color: showAddForm ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>+ Add Feed</button>
+            <button onClick={() => setShowAddForm(!showAddForm)} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: showAddForm ? "var(--accent-bg)" : "transparent", color: showAddForm ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>+ Add Source</button>
             <button onClick={runHealthCheck} disabled={analyzing} style={{ padding: "5px 12px", borderRadius: 6, border: "1px solid var(--border)", background: analyzing ? "var(--accent-bg)" : "transparent", color: analyzing ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
               {analyzing ? "Checking..." : "Health Check"}
             </button>
@@ -621,7 +621,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
       {showAddForm && (
         <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", background: "var(--bg-form)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <input placeholder="Paste a URL — RSS feed, X profile, YouTube channel, blog..." value={newFeed.url} onChange={e => setNewFeed(p => ({ ...p, url: e.target.value }))} style={inp} onKeyDown={e => e.key === "Enter" && addFeed()} autoFocus />
+            <input placeholder="Paste a URL — RSS, X profile, YouTube channel, blog, newsletter..." value={newFeed.url} onChange={e => setNewFeed(p => ({ ...p, url: e.target.value }))} style={inp} onKeyDown={e => e.key === "Enter" && addFeed()} autoFocus />
             <div style={{ display: "flex", gap: 8 }}>
               <input placeholder="Name (optional — auto-detected)" value={newFeed.name} onChange={e => setNewFeed(p => ({ ...p, name: e.target.value }))} style={{ ...inp, flex: 1 }} />
               <select value={newFeed.category} onChange={e => setNewFeed(p => ({ ...p, category: e.target.value }))} style={{ ...inp, flex: 1 }}>
@@ -630,7 +630,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
             </div>
             {addError && <div style={{ color: "#EF4444", fontSize: 11, fontFamily: mono }}>{addError}</div>}
             <button onClick={addFeed} disabled={addingFeed || !newFeed.url} style={{ padding: 10, background: "var(--accent)", border: "none", borderRadius: 6, color: "white", fontFamily: mono, fontSize: 12, cursor: "pointer", fontWeight: 600, opacity: addingFeed ? 0.6 : 1 }}>
-              {addingFeed ? "Adding..." : "Add Feed"}
+              {addingFeed ? "Adding..." : "Add Source"}
             </button>
           </div>
         </div>
@@ -640,7 +640,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
       {confirmDelete && (
         <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "var(--error-bg-strong)" }}>
           <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: sans, marginBottom: 8 }}>
-            Delete <strong>{confirmDelete.name}</strong>? This will remove the feed and all its items.
+            Delete <strong>{confirmDelete.name}</strong>? This will remove this source and all its items.
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => removeFeed(confirmDelete)} style={{ padding: "6px 14px", background: "#EF4444", border: "none", borderRadius: 5, color: "white", fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>Delete</button>
@@ -705,17 +705,18 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
                           <span style={{ color: f.active ? "var(--text-secondary)" : "var(--text-faint)", fontSize: 12.5, fontFamily: sans, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
                           {f.authoritative && <span title="Authoritative source" style={{ color: "var(--accent)", fontSize: 10, flexShrink: 0 }}>◆</span>}
                           <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono, flexShrink: 0 }}>{f.type}</span>
+                          {f.paywall && <span title="Paywalled — authenticate for full content" style={{ padding: "0 4px", borderRadius: 3, fontSize: 8, fontFamily: mono, fontWeight: 600, background: "#F59E0B20", color: "#F59E0B", flexShrink: 0 }}>paywall</span>}
                         </div>
                         <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
                           {!f.active && <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, marginRight: 2 }}>MUTED</span>}
-                          <button onClick={e => { e.stopPropagation(); toggleMute(f); }} title={f.active ? "Mute feed" : "Unmute feed"}
+                          <button onClick={e => { e.stopPropagation(); toggleMute(f); }} title={f.active ? "Mute source" : "Unmute source"}
                             style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: "2px 4px", lineHeight: 1 }}>
                             {f.active
                               ? <span style={{ color: "#10B981" }}>🎙</span>
                               : <span style={{ color: "#EF4444" }}>🔇</span>}
                           </button>
                           {!f.active && (
-                            <button onClick={e => { e.stopPropagation(); setConfirmDelete(f); }} title="Delete feed"
+                            <button onClick={e => { e.stopPropagation(); setConfirmDelete(f); }} title="Delete source"
                               style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", fontSize: 12, padding: "2px 4px" }}>
                               ✕
                             </button>
@@ -779,8 +780,9 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
                             <input type="checkbox" checked={!!f.authoritative} readOnly
                               style={{ accentColor: "var(--accent)", width: 13, height: 13, cursor: "pointer" }} />
                             <span style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: mono }}>Authoritative source</span>
-                            <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: sans }}> — items from this feed count toward critical alerts</span>
+                            <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: sans }}> — items from this source count toward critical alerts</span>
                           </label>
+                          {f.paywall && <PaywallPrompt feed={f} onConnect={handleServiceConnect} />}
                         </div>
                       </div>
                     )}
@@ -837,7 +839,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
           )}
           {!hasSuggestions && !analysis && (
             <div style={{ color: "var(--text-faint)", fontSize: 11, fontFamily: sans }}>
-              Run a Health Check to get AI-powered feed recommendations.
+              Run a Health Check to get AI-powered source recommendations.
             </div>
           )}
         </div>
@@ -921,6 +923,103 @@ const SERVICES = [
 ];
 
 const isElectron = !!(window.electronAPI?.isElectron);
+
+// ── Paywall Prompt (inline in feed detail) ──────────────────────────────────
+// In Electron: opens a browser window to the site, captures session cookie automatically.
+// In web mode: directs user to log in and paste a session token as fallback.
+function PaywallPrompt({ feed }) {
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [token, setToken] = useState("");
+
+  let domain = "";
+  let siteUrl = "";
+  try {
+    const u = new URL(feed.url);
+    domain = u.hostname.replace(/^www\./, "");
+    siteUrl = u.origin;
+  } catch { /* */ }
+
+  const envKey = feed.id.toUpperCase().replace(/-/g, "_") + "_SESSION";
+
+  const handleElectronAuth = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const result = await window.electronAPI.connectFeed({ feedId: feed.id, siteUrl, envKey });
+      if (result.ok) {
+        setDone(true);
+      } else {
+        setError(result.error || "Sign-in was not completed");
+        setShowManual(true);
+      }
+    } catch (e) {
+      setError(e.message);
+      setShowManual(true);
+    }
+    setConnecting(false);
+  };
+
+  const handleManualSave = async () => {
+    if (!token.trim()) return;
+    try {
+      await api.saveSettings({ [envKey]: token.trim() });
+      setDone(true);
+      setShowManual(false);
+    } catch (e) { setError(e.message); }
+  };
+
+  return (
+    <div style={{ marginTop: 6, padding: "6px 10px", background: "#F59E0B10", border: "1px solid #F59E0B30", borderRadius: 5 }} onClick={e => e.stopPropagation()}>
+      <div style={{ color: "#F59E0B", fontSize: 10, fontFamily: mono, fontWeight: 600, marginBottom: 3 }}>REQUIRES AUTHORIZATION</div>
+      {done ? (
+        <div style={{ color: "#10B981", fontSize: 10, fontFamily: mono }}>Authorized. Full content will be available on next refresh.</div>
+      ) : (
+        <>
+          <div style={{ color: "var(--text-muted)", fontSize: 10, lineHeight: 1.4, marginBottom: 6 }}>
+            This source requires a subscription or login to <strong>{domain}</strong>. Items may be missing or truncated.
+          </div>
+          {error && <div style={{ color: "#EF4444", fontSize: 10, fontFamily: mono, marginBottom: 6 }}>{error}</div>}
+
+          {isElectron ? (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button onClick={handleElectronAuth} disabled={connecting}
+                style={{ padding: "4px 12px", background: "var(--accent)", border: "none", borderRadius: 4, color: "white", fontSize: 9, fontFamily: mono, cursor: "pointer", fontWeight: 600, opacity: connecting ? 0.6 : 1 }}>
+                {connecting ? "Signing in..." : `Sign in to ${domain}`}
+              </button>
+            </div>
+          ) : !showManual ? (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button onClick={() => setShowManual(true)}
+                style={{ padding: "4px 12px", background: "var(--accent)", border: "none", borderRadius: 4, color: "white", fontSize: 9, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>
+                Authorize Access
+              </button>
+            </div>
+          ) : null}
+
+          {/* Manual fallback: shown in web mode, or after Electron auth failure */}
+          {showManual && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ color: "var(--text-muted)", fontSize: 10, lineHeight: 1.4, marginBottom: 6 }}>
+                Log in to {domain} in your browser, then paste your session token below.
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input type="password" value={token} onChange={e => setToken(e.target.value)} placeholder="Session token..."
+                  style={{ flex: 1, padding: "5px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-primary)", fontSize: 11, fontFamily: mono, outline: "none" }} />
+                <button onClick={handleManualSave} disabled={!token.trim()}
+                  style={{ padding: "4px 10px", background: token.trim() ? "var(--accent)" : "var(--bg-input)", border: "none", borderRadius: 4, color: token.trim() ? "white" : "var(--text-disabled)", fontSize: 9, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 // ── Service Connect Card ────────────────────────────────────────────────────
 function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect, health }) {
@@ -1131,7 +1230,7 @@ function ConnectedServicesSection({ settings, onConnect, onDisconnect }) {
           {showAddService ? "Cancel" : "+ Add"}
         </button>
       </div>
-      <div style={hint}>Connect to third-party services for authenticated feed access. Service health is checked when settings are opened.</div>
+      <div style={hint}>Connect to third-party services for authenticated source access. Service health is checked when settings are opened.</div>
 
       {/* Add service form */}
       {showAddService && (
@@ -1673,7 +1772,7 @@ function SettingsPanel({ onClose }) {
 
         {/* Refresh Interval */}
         <div>
-          <label style={label}>FEED REFRESH INTERVAL (MINUTES)</label>
+          <label style={label}>SOURCE REFRESH INTERVAL (MINUTES)</label>
           <input type="number" min="5" max="1440" value={form.refreshInterval} onChange={e => setForm(f => ({ ...f, refreshInterval: e.target.value }))} style={{ ...inp, width: 120 }} />
         </div>
 
@@ -1806,6 +1905,7 @@ export default function App() {
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [selectedOrgs, setSelectedOrgs] = useState([]);
   const [orgCounts, setOrgCounts] = useState([]); // [{ label, count }]
+  const [selectedFeedIds, setSelectedFeedIds] = useState([]);
   const [page, setPage] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
   const PAGE_SIZE = 25;
@@ -1828,6 +1928,7 @@ export default function App() {
           unread: criticalOnly ? undefined : true,
           critical: criticalOnly || undefined,
           orgs: selectedOrgs.length > 0 ? selectedOrgs.join(",") : undefined,
+          feedIds: selectedFeedIds.length > 0 ? selectedFeedIds.join(",") : undefined,
           limit: PAGE_SIZE, offset: page * PAGE_SIZE,
         }),
         api.getFeeds(),
@@ -1844,12 +1945,12 @@ export default function App() {
       console.error("Failed to load data:", err);
     }
     setLoading(false);
-  }, [category, minRelevance, search, criticalOnly, selectedOrgs, page]);
+  }, [category, minRelevance, search, criticalOnly, selectedOrgs, selectedFeedIds, page]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   // Reset to page 0 when filters change
-  useEffect(() => { setPage(0); }, [category, minRelevance, search, criticalOnly, selectedOrgs]);
+  useEffect(() => { setPage(0); }, [category, minRelevance, search, criticalOnly, selectedOrgs, selectedFeedIds]);
 
   useEffect(() => {
     const interval = setInterval(loadData, 5 * 60 * 1000);
@@ -1867,7 +1968,7 @@ export default function App() {
     const abort = new AbortController();
     refreshAbortRef.current = abort;
     setRefreshing(true);
-    setRefreshStatus({ stage: "Fetching feeds…", pct: 15 });
+    setRefreshStatus({ stage: "Fetching sources…", pct: 15 });
     try {
       const fetchResult = await api.refreshAll({ signal: abort.signal });
       const newCount = fetchResult?.totalNew || 0;
@@ -1953,7 +2054,7 @@ export default function App() {
     return (
       <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, background: "var(--bg-base)" }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: "linear-gradient(135deg, #4F8EF7, #8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontFamily: mono, color: "white", fontWeight: 700 }}>Δ</div>
-        <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 13 }}>Loading feeds...</div>
+        <div style={{ color: "var(--text-muted)", fontFamily: mono, fontSize: 13 }}>Loading sources...</div>
       </div>
     );
   }
@@ -1967,7 +2068,7 @@ export default function App() {
           <div>
             <div style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: mono, letterSpacing: "-0.02em" }}>AI INTELLIGENCE HUB</div>
             <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>
-              {feeds.filter(f => f.active).length} feeds · {stats.unread || 0} unread
+              {feeds.filter(f => f.active).length} sources · {stats.unread || 0} unread
               {(stats.critical || 0) > 0 && <>{" · "}<a href="#" onClick={e => { e.preventDefault(); setCriticalOnly(c => !c); }} style={{
                 color: criticalOnly ? "white" : "#EF4444", textDecoration: "none", fontWeight: 600,
                 background: criticalOnly ? "#EF4444" : "transparent",
@@ -1981,7 +2082,7 @@ export default function App() {
         <input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
           style={{ padding: "7px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, flex: 1, minWidth: 120, fontFamily: sans, outline: "none" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-          <button onClick={handleRefresh} disabled={refreshing} title="Refresh all feeds and score new items"
+          <button onClick={handleRefresh} disabled={refreshing} title="Refresh all sources and score new items"
             style={{ padding: "7px 14px", background: refreshing ? "var(--accent)" : "var(--accent-bg)", border: "none", borderRadius: 8, color: refreshing ? "white" : "var(--accent)", cursor: refreshing ? "default" : "pointer", fontSize: 13, fontFamily: mono, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, opacity: refreshing ? 0.8 : 1 }}>
             <span style={{ display: "inline-block", animation: refreshing ? "spin 1s linear infinite" : "none", fontSize: 16 }}>↻</span> Refresh
           </button>
@@ -2083,6 +2184,40 @@ export default function App() {
             </div>
           </>)}
 
+          {/* Sources filter */}
+          {(() => {
+            const activeFeeds = feeds.filter(f => f.active && (f.item_count > 0 || f.live_items > 0))
+              .sort((a, b) => (b.live_items || b.item_count || 0) - (a.live_items || a.item_count || 0));
+            if (activeFeeds.length === 0) return null;
+            return (<>
+              <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", fontWeight: 600 }}>SOURCES</div>
+                {selectedFeedIds.length > 0 && (
+                  <button onClick={() => setSelectedFeedIds([])} style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 9, fontFamily: mono, cursor: "pointer", padding: 0 }}>clear</button>
+                )}
+              </div>
+              <div style={{ maxHeight: 180, overflow: "auto", marginTop: 6 }}>
+                {activeFeeds.map(f => {
+                  const selected = selectedFeedIds.includes(f.id);
+                  const count = f.live_items || f.item_count || 0;
+                  return (
+                    <button key={f.id} onClick={() => setSelectedFeedIds(prev =>
+                      selected ? prev.filter(id => id !== f.id) : [...prev, f.id]
+                    )} style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                      padding: "3px 8px", marginBottom: 1, borderRadius: 4, border: "none",
+                      background: selected ? "var(--accent-bg)" : "transparent",
+                      cursor: "pointer", textAlign: "left",
+                    }}>
+                      <span style={{ color: selected ? "var(--accent)" : "var(--text-secondary)", fontSize: 11, fontFamily: sans, fontWeight: selected ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                      <span style={{ fontSize: 9, color: "var(--text-faint)", fontFamily: mono, flexShrink: 0, marginLeft: 4 }}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>);
+          })()}
+
           <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>THEME</div>
           <ThemeToggle mode={themeMode} setMode={setThemeMode} />
         </aside>
@@ -2091,7 +2226,7 @@ export default function App() {
         <main style={{ flex: 1, padding: "20px 28px", maxWidth: 880 }}>
           <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "var(--text-primary)", fontSize: 13, fontFamily: mono, fontWeight: 500 }}>
-              {criticalOnly ? "CRITICAL ITEMS" : category === "all" ? "ALL FEEDS" : CATEGORIES[category]?.label.toUpperCase()}
+              {criticalOnly ? "CRITICAL ITEMS" : category === "all" ? "ALL SOURCES" : CATEGORIES[category]?.label.toUpperCase()}
               <span style={{ color: "var(--text-faint)", marginLeft: 8 }}>({totalItems})</span>
             </span>
             <div style={{ display: "flex", gap: 6 }}>
@@ -2100,6 +2235,12 @@ export default function App() {
                   padding: "4px 10px", background: "var(--accent-bg)", border: "1px solid var(--accent)",
                   borderRadius: 5, color: "var(--accent)", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600,
                 }}>{selectedOrgs.length} org{selectedOrgs.length > 1 ? "s" : ""} ✕</button>
+              )}
+              {selectedFeedIds.length > 0 && (
+                <button onClick={() => setSelectedFeedIds([])} style={{
+                  padding: "4px 10px", background: "var(--accent-bg)", border: "1px solid var(--accent)",
+                  borderRadius: 5, color: "var(--accent)", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600,
+                }}>{selectedFeedIds.length} source{selectedFeedIds.length > 1 ? "s" : ""} ✕</button>
               )}
               {criticalOnly && (
                 <button onClick={() => setCriticalOnly(false)} style={{
@@ -2174,7 +2315,7 @@ export default function App() {
                       <button onClick={e => handleSave(e, item)} style={{ padding: "5px 12px", background: item.saved ? "var(--accent-bg)" : "transparent", border: `1px solid ${item.saved ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, color: item.saved ? "var(--accent)" : "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
                         {item.saved ? "★ Saved" : "☆ Save"}
                       </button>
-                      <button onClick={e => handleMarkRead(e, item)} title="Mark read and remove from feed" style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+                      <button onClick={e => handleMarkRead(e, item)} title="Mark read and dismiss" style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
                         ✓ Read
                       </button>
                       <button onClick={e => handleDismiss(e, item)} style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-faint)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>

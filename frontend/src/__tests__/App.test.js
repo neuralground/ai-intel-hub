@@ -68,7 +68,7 @@ describe('App', () => {
     api.getFeeds.mockReturnValue(new Promise(() => {}));
     api.getStats.mockReturnValue(new Promise(() => {}));
     render(React.createElement(App));
-    expect(screen.getByText('Loading feeds...')).toBeInTheDocument();
+    expect(screen.getByText('Loading sources...')).toBeInTheDocument();
   });
 
   it('renders the app header with "AI INTELLIGENCE HUB" text', async () => {
@@ -86,7 +86,7 @@ describe('App', () => {
     api.getStats.mockResolvedValue({ totalItems: 10, unread: 5, critical: 0, saved: 2, byCategory: [] });
     render(React.createElement(App));
     await waitFor(() => {
-      expect(screen.getByText(/2 feeds/)).toBeInTheDocument();
+      expect(screen.getByText(/2 sources/)).toBeInTheDocument();
       expect(screen.getByText(/5 unread/)).toBeInTheDocument();
     });
   });

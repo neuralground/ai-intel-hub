@@ -4,7 +4,7 @@
 
 This document describes the architecture, design decisions, data flows, and planned improvements for the AI Intelligence Hub. It is intended as the primary onboarding document for any developer or AI coding agent (e.g. Claude Code) working on this codebase.
 
-The AI Intelligence Hub is a personalized feed aggregation and analysis platform for a senior technology executive at a GSIB (Global Systemically Important Bank). It consolidates AI-related content from RSS feeds, Substacks, arXiv, AI lab blogs, and tracked X/Twitter accounts into a single dashboard. An LLM layer (Claude via Anthropic API) provides relevance scoring, executive briefings, and feed health analysis personalized to the user's specific role and focus areas.
+The AI Intelligence Hub is a personalized feed aggregation and analysis platform for a senior technology executive at a GSIB (Global Systemically Important Bank). It consolidates AI-related content from RSS feeds, Substacks, arXiv, AI lab blogs, and tracked X/Twitter accounts into a single dashboard. An LLM layer (Claude via Anthropic API) provides relevance scoring, daily summaries, and feed health analysis personalized to the user's specific role and focus areas.
 
 ---
 
@@ -262,7 +262,7 @@ POST /api/analyze { mode: "briefing", category: "research" }
     → check analysis cache (30 min TTL)
     → if miss: fetch top 15 items by relevance
     → construct prompt for selected mode:
-        "briefing" → Critical Developments / Strategic Signals / Action Items
+        "briefing" → Daily Summary: Critical Developments / Strategic Signals / Action Items
         "risks"    → Regulatory / Technology / Vendor / Operational risks
         "gaps"     → Coverage gaps / Perspective bias / Suggested additions
         "what-so-what-now-what" → What changed / So what / Now what
@@ -424,7 +424,7 @@ Organized by priority and effort. Items marked `[MVP]` are the most impactful ne
 **Complexity:** Medium.
 
 ### T8: Multi-model support
-**What:** Allow configuring different models for scoring vs. analysis (e.g., Haiku for high-volume scoring, Opus for executive briefings). Add model selection to `.env` or make it per-task configurable.
+**What:** Allow configuring different models for scoring vs. analysis (e.g., Haiku for high-volume scoring, Opus for daily summaries). Add model selection to `.env` or make it per-task configurable.
 **Where:** `backend/src/scorer.js` — parameterize the MODEL constant.
 **Complexity:** Low.
 

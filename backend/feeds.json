@@ -130,14 +130,16 @@
     "name": "Stratechery (Ben Thompson)",
     "url": "https://stratechery.com/feed/",
     "type": "rss",
-    "category": "industry"
+    "category": "industry",
+    "paywall": true
   },
   {
     "id": "semianalysis",
     "name": "SemiAnalysis",
     "url": "https://newsletter.semianalysis.com/feed",
     "type": "rss",
-    "category": "industry"
+    "category": "industry",
+    "paywall": true
   },
   {
     "id": "thetransc",
@@ -462,7 +464,8 @@
     "name": "The Information",
     "url": "https://www.theinformation.com/feed",
     "type": "rss",
-    "category": "news"
+    "category": "news",
+    "paywall": true
   },
   {
     "id": "venturebeat-ai",
@@ -472,9 +475,9 @@
     "category": "news"
   },
   {
-    "id": "reuters-tech",
-    "name": "Reuters Technology",
-    "url": "https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best&best-sectors=tech",
+    "id": "zdnet-ai",
+    "name": "ZDNet AI",
+    "url": "https://www.zdnet.com/topic/artificial-intelligence/rss.xml",
     "type": "rss",
     "category": "news"
   },
@@ -502,14 +505,14 @@
   {
     "id": "therundown-ai",
     "name": "The Rundown AI",
-    "url": "https://www.therundown.ai/feed",
+    "url": "https://www.therundownai.com/feed",
     "type": "rss",
     "category": "news"
   },
   {
-    "id": "superhuman-ai",
-    "name": "Superhuman AI Newsletter",
-    "url": "https://www.superhuman.ai/feed",
+    "id": "algorithmic-bridge",
+    "name": "The Algorithmic Bridge",
+    "url": "https://www.thealgorithmicbridge.com/feed",
     "type": "rss",
     "category": "news"
   }

@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Trigger an OAuth or cookie-capture flow for a third-party service.
   // Returns a promise that resolves with { ok, token?, error? }.
   connectService: (serviceId) => ipcRenderer.invoke("connect-service", serviceId),
+  connectFeed: (opts) => ipcRenderer.invoke("connect-feed", opts),
 });

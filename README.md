@@ -1,6 +1,6 @@
 # AI Intelligence Hub
 
-A personalized AI intelligence feed aggregator and analysis platform. Consolidates content from RSS feeds, Substacks, arXiv, AI lab blogs, and tracked X accounts into a single dashboard with LLM-powered relevance scoring, executive briefings, and feed health monitoring.
+A personalized AI intelligence feed aggregator and analysis platform. Consolidates content from RSS feeds, Substacks, arXiv, AI lab blogs, and tracked X accounts into a single dashboard with LLM-powered relevance scoring, daily summaries, and feed health monitoring.
 
 For a detailed walkthrough of every feature, see the [User Guide](USER_GUIDE.md).
 
@@ -223,7 +223,7 @@ Configure via `backend/.env` (client-server) or as environment variables (Docker
 | `GEMINI_API_KEY` | For Gemini | — | Google Gemini API key |
 | `OLLAMA_BASE_URL` | For Ollama | `http://localhost:11434` | Ollama server endpoint |
 
-The app works without an API key, but LLM-powered features (relevance scoring, executive briefings, feed health analysis) will be disabled. Feeds will still fetch and display with a default relevance of 0.5.
+The app works without an API key, but LLM-powered features (relevance scoring, daily summaries, feed health analysis) will be disabled. Feeds will still fetch and display with a default relevance of 0.5.
 
 ### Desktop App Settings
 
@@ -264,7 +264,7 @@ GPU infrastructure economics, quantum computing applications in
 financial services, verified banking DSL design.
 ```
 
-This context is injected into every LLM prompt — for relevance scoring, executive briefings, risk analysis, and feed health suggestions. A vague context produces vague scoring; a specific context produces actionable intelligence.
+This context is injected into every LLM prompt — for relevance scoring, daily summaries, risk analysis, and feed health suggestions. A vague context produces vague scoring; a specific context produces actionable intelligence.
 
 ---
 
