@@ -191,6 +191,14 @@ describe('App', () => {
     });
   });
 
+  it('recency slider exists in sidebar with default "All time" label', async () => {
+    render(React.createElement(App));
+    await waitFor(() => {
+      expect(screen.getByText('RECENCY')).toBeInTheDocument();
+    });
+    expect(screen.getByText('All time')).toBeInTheDocument();
+  });
+
   it('clicking refresh triggers api calls', async () => {
     render(React.createElement(App));
     await waitFor(() => {

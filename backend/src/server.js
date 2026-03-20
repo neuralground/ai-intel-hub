@@ -177,12 +177,14 @@ app.delete("/api/feeds/:id", (req, res) => {
 
 // ── Items ───────────────────────────────────────────────────────────────────
 app.get("/api/items", (req, res) => {
-  const { category, minRelevance, limit, offset, saved, unread, search, critical, orgs, feedIds } = req.query;
+  const { category, minRelevance, maxAgeDays, limit, offset, saved, unread, search, critical, orgs, feedIds } = req.query;
   const orgsList = orgs ? orgs.split(",").filter(Boolean) : undefined;
   const feedIdsList = feedIds ? feedIds.split(",").filter(Boolean) : undefined;
+  const ageDays = maxAgeDays ? parseInt(maxAgeDays) : 0;
   const items = getItems({
     category,
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
+    maxAgeDays: ageDays,
     limit: limit ? parseInt(limit) : 100,
     offset: offset ? parseInt(offset) : 0,
     saved: saved === "true",
@@ -195,6 +197,7 @@ app.get("/api/items", (req, res) => {
   const count = getItemCount({
     category,
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
+    maxAgeDays: ageDays,
     unread: unread === "true",
     critical: critical === "true",
     orgs: orgsList,

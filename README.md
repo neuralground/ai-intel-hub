@@ -1,6 +1,6 @@
 # AI Intelligence Hub
 
-A personalized AI intelligence feed aggregator and analysis platform. Consolidates content from RSS feeds, Substacks, arXiv, AI lab blogs, and tracked X accounts into a single dashboard with LLM-powered relevance scoring, daily summaries, and feed health monitoring.
+A personalized AI intelligence source aggregator and analysis platform. Consolidates content from RSS sources, Substacks, arXiv, AI lab blogs, and tracked X accounts into a single dashboard with LLM-powered relevance scoring, daily summaries, and source health monitoring.
 
 For a detailed walkthrough of every feature, see the [User Guide](USER_GUIDE.md).
 
@@ -33,12 +33,12 @@ Download the latest release for your platform:
 | Windows | `AI Intelligence Hub Setup x.x.x.exe` | NSIS installer with options |
 | Windows (portable) | `AI Intelligence Hub x.x.x.exe` | No install needed, runs directly |
 
-Open the DMG or run the installer. The app launches immediately with ~50 pre-configured AI feeds.
+Open the DMG or run the installer. The app launches immediately with ~50 pre-configured AI sources.
 
 ### First Launch
 
 1. Open the app
-2. Feeds begin loading automatically
+2. Sources begin loading automatically
 3. Open **Settings** (gear icon in the header bar, or Cmd+, on macOS) to configure:
    - **Anthropic API key** — required for relevance scoring and analysis
    - **Your Role** — describe who you are so the LLM can score items for your needs
@@ -223,7 +223,7 @@ Configure via `backend/.env` (client-server) or as environment variables (Docker
 | `GEMINI_API_KEY` | For Gemini | — | Google Gemini API key |
 | `OLLAMA_BASE_URL` | For Ollama | `http://localhost:11434` | Ollama server endpoint |
 
-The app works without an API key, but LLM-powered features (relevance scoring, daily summaries, feed health analysis) will be disabled. Feeds will still fetch and display with a default relevance of 0.5.
+The app works without an API key, but LLM-powered features (relevance scoring, daily summaries, source health analysis) will be disabled. Sources will still fetch and display with a default relevance of 0.5.
 
 ### Desktop App Settings
 
@@ -272,10 +272,10 @@ This context is injected into every LLM prompt — for relevance scoring, daily 
 
 Regardless of which mode you choose, the app does the same thing on startup:
 
-1. **Loads ~50 default feeds** across 6 categories (research, engineering, industry, policy, labs, news) including arXiv, Anthropic/OpenAI/DeepMind blogs, key Substacks, and industry publications
-2. **Fetches all RSS feeds** immediately (takes 10-30 seconds depending on network)
+1. **Loads ~50 default sources** across 6 categories (research, engineering, industry, policy, labs, news) including arXiv, Anthropic/OpenAI/DeepMind blogs, key Substacks, and industry publications
+2. **Fetches all RSS sources** immediately (takes 10-30 seconds depending on network)
 3. **Scores items via the configured LLM** if an API key is set (batches of 15, takes 1-2 minutes for initial scoring). The LLM provider is configurable -- Anthropic (default), OpenAI, Google Gemini, or Ollama for local models. See [Settings](USER_GUIDE.md#settings) in the User Guide.
-4. **Starts the refresh scheduler** — feeds are re-fetched and new items scored every 30 minutes (configurable)
+4. **Starts the refresh scheduler** — sources are re-fetched and new items scored every 30 minutes (configurable)
 5. **Runs daily cleanup** at 3 AM, removing items older than 30 days (saved items are preserved)
 
 ---
@@ -332,7 +332,7 @@ All endpoints are available in every mode (client-server, Docker, and desktop). 
 ### Items
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/items?category=&minRelevance=&search=&limit=&offset=&saved=&orgs=` | Filtered item list (use `orgs` to filter by organization affiliation) |
+| `GET` | `/api/items?category=&minRelevance=&search=&limit=&offset=&saved=&orgs=&maxAgeDays=` | Filtered item list (use `orgs` to filter by organization affiliation, `maxAgeDays` to limit by recency) |
 | `POST` | `/api/items/:id/read` | Mark as read |
 | `POST` | `/api/items/:id/save` | Toggle saved `{saved: true\|false}` |
 | `POST` | `/api/items/:id/dismiss` | Soft-delete from feed |
@@ -432,9 +432,9 @@ For convenience, common operations are available via `make`:
 
 ## Troubleshooting
 
-### Feeds not loading
+### Sources not loading
 
-- Check internet connectivity — the app requires network access to fetch RSS feeds
+- Check internet connectivity — the app requires network access to fetch RSS sources
 - Look at the Sources panel for per-feed error messages (red indicators)
 - Check the terminal/console for `[Fetcher]` error messages
 

@@ -8,9 +8,9 @@ This guide walks through every feature of the AI Intelligence Hub desktop applic
 
 When you first open AI Intelligence Hub, the app begins working immediately:
 
-1. Approximately 50 pre-configured feeds start loading across six categories: AI Research, Engineering and Practice, Industry and Capital, Policy and Governance, AI Labs, and AI News and Announcements.
-2. Feed items appear in the main list within 10-30 seconds as each feed is fetched.
-3. If no LLM API key is configured, items display with a default relevance of 50%. Scoring, briefings, and feed health analysis require an LLM provider to be set up.
+1. Approximately 50 pre-configured sources start loading across six categories: AI Research, Engineering and Practice, Industry and Capital, Policy and Governance, AI Labs, and AI News and Announcements.
+2. Items appear in the main list within 10-30 seconds as each source is fetched.
+3. If no LLM API key is configured, items display with a default relevance of 50%. Scoring, briefings, and source health analysis require an LLM provider to be set up.
 
 To configure your LLM provider and personalize scoring, open **Settings** by clicking the gear icon in the header bar (or pressing Cmd+, on macOS). See the [Settings](#settings) section for full details.
 
@@ -25,9 +25,9 @@ The dashboard is divided into three main areas: the header bar, the sidebar, and
 The header bar runs across the top of the window and contains:
 
 - **App name** on the left.
-- **Stats counters** showing the total number of feeds, unread items, and critical items. The critical count is clickable (see [Critical Items](#critical-items)).
+- **Stats counters** showing the total number of sources, unread items, and critical items. The critical count is clickable (see [Critical Items](#critical-items)).
 - **Search field** for filtering items by keyword. Searches match against titles, summaries, authors, and tags.
-- **Toolbar buttons** on the right: Refresh, Analysis (briefing panel), Sources (feed management), Saved items, and Settings (gear icon).
+- **Toolbar buttons** on the right: Refresh, Analysis (briefing panel), Sources (source management), Saved items, and Settings (gear icon).
 
 ### Sidebar
 
@@ -35,12 +35,16 @@ The sidebar sits on the left side and provides:
 
 - **Category filters** -- buttons for each of the six feed categories (including AI News and Announcements). Click one to filter the item list to that category. Click it again (or click "All") to clear the filter.
 - **Relevance slider** -- drag to set the minimum relevance threshold. Items scoring below this threshold are hidden. This is useful for cutting through noise when you only want high-signal content.
-- **Organizations filter** -- a scrollable list of organizations with item counts, positioned between the relevance slider and theme toggle. Select one or more organizations to filter the item list to items affiliated with those orgs. Multi-select is supported: click additional orgs to add them to the filter. A clear button at the top resets the organization filter. Each entry shows the org name as a text badge and the number of items affiliated with that org.
+- **Recency slider** -- filter items by age. Stops at: All time (default), Last 24h, Last 3d, Last 7d, Last 14d, and Last 30d. Drag to restrict the item list to content published within the selected window.
+- **Organizations filter** -- a scrollable list of organizations ranked by a composite score (freshness 40%, average relevance 30%, log-scaled count 30%), with item counts. Select one or more organizations to filter the item list to items affiliated with those orgs. Multi-select is supported: click additional orgs to add them to the filter. A clear button at the top resets the organization filter.
+- **Sources filter** -- a scrollable multi-select list of active sources with item counts, ranked by the same composite score as organizations. Select one or more sources to show only items from those sources. This is useful for focusing on specific publications or newsletters.
 - **Theme toggle** -- switch between System, Light, and Dark appearance modes.
+
+All sidebar filters (relevance, recency, organizations, and sources) are applied instantly on the client side with no network delay. The server is only contacted for coarse filters like category, search, and critical item toggling.
 
 ### Item List
 
-The main area of the dashboard displays feed items as a vertical list of cards. Each card shows:
+The main area of the dashboard displays items as a vertical list of cards. Each card shows:
 
 - **Title** -- the headline of the article, paper, or post.
 - **Category badge** -- color-coded label indicating the feed category (e.g., "AI Research" in blue, "Policy & Governance" in red).

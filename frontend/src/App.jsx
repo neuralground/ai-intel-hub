@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Markdown from "react-markdown";
 import { api } from "./api.js";
 import { useTheme } from "./useTheme.js";
@@ -1894,21 +1894,43 @@ function SavedItemsPanel({ onClose }) {
 // ── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
-  const [items, setItems] = useState([]);
+  const [allItems, setAllItems] = useState([]); // full set from server
   const [feeds, setFeeds] = useState([]);
   const feedNameMap = Object.fromEntries(feeds.map(f => [f.id, f.name]));
   const feedName = (id) => feedNameMap[id] || id;
   const [stats, setStats] = useState({});
   const [category, setCategory] = useState("all");
   const [minRelevance, setMinRelevance] = useState(0);
+  const [maxAgeDays, setMaxAgeDays] = useState(0); // 0 = no limit
   const [search, setSearch] = useState("");
   const [criticalOnly, setCriticalOnly] = useState(false);
   const [selectedOrgs, setSelectedOrgs] = useState([]);
   const [orgCounts, setOrgCounts] = useState([]); // [{ label, count }]
   const [selectedFeedIds, setSelectedFeedIds] = useState([]);
   const [page, setPage] = useState(0);
-  const [totalItems, setTotalItems] = useState(0);
   const PAGE_SIZE = 25;
+
+  // Client-side filtering: relevance, recency, orgs, sources applied locally
+  const filteredItems = useMemo(() => {
+    let r = allItems;
+    if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
+    if (maxAgeDays > 0) {
+      const cutoff = new Date(Date.now() - maxAgeDays * 86400000).toISOString();
+      r = r.filter(i => i.published > cutoff);
+    }
+    if (selectedOrgs.length > 0) {
+      const orgSet = new Set(selectedOrgs);
+      r = r.filter(i => (i.affiliations || []).some(a => orgSet.has(a)));
+    }
+    if (selectedFeedIds.length > 0) {
+      const feedSet = new Set(selectedFeedIds);
+      r = r.filter(i => feedSet.has(i.feed_id));
+    }
+    return r;
+  }, [allItems, minRelevance, maxAgeDays, selectedOrgs, selectedFeedIds]);
+
+  const totalItems = filteredItems.length;
+  const items = filteredItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const [expandedItem, setExpandedItem] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showSources, setShowSources] = useState(false);
@@ -1920,23 +1942,23 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
 
+  // Fetch from server: only category, search, critical (coarse filters).
+  // Relevance, recency, orgs, sources, pagination applied client-side.
   const loadData = useCallback(async () => {
     try {
       const [itemsRes, feedsRes, statsRes, affRes] = await Promise.all([
         api.getItems({
-          category: category !== "all" ? category : undefined, minRelevance, search,
+          category: category !== "all" ? category : undefined,
+          search: search || undefined,
           unread: criticalOnly ? undefined : true,
           critical: criticalOnly || undefined,
-          orgs: selectedOrgs.length > 0 ? selectedOrgs.join(",") : undefined,
-          feedIds: selectedFeedIds.length > 0 ? selectedFeedIds.join(",") : undefined,
-          limit: PAGE_SIZE, offset: page * PAGE_SIZE,
+          limit: 500,
         }),
         api.getFeeds(),
         api.getStats(),
         api.getOrgAffiliations(),
       ]);
-      setItems(itemsRes.items);
-      setTotalItems(itemsRes.total);
+      setAllItems(itemsRes.items);
       setFeeds(feedsRes);
       setStats(statsRes);
       setOrgCounts(affRes);
@@ -1945,12 +1967,12 @@ export default function App() {
       console.error("Failed to load data:", err);
     }
     setLoading(false);
-  }, [category, minRelevance, search, criticalOnly, selectedOrgs, selectedFeedIds, page]);
+  }, [category, search, criticalOnly]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Reset to page 0 when filters change
-  useEffect(() => { setPage(0); }, [category, minRelevance, search, criticalOnly, selectedOrgs, selectedFeedIds]);
+  // Reset to page 0 when any filter changes
+  useEffect(() => { setPage(0); }, [category, minRelevance, maxAgeDays, search, criticalOnly, selectedOrgs, selectedFeedIds]);
 
   useEffect(() => {
     const interval = setInterval(loadData, 5 * 60 * 1000);
@@ -2156,6 +2178,16 @@ export default function App() {
             <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono, textAlign: "center" }}>≥ {(minRelevance * 100).toFixed(0)}%</div>
           </div>
 
+          <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>RECENCY</div>
+          <div style={{ padding: "0 8px" }}>
+            <input type="range" min="0" max="6" step="1" value={[0, 1, 3, 7, 14, 30, 0].indexOf(maxAgeDays) >= 0 ? [0, 1, 3, 7, 14, 30, 0].indexOf(maxAgeDays) : 0}
+              onChange={e => setMaxAgeDays([0, 1, 3, 7, 14, 30][parseInt(e.target.value)] || 0)}
+              style={{ width: "100%", accentColor: "var(--accent)" }} />
+            <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono, textAlign: "center" }}>
+              {maxAgeDays === 0 ? "All time" : maxAgeDays === 1 ? "Last 24h" : `Last ${maxAgeDays}d`}
+            </div>
+          </div>
+
           {/* Organizations filter */}
           {orgCounts.length > 0 && (<>
             <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -2186,8 +2218,17 @@ export default function App() {
 
           {/* Sources filter */}
           {(() => {
+            const now = Date.now();
+            const sourceScore = (f) => {
+              const count = f.live_items || f.item_count || 0;
+              const avgRel = f.computed_avg_relevance || f.avg_relevance || 0;
+              const latestTs = f.latest_item ? new Date(f.latest_item).getTime() : 0;
+              const ageHours = latestTs ? (now - latestTs) / 3600000 : 999;
+              const freshness = 1 / (1 + Math.pow(ageHours / 168, 2)); // midpoint 7d
+              return freshness * 0.4 + avgRel * 0.3 + Math.min(1, Math.log10(count + 1) / 2) * 0.3;
+            };
             const activeFeeds = feeds.filter(f => f.active && (f.item_count > 0 || f.live_items > 0))
-              .sort((a, b) => (b.live_items || b.item_count || 0) - (a.live_items || a.item_count || 0));
+              .sort((a, b) => sourceScore(b) - sourceScore(a));
             if (activeFeeds.length === 0) return null;
             return (<>
               <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>

@@ -108,19 +108,31 @@ export function upsertItem(item) {
 }
 
 export function getDistinctAffiliations() {
-  const counts = {};
+  const now = Date.now();
+  const orgs = {};
   for (const item of store.items) {
     if (item.dismissed) continue;
     for (const a of (item.affiliations || [])) {
-      counts[a] = (counts[a] || 0) + 1;
+      if (!orgs[a]) orgs[a] = { count: 0, totalRelevance: 0, latestTs: 0 };
+      orgs[a].count++;
+      orgs[a].totalRelevance += item.relevance || 0;
+      const ts = new Date(item.published).getTime();
+      if (ts > orgs[a].latestTs) orgs[a].latestTs = ts;
     }
   }
-  return Object.entries(counts)
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count);
+  return Object.entries(orgs)
+    .map(([label, o]) => {
+      const avgRel = o.count > 0 ? o.totalRelevance / o.count : 0;
+      const ageHours = (now - o.latestTs) / 3600000;
+      const freshness = 1 / (1 + Math.pow(ageHours / 168, 2)); // midpoint 7d
+      // Composite: freshness (40%) + avg relevance (30%) + log count (30%)
+      const score = freshness * 0.4 + avgRel * 0.3 + Math.min(1, Math.log10(o.count + 1) / 2) * 0.3;
+      return { label, count: o.count, score };
+    })
+    .sort((a, b) => b.score - a.score);
 }
 
-export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, saved, unread, search, critical, orgs, feedIds }) {
+export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, saved, unread, search, critical, orgs, feedIds, maxAgeDays }) {
   let r = store.items.filter(i => !i.dismissed);
   if (critical) r = r.filter(i => isCritical(i));
   if (orgs && orgs.length > 0) {
@@ -130,6 +142,10 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   if (feedIds && feedIds.length > 0) {
     const feedSet = new Set(feedIds);
     r = r.filter(i => feedSet.has(i.feed_id));
+  }
+  if (maxAgeDays > 0) {
+    const cutoff = new Date(Date.now() - maxAgeDays * 86400000).toISOString();
+    r = r.filter(i => i.published > cutoff);
   }
   if (category && category !== "all") r = r.filter(i => i.category === category);
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
@@ -207,11 +223,12 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   return r.slice(offset, offset + limit);
 }
 
-export function getItemCount({ category, minRelevance = 0, unread, search, critical, orgs, feedIds }) {
+export function getItemCount({ category, minRelevance = 0, unread, search, critical, orgs, feedIds, maxAgeDays }) {
   let r = store.items.filter(i => !i.dismissed);
   if (critical) r = r.filter(i => isCritical(i));
   if (orgs && orgs.length > 0) { const orgSet = new Set(orgs); r = r.filter(i => (i.affiliations || []).some(a => orgSet.has(a))); }
   if (feedIds && feedIds.length > 0) { const feedSet = new Set(feedIds); r = r.filter(i => feedSet.has(i.feed_id)); }
+  if (maxAgeDays > 0) { const cutoff = new Date(Date.now() - maxAgeDays * 86400000).toISOString(); r = r.filter(i => i.published > cutoff); }
   if (category && category !== "all") r = r.filter(i => i.category === category);
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
   if (unread) r = r.filter(i => !i.read);
