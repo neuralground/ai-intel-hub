@@ -171,4 +171,63 @@ describe('api', () => {
       }));
     });
   });
+
+  describe('getOrgAffiliations', () => {
+    it('calls GET /api/orgs/affiliations', async () => {
+      const affiliations = ['OpenAI', 'Google'];
+      mockOk(affiliations);
+      const result = await api.getOrgAffiliations();
+      expect(result).toEqual(affiliations);
+      expect(mockFetch).toHaveBeenCalledWith('/api/orgs/affiliations', expect.objectContaining({
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      }));
+    });
+  });
+
+  describe('addOrg', () => {
+    it('calls POST /api/orgs with correct body', async () => {
+      const org = { id: 'test-org', label: 'Test Org', type: 'lab', aliases: ['TO'] };
+      mockOk({ added: true });
+      const result = await api.addOrg(org);
+      expect(result).toEqual({ added: true });
+      expect(mockFetch).toHaveBeenCalledWith('/api/orgs', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(org),
+      }));
+    });
+  });
+
+  describe('removeOrg', () => {
+    it('calls DELETE /api/orgs/:id', async () => {
+      mockOk({ removed: true });
+      const result = await api.removeOrg('test-id');
+      expect(result).toEqual({ removed: true });
+      expect(mockFetch).toHaveBeenCalledWith('/api/orgs/test-id', expect.objectContaining({
+        method: 'DELETE',
+      }));
+    });
+  });
+
+  describe('cleanupItems', () => {
+    it('calls POST /api/admin/cleanup with days', async () => {
+      mockOk({ deleted: 10 });
+      const result = await api.cleanupItems(7);
+      expect(result).toEqual({ deleted: 10 });
+      expect(mockFetch).toHaveBeenCalledWith('/api/admin/cleanup', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ days: 7 }),
+      }));
+    });
+  });
+
+  describe('rescoreAll', () => {
+    it('calls POST /api/admin/rescore', async () => {
+      mockOk({ rescored: 50 });
+      const result = await api.rescoreAll();
+      expect(result).toEqual({ rescored: 50 });
+      expect(mockFetch).toHaveBeenCalledWith('/api/admin/rescore', expect.objectContaining({
+        method: 'POST',
+      }));
+    });
+  });
 });

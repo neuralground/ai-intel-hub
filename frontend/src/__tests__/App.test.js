@@ -41,6 +41,11 @@ vi.mock('../api.js', () => ({
     acceptSuggestion: vi.fn().mockResolvedValue({}),
     dismissSuggestion: vi.fn().mockResolvedValue({}),
     refreshFeed: vi.fn().mockResolvedValue({}),
+    getOrgAffiliations: vi.fn().mockResolvedValue([]),
+    addOrg: vi.fn().mockResolvedValue({ added: true }),
+    removeOrg: vi.fn().mockResolvedValue({ removed: true }),
+    cleanupItems: vi.fn().mockResolvedValue({ removed: 0 }),
+    rescoreAll: vi.fn().mockResolvedValue({ reset: 0, scored: 0 }),
   },
 }));
 

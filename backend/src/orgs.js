@@ -1,8 +1,15 @@
 // ── Recognized organizations for affiliation tagging ────────────────────────
 // Each org has an id, display label, type, and optional aliases the LLM or
 // regex can match against.  This list is also served to the frontend via API.
+// User-added orgs are merged at runtime from settings.json.
 
-const ORGS = [
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const BUILTIN_ORGS = [
   // AI labs & big tech
   { id: "google", label: "Google", type: "company", aliases: ["Google DeepMind", "DeepMind", "Google Brain", "Google Research"] },
   { id: "openai", label: "OpenAI", type: "lab", aliases: [] },
@@ -60,26 +67,72 @@ const FEED_ORG_MAP = {
   "dario-amodei-anthropic-ceo": "anthropic",
 };
 
+// ── User-added orgs persistence ─────────────────────────────────────────────
+
+function getSettingsFile() {
+  const dataDir = process.env.DATA_DIR || path.join(__dirname, "..", "data");
+  return path.join(path.dirname(dataDir), "settings.json");
+}
+
+function loadUserOrgs() {
+  try {
+    const s = JSON.parse(fs.readFileSync(getSettingsFile(), "utf-8"));
+    return s.USER_ORGS || [];
+  } catch { return []; }
+}
+
+function saveUserOrgs(orgs) {
+  const file = getSettingsFile();
+  let s = {};
+  try { s = JSON.parse(fs.readFileSync(file, "utf-8")); } catch { /* */ }
+  s.USER_ORGS = orgs;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(s, null, 2));
+}
+
+// Merged list: builtins + user-added
 export function getOrgs() {
-  return ORGS;
+  const userOrgs = loadUserOrgs();
+  const builtinIds = new Set(BUILTIN_ORGS.map(o => o.id));
+  return [...BUILTIN_ORGS, ...userOrgs.filter(o => !builtinIds.has(o.id))];
 }
 
 export function getOrgById(id) {
-  return ORGS.find(o => o.id === id);
+  return getOrgs().find(o => o.id === id);
 }
 
 export function getOrgLabels() {
-  return ORGS.map(o => o.label);
+  return getOrgs().map(o => o.label);
+}
+
+export function addOrg(org) {
+  const all = getOrgs();
+  if (all.find(o => o.id === org.id)) return { added: false, reason: "already exists" };
+  const userOrgs = loadUserOrgs();
+  userOrgs.push(org);
+  saveUserOrgs(userOrgs);
+  return { added: true };
+}
+
+export function removeOrg(id) {
+  // Can only remove user-added orgs
+  if (BUILTIN_ORGS.find(o => o.id === id)) return { removed: false, reason: "builtin" };
+  const userOrgs = loadUserOrgs();
+  const before = userOrgs.length;
+  const filtered = userOrgs.filter(o => o.id !== id);
+  if (filtered.length === before) return { removed: false, reason: "not found" };
+  saveUserOrgs(filtered);
+  return { removed: true };
 }
 
 // Get the org label for a feed (if it's a direct-source feed)
 export function getFeedOrg(feedId) {
   const orgId = FEED_ORG_MAP[feedId];
   if (!orgId) return null;
-  return ORGS.find(o => o.id === orgId) || null;
+  return getOrgs().find(o => o.id === orgId) || null;
 }
 
 // Build the list of all org names/aliases for LLM prompt
 export function getOrgNamesForPrompt() {
-  return ORGS.map(o => o.label + (o.aliases.length ? ` (also: ${o.aliases.join(", ")})` : "")).join("\n");
+  return getOrgs().map(o => o.label + (o.aliases.length ? ` (also: ${o.aliases.join(", ")})` : "")).join("\n");
 }

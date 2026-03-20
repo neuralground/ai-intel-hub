@@ -70,7 +70,7 @@ The app runs in two modes from the same codebase:
 
 ### Organization Registry (orgs.js)
 
-A shared registry of 34 recognized organizations (AI labs, big tech companies, and top universities). The registry:
+A shared registry of recognized organizations (AI labs, big tech companies, and top universities). Users can add custom organizations via the Settings panel or `POST /api/orgs`; user-added orgs are persisted in `settings.json` under the `USER_ORGS` key. The registry:
 
 - Maps feed IDs to their owning organization (e.g., `openai-blog` maps to OpenAI) via `FEED_ORG_MAP`.
 - Provides org names and aliases for LLM prompts, so the scorer can detect affiliations in research papers and blog posts.
@@ -187,7 +187,7 @@ ai-intel-hub/
   name: "arXiv cs.AI",         // Display name
   url: "https://...",          // Feed URL (RSS endpoint, X profile URL, etc.)
   type: "rss",                 // "rss" | "x-account" | "scrape" | "linkedin"
-  category: "research",        // "research" | "engineering" | "industry" | "policy" | "labs"
+  category: "research",        // "research" | "engineering" | "industry" | "policy" | "labs" | "news"
   active: 1,                   // 1 = enabled, 0 = disabled
   last_fetched: "ISO8601",     // Last successful fetch timestamp
   last_error: "string|null",   // Last error message
@@ -229,6 +229,7 @@ ai-intel-hub/
 | `industry` | Industry & Capital | VCs, market analysis, startup news, enterprise adoption |
 | `policy` | Policy & Governance | Regulation, safety, ethics, geopolitics |
 | `labs` | AI Labs | Official blogs from OpenAI, Anthropic, DeepMind, Meta AI, etc. |
+| `news` | AI News & Announcements | AI-focused news from major tech publications, newsletters, and curated X accounts |
 
 ---
 
@@ -331,7 +332,7 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 ### Items
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/items?category=&minRelevance=&search=&limit=&offset=&saved=` | Filtered item list |
+| GET | `/api/items?category=&minRelevance=&search=&limit=&offset=&saved=&orgs=` | Filtered item list (use `orgs` to filter by organization) |
 | POST | `/api/items/:id/read` | Mark as read |
 | POST | `/api/items/:id/save` | Toggle saved `{saved: bool}` |
 | POST | `/api/items/:id/dismiss` | Soft-delete from feed |
@@ -356,7 +357,16 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/orgs` | List recognized organizations for affiliation tagging |
+| POST | `/api/orgs` | Add a custom organization `{id, label, type, aliases}` |
+| DELETE | `/api/orgs/:id` | Remove a user-added organization |
+| GET | `/api/orgs/affiliations` | Distinct affiliations with item counts |
 | GET | `/api/ollama/models` | List locally available Ollama models |
+
+### Admin
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/admin/cleanup` | Clear old items `{days}` (0 = all non-saved) |
+| POST | `/api/admin/rescore` | Reset scores and re-run LLM scoring |
 
 ---
 

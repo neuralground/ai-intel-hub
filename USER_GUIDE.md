@@ -8,7 +8,7 @@ This guide walks through every feature of the AI Intelligence Hub desktop applic
 
 When you first open AI Intelligence Hub, the app begins working immediately:
 
-1. Approximately 50 pre-configured feeds start loading across five categories: AI Research, Engineering and Practice, Industry and Capital, Policy and Governance, and AI Labs.
+1. Approximately 50 pre-configured feeds start loading across six categories: AI Research, Engineering and Practice, Industry and Capital, Policy and Governance, AI Labs, and AI News and Announcements.
 2. Feed items appear in the main list within 10-30 seconds as each feed is fetched.
 3. If no LLM API key is configured, items display with a default relevance of 50%. Scoring, briefings, and feed health analysis require an LLM provider to be set up.
 
@@ -33,8 +33,9 @@ The header bar runs across the top of the window and contains:
 
 The sidebar sits on the left side and provides:
 
-- **Category filters** -- buttons for each of the five feed categories. Click one to filter the item list to that category. Click it again (or click "All") to clear the filter.
+- **Category filters** -- buttons for each of the six feed categories (including AI News and Announcements). Click one to filter the item list to that category. Click it again (or click "All") to clear the filter.
 - **Relevance slider** -- drag to set the minimum relevance threshold. Items scoring below this threshold are hidden. This is useful for cutting through noise when you only want high-signal content.
+- **Organizations filter** -- a scrollable list of organizations with item counts, positioned between the relevance slider and theme toggle. Select one or more organizations to filter the item list to items affiliated with those orgs. Multi-select is supported: click additional orgs to add them to the filter. A clear button at the top resets the organization filter. Each entry shows the org logo (when available) and the number of items affiliated with that org.
 - **Theme toggle** -- switch between System, Light, and Dark appearance modes.
 
 ### Item List
@@ -140,6 +141,8 @@ The app uses a three-layer approach to detect which organizations are associated
 When affiliations are detected, small badges with organization logos appear on the item card. Organizations with recognized logos (Google, OpenAI, Anthropic, Meta, Microsoft, Apple, Amazon, NVIDIA, Stanford, MIT, CMU, Berkeley) display their logo. Other organizations display their name in text.
 
 ### Recognized Organizations
+
+Items can also be filtered by organization using the Organizations filter in the sidebar (see [Sidebar](#sidebar)).
 
 The app recognizes 34 organizations across three categories:
 
@@ -269,7 +272,11 @@ To switch providers:
 
 ### Recognized Organizations
 
-View the list of organizations the system recognizes for affiliation tagging. This list is shared between the scorer, fetcher, and database modules.
+View and manage the list of organizations the system recognizes for affiliation tagging. This list is shared between the scorer, fetcher, and database modules.
+
+To add a custom organization, click "Add Organization" and provide an ID, label, type, and optional aliases. After adding an org, the app prompts you to rescan existing items so that previously ingested content is re-evaluated for affiliations with the new org. User-added organizations are persisted in `settings.json` under the `USER_ORGS` key.
+
+To remove a user-added organization, click the delete button next to it. Built-in organizations cannot be removed.
 
 ### Feed Refresh Interval
 
@@ -286,6 +293,13 @@ Connect third-party platforms to pull in additional content:
 - **YouTube** -- monitor specific channels.
 
 In the desktop app, clicking "Sign in" opens a browser login window for each service. No API keys or developer accounts are needed -- the app uses browser-based authentication.
+
+### Advanced
+
+The Advanced section at the bottom of Settings provides maintenance operations:
+
+- **Clear old items** -- remove items older than a specified number of days. Set to 0 to clear all non-saved items. A confirmation dialog appears before the operation proceeds.
+- **Re-score all items** -- reset all relevance scores and re-run LLM scoring from scratch. This is useful after changing your relevance context or scoring instructions. A confirmation dialog warns that this operation may take several minutes and consume API credits.
 
 ### Theme
 

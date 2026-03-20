@@ -54,8 +54,15 @@ export const api = {
   acceptSuggestion: (id) => request(`/suggestions/${id}/accept`, { method: "POST" }),
   dismissSuggestion: (id) => request(`/suggestions/${id}/dismiss`, { method: "POST" }),
 
+  // Admin
+  cleanupItems: (days) => request("/admin/cleanup", { method: "POST", body: JSON.stringify({ days }) }),
+  rescoreAll: () => request("/admin/rescore", { method: "POST" }),
+
   // Organizations
   getOrgs: () => request("/orgs"),
+  getOrgAffiliations: () => request("/orgs/affiliations"),
+  addOrg: (org) => request("/orgs", { method: "POST", body: JSON.stringify(org) }),
+  removeOrg: (id) => request(`/orgs/${id}`, { method: "DELETE" }),
 
   // Settings
   getSettings: () => request("/settings"),

@@ -9,11 +9,11 @@ import {
   getAllFeeds, getActiveFeeds, upsertFeed, deleteFeed,
   getItems, getItemCount, markItem, setItemFeedback, deleteItem, getStats,
   getFeedHealth, getSuggestions, getSuggestionById, addSuggestion, updateSuggestionStatus,
-  cleanupOldItems,
+  cleanupOldItems, getDistinctAffiliations,
 } from "./db.js";
 import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
 import { scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
-import { getOrgs } from "./orgs.js";
+import { getOrgs, addOrg, removeOrg } from "./orgs.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 import { detectSourceType } from "./source-types.js";
 
@@ -64,6 +64,22 @@ app.get("/api/source-types", (req, res) => {
 // ── Organizations ───────────────────────────────────────────────────────────
 app.get("/api/orgs", (req, res) => {
   res.json(getOrgs());
+});
+
+app.get("/api/orgs/affiliations", (req, res) => {
+  res.json(getDistinctAffiliations());
+});
+
+app.post("/api/orgs", (req, res) => {
+  const { id, label, type, aliases } = req.body;
+  if (!id || !label) return res.status(400).json({ error: "id and label are required" });
+  const result = addOrg({ id, label, type: type || "other", aliases: aliases || [] });
+  res.json(result);
+});
+
+app.delete("/api/orgs/:id", (req, res) => {
+  const result = removeOrg(req.params.id);
+  res.json(result);
 });
 
 // ── Feeds ───────────────────────────────────────────────────────────────────
@@ -161,7 +177,8 @@ app.delete("/api/feeds/:id", (req, res) => {
 
 // ── Items ───────────────────────────────────────────────────────────────────
 app.get("/api/items", (req, res) => {
-  const { category, minRelevance, limit, offset, saved, unread, search, critical } = req.query;
+  const { category, minRelevance, limit, offset, saved, unread, search, critical, orgs } = req.query;
+  const orgsList = orgs ? orgs.split(",").filter(Boolean) : undefined;
   const items = getItems({
     category,
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
@@ -170,6 +187,7 @@ app.get("/api/items", (req, res) => {
     saved: saved === "true",
     unread: unread === "true",
     critical: critical === "true",
+    orgs: orgsList,
     search,
   });
   const count = getItemCount({
@@ -177,6 +195,7 @@ app.get("/api/items", (req, res) => {
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
     unread: unread === "true",
     critical: critical === "true",
+    orgs: orgsList,
     search,
   });
   res.json({ items, total: count });
@@ -318,6 +337,28 @@ app.post("/api/score", async (req, res) => {
   try {
     const result = await scoreUnscoredItems();
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Admin / Debug ───────────────────────────────────────────────────────────
+app.post("/api/admin/cleanup", (req, res) => {
+  const { days } = req.body; // days=0 means clear all non-saved items
+  const d = parseInt(days);
+  if (isNaN(d) || d < 0) return res.status(400).json({ error: "Invalid days value" });
+  const result = cleanupOldItems(d === 0 ? 0 : d);
+  res.json({ ok: true, removed: result.changes });
+});
+
+app.post("/api/admin/rescore", async (req, res) => {
+  try {
+    // Reset scored_at on all items so they get re-scored
+    const { resetScores } = await import("./db.js");
+    const reset = resetScores();
+    // Now score them
+    const result = await scoreUnscoredItems();
+    res.json({ ok: true, reset: reset.count, scored: result.scored });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

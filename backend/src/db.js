@@ -107,9 +107,26 @@ export function upsertItem(item) {
   return { changes: idx >= 0 ? 0 : 1 };
 }
 
-export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, saved, unread, search, critical }) {
+export function getDistinctAffiliations() {
+  const counts = {};
+  for (const item of store.items) {
+    if (item.dismissed) continue;
+    for (const a of (item.affiliations || [])) {
+      counts[a] = (counts[a] || 0) + 1;
+    }
+  }
+  return Object.entries(counts)
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, saved, unread, search, critical, orgs }) {
   let r = store.items.filter(i => !i.dismissed);
   if (critical) r = r.filter(i => isCritical(i));
+  if (orgs && orgs.length > 0) {
+    const orgSet = new Set(orgs);
+    r = r.filter(i => (i.affiliations || []).some(a => orgSet.has(a)));
+  }
   if (category && category !== "all") r = r.filter(i => i.category === category);
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
   if (saved) r = r.filter(i => i.saved);
@@ -186,9 +203,10 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   return r.slice(offset, offset + limit);
 }
 
-export function getItemCount({ category, minRelevance = 0, unread, search, critical }) {
+export function getItemCount({ category, minRelevance = 0, unread, search, critical, orgs }) {
   let r = store.items.filter(i => !i.dismissed);
   if (critical) r = r.filter(i => isCritical(i));
+  if (orgs && orgs.length > 0) { const orgSet = new Set(orgs); r = r.filter(i => (i.affiliations || []).some(a => orgSet.has(a))); }
   if (category && category !== "all") r = r.filter(i => i.category === category);
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
   if (unread) r = r.filter(i => !i.read);
@@ -331,10 +349,31 @@ export function getCachedAnalysis(mode, category, maxAgeMinutes = 60) {
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
 }
 
+export function resetScores() {
+  let count = 0;
+  for (const item of store.items) {
+    if (item.scored_at) {
+      item.relevance = 0.5;
+      item.relevance_reason = null;
+      item.scored_at = null;
+      item.affiliations = [];
+      item.tags = [];
+      count++;
+    }
+  }
+  if (count > 0) save();
+  return { count };
+}
+
 export function cleanupOldItems(daysToKeep = 7) {
-  const cutoff = new Date(Date.now() - daysToKeep * 86400000).toISOString();
   const before = store.items.length;
-  store.items = store.items.filter(i => i.saved || i.published > cutoff);
+  if (daysToKeep === 0) {
+    // Clear all non-saved items
+    store.items = store.items.filter(i => i.saved);
+  } else {
+    const cutoff = new Date(Date.now() - daysToKeep * 86400000).toISOString();
+    store.items = store.items.filter(i => i.saved || i.published > cutoff);
+  }
   if (before !== store.items.length) save();
   return { changes: before - store.items.length };
 }

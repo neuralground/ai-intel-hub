@@ -406,6 +406,11 @@ const CURATED_FEEDS = [
   { name: "Ada Lovelace Institute", url: "https://www.adalovelaceinstitute.org/feed/", category: "policy" },
   { name: "Partnership on AI", url: "https://partnershiponai.org/feed/", category: "policy" },
   { name: "Wired AI", url: "https://www.wired.com/feed/tag/ai/latest/rss", category: "policy" },
+  { name: "The Verge AI", url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", category: "news" },
+  { name: "TechCrunch AI", url: "https://techcrunch.com/category/artificial-intelligence/feed/", category: "news" },
+  { name: "Ars Technica AI", url: "https://feeds.arstechnica.com/arstechnica/technology-lab", category: "news" },
+  { name: "VentureBeat AI", url: "https://venturebeat.com/category/ai/feed/", category: "news" },
+  { name: "The Rundown AI", url: "https://www.therundown.ai/feed", category: "news" },
 ];
 
 export async function analyzeFeedHealth(feedHealth, onProgress = () => {}) {
@@ -476,7 +481,7 @@ export async function analyzeFeedHealth(feedHealth, onProgress = () => {}) {
   const systemPrompt = `You are a feed curation advisor for: ${context}
 Analyze feed health and suggest new RSS feeds. Respond in JSON format only.`;
 
-  const categories = "research, engineering, industry, policy, labs";
+  const categories = "research, engineering, news, industry, policy, labs";
   const userMessage = `Analyze these feeds and suggest improvements. Respond with JSON:
 {
   "stale": [{"id": "feed-id", "reason": "why it appears stale"}],

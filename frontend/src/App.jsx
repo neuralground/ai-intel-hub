@@ -6,6 +6,7 @@ import { useTheme } from "./useTheme.js";
 const CATEGORIES = {
   research: { label: "AI Research", color: "#4F8EF7", icon: "🔬" },
   engineering: { label: "Engineering & Practice", color: "#10B981", icon: "⚙️" },
+  news: { label: "AI News & Announcements", color: "#06B6D4", icon: "📰" },
   industry: { label: "Industry & Capital", color: "#F59E0B", icon: "💰" },
   policy: { label: "Policy & Governance", color: "#EF4444", icon: "🏛️" },
   labs: { label: "AI Labs", color: "#8B5CF6", icon: "🏢" },
@@ -1059,6 +1060,273 @@ const LLM_PROVIDERS = [
   },
 ];
 
+// ── Organizations Manager (Settings sub-panel) ─────────────────────────────
+function OrgManager({ orgs, onUpdate }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [newType, setNewType] = useState("company");
+  const [newAliases, setNewAliases] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+  const [confirmRescan, setConfirmRescan] = useState(false); // after adding, offer rescan
+  const [lastAdded, setLastAdded] = useState(null);
+
+  const label = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
+  const hint = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
+  const inp = { padding: "6px 10px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-primary)", fontSize: 12, fontFamily: sans, outline: "none", width: "100%" };
+  const btnBase = { padding: "5px 12px", borderRadius: 5, fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600 };
+
+  const handleAdd = async () => {
+    if (!newLabel.trim()) return;
+    setAdding(true);
+    const id = newLabel.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const aliases = newAliases.split(",").map(a => a.trim()).filter(Boolean);
+    try {
+      const r = await api.addOrg({ id, label: newLabel.trim(), type: newType, aliases });
+      if (r.added) {
+        setLastAdded(newLabel.trim());
+        setNewLabel(""); setNewAliases(""); setShowAdd(false);
+        setConfirmRescan(true);
+        onUpdate();
+      }
+    } catch (e) { console.error(e); }
+    setAdding(false);
+  };
+
+  const handleRemove = async (orgId) => {
+    try {
+      await api.removeOrg(orgId);
+      onUpdate();
+    } catch (e) { console.error(e); }
+  };
+
+  const handleRescan = async () => {
+    setConfirmRescan(false);
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const r = await api.rescoreAll();
+      setScanResult(`Scanned ${r.reset} items, updated ${r.scored} scores`);
+    } catch (e) { setScanResult("Scan failed: " + e.message); }
+    setScanning(false);
+  };
+
+  // Separate builtins from user-added (builtins have known IDs from the 34 defaults)
+  const BUILTIN_IDS = new Set(["google","openai","anthropic","meta","microsoft","apple","amazon","nvidia","xai","mistral","cohere","huggingface","baidu","tencent","alibaba","bytedance","samsung","intel","ibm","salesforce","stanford","mit","cmu","berkeley","harvard","princeton","oxford","cambridge","eth","tsinghua","peking","toronto","mila","ai2"]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600 }}>Organizations</div>
+        <button onClick={() => setShowAdd(!showAdd)} style={{ ...btnBase, background: "none", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+          {showAdd ? "Cancel" : "+ Add"}
+        </button>
+      </div>
+      <div style={hint}>The AI identifies author affiliations with these organizations during scoring. Items from affiliated authors show org badges and count toward the sidebar filter.</div>
+
+      {/* Add new org form */}
+      {showAdd && (
+        <div style={{ marginTop: 8, padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: 6, border: "1px solid var(--border)" }}>
+          <div style={{ marginBottom: 6 }}>
+            <label style={label}>NAME</label>
+            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="e.g. Stability AI" style={inp} />
+          </div>
+          <div style={{ marginBottom: 6 }}>
+            <label style={label}>TYPE</label>
+            <select value={newType} onChange={e => setNewType(e.target.value)} style={{ ...inp, cursor: "pointer", appearance: "auto" }}>
+              <option value="company">Company</option>
+              <option value="lab">AI Lab</option>
+              <option value="university">University</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={label}>ALIASES (comma-separated, optional)</label>
+            <input value={newAliases} onChange={e => setNewAliases(e.target.value)} placeholder="e.g. Stability, SDXL Team" style={inp} />
+          </div>
+          <button onClick={handleAdd} disabled={adding || !newLabel.trim()}
+            style={{ ...btnBase, background: newLabel.trim() ? "var(--accent)" : "var(--bg-input)", border: "none", color: newLabel.trim() ? "white" : "var(--text-disabled)" }}>
+            {adding ? "Adding..." : "Add Organization"}
+          </button>
+        </div>
+      )}
+
+      {/* Rescan prompt after adding */}
+      {confirmRescan && (
+        <div style={{ marginTop: 8, padding: "8px 12px", background: "var(--accent-bg-subtle, rgba(79,142,247,0.06))", border: "1px solid var(--accent)", borderRadius: 6 }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>
+            Added <strong>{lastAdded}</strong>. Scan existing items for this affiliation?
+          </div>
+          <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>This will re-score all items so the LLM can detect affiliations with the new organization. This may take several minutes.</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={handleRescan} style={{ ...btnBase, background: "var(--accent)", border: "none", color: "white" }}>Scan now</button>
+            <button onClick={() => setConfirmRescan(false)} style={{ ...btnBase, background: "none", border: "1px solid var(--border)", color: "var(--text-muted)" }}>Skip</button>
+          </div>
+        </div>
+      )}
+
+      {scanning && (
+        <div style={{ marginTop: 6, color: "var(--accent)", fontSize: 10, fontFamily: mono }}>Scanning items... this may take a few minutes</div>
+      )}
+      {scanResult && (
+        <div style={{ marginTop: 6, color: "#10B981", fontSize: 10, fontFamily: mono }}>{scanResult}</div>
+      )}
+
+      {/* Org list */}
+      <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {orgs.map(o => (
+          <span key={o.id} style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "3px 8px", borderRadius: 4,
+            background: "var(--bg-input)", border: "1px solid var(--border)",
+            fontSize: 10, fontFamily: mono, color: "var(--text-secondary)",
+          }}>
+            {ORG_LOGOS[o.label] && <span style={{ display: "inline-flex" }}>{ORG_LOGOS[o.label](11)}</span>}
+            {o.label}
+            <span style={{ color: "var(--text-faint)", fontSize: 8 }}>{o.type}</span>
+            {!BUILTIN_IDS.has(o.id) && (
+              <button onClick={() => handleRemove(o.id)} title="Remove" style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 10, padding: 0, marginLeft: 2, lineHeight: 1 }}>✕</button>
+            )}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Advanced Settings Sub-panel ─────────────────────────────────────────────
+function AdvancedSection() {
+  const [expanded, setExpanded] = useState(false);
+  const [cleanupDays, setCleanupDays] = useState("7");
+  const [confirm, setConfirm] = useState(null); // 'cleanup' | 'cleanup-all' | 'rescore'
+  const [running, setRunning] = useState(null); // 'cleanup' | 'rescore'
+  const [result, setResult] = useState(null); // { message, type: 'ok'|'error' }
+
+  const label = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
+  const hint = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
+  const btnBase = { padding: "6px 14px", borderRadius: 6, fontSize: 11, fontFamily: mono, cursor: "pointer", fontWeight: 600 };
+
+  const handleCleanup = async (days) => {
+    setConfirm(null);
+    setRunning("cleanup");
+    setResult(null);
+    try {
+      const r = await api.cleanupItems(days);
+      setResult({ message: `Removed ${r.removed} item${r.removed !== 1 ? "s" : ""}`, type: "ok" });
+    } catch (e) {
+      setResult({ message: e.message, type: "error" });
+    }
+    setRunning(null);
+  };
+
+  const handleRescore = async () => {
+    setConfirm(null);
+    setRunning("rescore");
+    setResult(null);
+    try {
+      const r = await api.rescoreAll();
+      setResult({ message: `Reset ${r.reset} items, re-scored ${r.scored}`, type: "ok" });
+    } catch (e) {
+      setResult({ message: e.message, type: "error" });
+    }
+    setRunning(null);
+  };
+
+  if (!expanded) {
+    return (
+      <div>
+        <button onClick={() => setExpanded(true)} style={{
+          ...btnBase, background: "none", border: "1px solid var(--border)",
+          color: "var(--text-faint)", display: "flex", alignItems: "center", gap: 6, width: "100%",
+          justifyContent: "center", padding: "8px",
+        }}>
+          Advanced ▾
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600 }}>Advanced</div>
+        <button onClick={() => setExpanded(false)} style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 10, fontFamily: mono }}>▴ collapse</button>
+      </div>
+
+      {/* Cleanup Items */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={label}>CLEAR OLD ITEMS</label>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: mono }}>Older than</span>
+          <input type="number" min="1" max="365" value={cleanupDays}
+            onChange={e => setCleanupDays(e.target.value)}
+            style={{ width: 55, padding: "5px 8px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-primary)", fontSize: 12, fontFamily: mono, textAlign: "center", outline: "none" }} />
+          <span style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: mono }}>days</span>
+          <button onClick={() => setConfirm("cleanup")} disabled={!!running}
+            style={{ ...btnBase, marginLeft: "auto", background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+            {running === "cleanup" ? "Clearing..." : "Clear"}
+          </button>
+        </div>
+        <div style={{ marginTop: 6 }}>
+          <button onClick={() => setConfirm("cleanup-all")} disabled={!!running}
+            style={{ ...btnBase, background: "transparent", border: "1px solid #EF444440", color: "#EF4444", fontSize: 10 }}>
+            Clear all items
+          </button>
+        </div>
+        <div style={hint}>Removes items older than the specified age. Saved items are always preserved.</div>
+      </div>
+
+      {/* Re-score */}
+      <div style={{ marginBottom: 14 }}>
+        <label style={label}>RE-SCORE ALL ITEMS</label>
+        <button onClick={() => setConfirm("rescore")} disabled={!!running}
+          style={{ ...btnBase, background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+          {running === "rescore" ? "Scoring..." : "Re-score all items"}
+        </button>
+        <div style={hint}>Resets all relevance scores and re-runs LLM scoring from scratch. Useful after changing your role, scoring instructions, or LLM provider.</div>
+      </div>
+
+      {/* Result message */}
+      {result && (
+        <div style={{ padding: "6px 10px", borderRadius: 5, fontSize: 11, fontFamily: mono,
+          background: result.type === "ok" ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)",
+          color: result.type === "ok" ? "#10B981" : "#EF4444", marginBottom: 10,
+        }}>{result.message}</div>
+      )}
+
+      {/* Confirmation dialog */}
+      {confirm && (
+        <div style={{
+          padding: "12px 14px", borderRadius: 8, border: "1px solid #EF444440",
+          background: "var(--bg-elevated)", marginBottom: 10,
+        }}>
+          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 6 }}>
+            {confirm === "rescore" ? "Re-score all items?" : confirm === "cleanup-all" ? "Clear ALL items?" : `Clear items older than ${cleanupDays} days?`}
+          </div>
+          <div style={{ color: "var(--text-muted)", fontSize: 11, marginBottom: 10, lineHeight: 1.5 }}>
+            {confirm === "rescore"
+              ? "This will reset all relevance scores, affiliations, and tags, then re-run LLM scoring. This may take several minutes and use API credits."
+              : confirm === "cleanup-all"
+                ? "This will permanently remove all items from the database except saved items. This cannot be undone."
+                : `This will permanently remove all items published more than ${cleanupDays} days ago. Saved items are preserved.`}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => confirm === "rescore" ? handleRescore() : handleCleanup(confirm === "cleanup-all" ? 0 : parseInt(cleanupDays))}
+              style={{ ...btnBase, background: "#EF4444", border: "none", color: "white" }}>
+              {confirm === "rescore" ? "Re-score" : "Clear"}
+            </button>
+            <button onClick={() => setConfirm(null)}
+              style={{ ...btnBase, background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Settings Panel ──────────────────────────────────────────────────────────
 function SettingsPanel({ onClose }) {
   const [settings, setSettings] = useState(null);
@@ -1280,25 +1548,8 @@ function SettingsPanel({ onClose }) {
           <input type="number" min="5" max="1440" value={form.refreshInterval} onChange={e => setForm(f => ({ ...f, refreshInterval: e.target.value }))} style={{ ...inp, width: 120 }} />
         </div>
 
-        {/* Recognized Organizations */}
-        <div>
-          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 6 }}>Recognized Organizations</div>
-          <div style={hint}>These organizations are recognized when the AI identifies author affiliations on papers and articles. Items from affiliated authors appear with org badges.</div>
-          <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {orgs.map(o => (
-              <span key={o.id} style={{
-                display: "inline-flex", alignItems: "center", gap: 4,
-                padding: "3px 8px", borderRadius: 4,
-                background: "var(--bg-input)", border: "1px solid var(--border)",
-                fontSize: 10, fontFamily: mono, color: "var(--text-secondary)",
-              }}>
-                {ORG_LOGOS[o.label] && <span style={{ display: "inline-flex" }}>{ORG_LOGOS[o.label](11)}</span>}
-                {o.label}
-                <span style={{ color: "var(--text-faint)", fontSize: 8 }}>{o.type}</span>
-              </span>
-            ))}
-          </div>
-        </div>
+        {/* Organizations */}
+        <OrgManager orgs={orgs} onUpdate={() => api.getOrgs().then(setOrgs).catch(console.error)} />
 
         {/* Connected Services */}
         <div>
@@ -1317,6 +1568,9 @@ function SettingsPanel({ onClose }) {
             ))}
           </div>
         </div>
+
+        {/* Advanced */}
+        <AdvancedSection />
       </div>
 
       {/* Save bar */}
@@ -1436,6 +1690,8 @@ export default function App() {
   const [minRelevance, setMinRelevance] = useState(0);
   const [search, setSearch] = useState("");
   const [criticalOnly, setCriticalOnly] = useState(false);
+  const [selectedOrgs, setSelectedOrgs] = useState([]);
+  const [orgCounts, setOrgCounts] = useState([]); // [{ label, count }]
   const [page, setPage] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
   const PAGE_SIZE = 25;
@@ -1452,26 +1708,33 @@ export default function App() {
 
   const loadData = useCallback(async () => {
     try {
-      const [itemsRes, feedsRes, statsRes] = await Promise.all([
-        api.getItems({ category: category !== "all" ? category : undefined, minRelevance, search, unread: true, critical: criticalOnly || undefined, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
+      const [itemsRes, feedsRes, statsRes, affRes] = await Promise.all([
+        api.getItems({
+          category: category !== "all" ? category : undefined, minRelevance, search, unread: true,
+          critical: criticalOnly || undefined,
+          orgs: selectedOrgs.length > 0 ? selectedOrgs.join(",") : undefined,
+          limit: PAGE_SIZE, offset: page * PAGE_SIZE,
+        }),
         api.getFeeds(),
         api.getStats(),
+        api.getOrgAffiliations(),
       ]);
       setItems(itemsRes.items);
       setTotalItems(itemsRes.total);
       setFeeds(feedsRes);
       setStats(statsRes);
+      setOrgCounts(affRes);
       setLastRefresh(new Date());
     } catch (err) {
       console.error("Failed to load data:", err);
     }
     setLoading(false);
-  }, [category, minRelevance, search, criticalOnly, page]);
+  }, [category, minRelevance, search, criticalOnly, selectedOrgs, page]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   // Reset to page 0 when filters change
-  useEffect(() => { setPage(0); }, [category, minRelevance, search, criticalOnly]);
+  useEffect(() => { setPage(0); }, [category, minRelevance, search, criticalOnly, selectedOrgs]);
 
   useEffect(() => {
     const interval = setInterval(loadData, 5 * 60 * 1000);
@@ -1677,6 +1940,38 @@ export default function App() {
             <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono, textAlign: "center" }}>≥ {(minRelevance * 100).toFixed(0)}%</div>
           </div>
 
+          {/* Organizations filter */}
+          {orgCounts.length > 0 && (<>
+            <div style={{ marginTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", fontWeight: 600 }}>ORGANIZATIONS</div>
+              {selectedOrgs.length > 0 && (
+                <button onClick={() => setSelectedOrgs([])} style={{ background: "none", border: "none", color: "var(--accent)", fontSize: 9, fontFamily: mono, cursor: "pointer", padding: 0 }}>clear</button>
+              )}
+            </div>
+            <div style={{ maxHeight: 180, overflow: "auto", marginTop: 6 }}>
+              {orgCounts.map(({ label, count }) => {
+                const selected = selectedOrgs.includes(label);
+                const Logo = ORG_LOGOS[label];
+                return (
+                  <button key={label} onClick={() => setSelectedOrgs(prev =>
+                    selected ? prev.filter(o => o !== label) : [...prev, label]
+                  )} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                    padding: "3px 8px", marginBottom: 1, borderRadius: 4, border: "none",
+                    background: selected ? "var(--accent-bg)" : "transparent",
+                    cursor: "pointer", textAlign: "left",
+                  }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: selected ? "var(--accent)" : "var(--text-secondary)", fontSize: 11, fontFamily: sans, fontWeight: selected ? 600 : 400 }}>
+                      {Logo && <span style={{ display: "inline-flex", flexShrink: 0 }}>{Logo(11)}</span>}
+                      {label}
+                    </span>
+                    <span style={{ fontSize: 9, color: "var(--text-faint)", fontFamily: mono }}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>)}
+
           <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>THEME</div>
           <ThemeToggle mode={themeMode} setMode={setThemeMode} />
         </aside>
@@ -1688,12 +1983,20 @@ export default function App() {
               {criticalOnly ? "CRITICAL ITEMS" : category === "all" ? "ALL FEEDS" : CATEGORIES[category]?.label.toUpperCase()}
               <span style={{ color: "var(--text-faint)", marginLeft: 8 }}>({totalItems})</span>
             </span>
-            {criticalOnly && (
-              <button onClick={() => setCriticalOnly(false)} style={{
-                padding: "4px 10px", background: "#EF444415", border: "1px solid #EF444440",
-                borderRadius: 5, color: "#EF4444", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600,
-              }}>✕ Clear filter</button>
-            )}
+            <div style={{ display: "flex", gap: 6 }}>
+              {selectedOrgs.length > 0 && (
+                <button onClick={() => setSelectedOrgs([])} style={{
+                  padding: "4px 10px", background: "var(--accent-bg)", border: "1px solid var(--accent)",
+                  borderRadius: 5, color: "var(--accent)", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600,
+                }}>{selectedOrgs.length} org{selectedOrgs.length > 1 ? "s" : ""} ✕</button>
+              )}
+              {criticalOnly && (
+                <button onClick={() => setCriticalOnly(false)} style={{
+                  padding: "4px 10px", background: "#EF444415", border: "1px solid #EF444440",
+                  borderRadius: 5, color: "#EF4444", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600,
+                }}>✕ Critical</button>
+              )}
+            </div>
           </div>
 
           {items.length === 0 && (

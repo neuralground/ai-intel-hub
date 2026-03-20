@@ -272,7 +272,7 @@ This context is injected into every LLM prompt — for relevance scoring, execut
 
 Regardless of which mode you choose, the app does the same thing on startup:
 
-1. **Loads ~50 default feeds** across 5 categories (research, engineering, industry, policy, labs) including arXiv, Anthropic/OpenAI/DeepMind blogs, key Substacks, and industry publications
+1. **Loads ~50 default feeds** across 6 categories (research, engineering, industry, policy, labs, news) including arXiv, Anthropic/OpenAI/DeepMind blogs, key Substacks, and industry publications
 2. **Fetches all RSS feeds** immediately (takes 10-30 seconds depending on network)
 3. **Scores items via the configured LLM** if an API key is set (batches of 15, takes 1-2 minutes for initial scoring). The LLM provider is configurable -- Anthropic (default), OpenAI, Google Gemini, or Ollama for local models. See [Settings](USER_GUIDE.md#settings) in the User Guide.
 4. **Starts the refresh scheduler** — feeds are re-fetched and new items scored every 30 minutes (configurable)
@@ -332,7 +332,7 @@ All endpoints are available in every mode (client-server, Docker, and desktop). 
 ### Items
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/items?category=&minRelevance=&search=&limit=&offset=&saved=` | Filtered item list |
+| `GET` | `/api/items?category=&minRelevance=&search=&limit=&offset=&saved=&orgs=` | Filtered item list (use `orgs` to filter by organization affiliation) |
 | `POST` | `/api/items/:id/read` | Mark as read |
 | `POST` | `/api/items/:id/save` | Toggle saved `{saved: true\|false}` |
 | `POST` | `/api/items/:id/dismiss` | Soft-delete from feed |
@@ -366,7 +366,16 @@ Analysis modes: `briefing`, `risks`, `gaps`, `what-so-what-now-what`
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/orgs` | List recognized organizations for affiliation tagging |
+| `POST` | `/api/orgs` | Add a custom organization `{id, label, type, aliases}` |
+| `DELETE` | `/api/orgs/:id` | Remove a user-added organization |
+| `GET` | `/api/orgs/affiliations` | Distinct affiliations with item counts |
 | `GET` | `/api/ollama/models` | List locally available Ollama models |
+
+### Admin
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/admin/cleanup` | Clear old items `{days}` (0 = all non-saved) |
+| `POST` | `/api/admin/rescore` | Reset scores and re-run LLM scoring |
 
 ### Settings
 | Method | Path | Description |
@@ -387,6 +396,7 @@ Accepted keys for `POST /api/settings`: `ANTHROPIC_API_KEY`, `RELEVANCE_CONTEXT`
 | Industry & Capital | `industry` | VC analysis, startup news, enterprise adoption |
 | Policy & Governance | `policy` | Regulation, safety, ethics, geopolitics |
 | AI Labs | `labs` | Official blogs from OpenAI, Anthropic, DeepMind, Meta AI, xAI |
+| AI News & Announcements | `news` | AI-focused news from major tech publications, newsletters, and curated X accounts |
 
 Feeds can be added, removed, muted, or reorganized from the Sources panel in the UI, or via the API.
 
