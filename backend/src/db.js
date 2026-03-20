@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import { getFeedOrg } from "./orgs.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "..", "data");
@@ -78,6 +79,7 @@ export function upsertItem(item) {
   const n = {
     id: item.id, feed_id: item.feedId || item.feed_id, title: item.title,
     summary: item.summary || "", url: item.url || "", author: item.author || "",
+    affiliations: item.affiliations || [],
     published: item.published || new Date().toISOString(),
     fetched_at: item.fetched_at || new Date().toISOString(),
     category: item.category || "", relevance: item.relevance ?? 0.5,
@@ -98,14 +100,16 @@ export function upsertItem(item) {
       relevance_reason: ex.relevance_reason || n.relevance_reason,
       scored_at: ex.scored_at || n.scored_at,
       tags: n.tags.length > 0 ? n.tags : ex.tags,
+      affiliations: n.affiliations?.length > 0 ? n.affiliations : (ex.affiliations || []),
     };
   } else { store.items.push(n); }
   save();
   return { changes: idx >= 0 ? 0 : 1 };
 }
 
-export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, saved, unread, search }) {
+export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, saved, unread, search, critical }) {
   let r = store.items.filter(i => !i.dismissed);
+  if (critical) r = r.filter(i => isCritical(i));
   if (category && category !== "all") r = r.filter(i => i.category === category);
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
   if (saved) r = r.filter(i => i.saved);
@@ -182,8 +186,9 @@ export function getItems({ category, minRelevance = 0, limit = 100, offset = 0, 
   return r.slice(offset, offset + limit);
 }
 
-export function getItemCount({ category, minRelevance = 0, unread, search }) {
+export function getItemCount({ category, minRelevance = 0, unread, search, critical }) {
   let r = store.items.filter(i => !i.dismissed);
+  if (critical) r = r.filter(i => isCritical(i));
   if (category && category !== "all") r = r.filter(i => i.category === category);
   if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
   if (unread) r = r.filter(i => !i.read);
@@ -211,6 +216,26 @@ export function deleteItem(itemId) {
   return { changes: before - store.items.length };
 }
 
+function isAuthoritativeFeed(feedId) {
+  // Feed is authoritative if: mapped to an org in orgs.js, or user-marked authoritative
+  if (getFeedOrg(feedId)) return true;
+  const feed = store.feeds.find(f => f.id === feedId);
+  return !!(feed && feed.authoritative);
+}
+
+export function isCritical(item) {
+  // Require scored relevance: either has scored_at, or relevance differs from the 0.5 default
+  const isScored = item.scored_at || item.relevance !== 0.5;
+  if (item.relevance < 0.85 || !isScored) return false;
+  const ageHours = (Date.now() - new Date(item.published).getTime()) / 3600000;
+  if (ageHours > 48) return false;
+  // Authoritative: from a known org feed, user-marked authoritative, or has notable affiliations
+  const authoritative = isAuthoritativeFeed(item.feed_id)
+    || (item.affiliations && item.affiliations.length > 0);
+  // Very high relevance alone qualifies (>= 0.95), otherwise need authority
+  return item.relevance >= 0.95 || (item.relevance >= 0.85 && authoritative);
+}
+
 export function getStats() {
   const active = store.items.filter(i => !i.dismissed);
   const byCat = {};
@@ -221,7 +246,7 @@ export function getStats() {
   }
   return {
     totalItems: active.length, unread: active.filter(i => !i.read).length,
-    critical: active.filter(i => i.relevance >= 0.85).length,
+    critical: active.filter(i => isCritical(i)).length,
     saved: active.filter(i => i.saved).length,
     byCategory: Object.values(byCat).map(c => ({ category: c.category, count: c.count, avg_relevance: c.count > 0 ? c.totalRel / c.count : 0 })),
   };

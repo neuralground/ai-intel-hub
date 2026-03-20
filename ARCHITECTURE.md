@@ -47,8 +47,8 @@ The app runs in two modes from the same codebase:
                          │  │    Extracts tags          │  │
                          │  │    Batch concurrent       │  │
                          │  │                          │  │
-                         │  │  scorer.js ─── Claude    │──┼──→ Anthropic API
-                         │  │    Relevance scoring     │  │    (claude-sonnet-4-20250514)
+                         │  │  scorer.js ─── LLM      │──┼──→ Anthropic / OpenAI /
+                         │  │    Relevance scoring     │  │    Gemini / Ollama
                          │  │    Executive briefings   │  │
                          │  │    Feed health analysis  │  │
                          │  │    Coverage gap detection │  │
@@ -67,6 +67,46 @@ The app runs in two modes from the same codebase:
                          │  └──────────────────────────┘  │
                          └────────────────────────────────┘
 ```
+
+### Organization Registry (orgs.js)
+
+A shared registry of 34 recognized organizations (AI labs, big tech companies, and top universities). The registry:
+
+- Maps feed IDs to their owning organization (e.g., `openai-blog` maps to OpenAI) via `FEED_ORG_MAP`.
+- Provides org names and aliases for LLM prompts, so the scorer can detect affiliations in research papers and blog posts.
+- Is used by the scorer (affiliation detection during scoring), the fetcher (feed-level org tagging), and the db module (storing affiliations on items).
+- Is served to the frontend via `GET /api/orgs` for badge rendering.
+
+### Multi-Provider LLM (scorer.js)
+
+The scoring and analysis engine supports four LLM providers:
+
+- **Anthropic** (default) -- Claude Sonnet, Haiku, Opus.
+- **OpenAI** -- GPT-4o, GPT-4o Mini, GPT-4 Turbo, o3-mini.
+- **Google Gemini** -- Gemini 2.0 Flash, Gemini 2.5 Pro/Flash Preview.
+- **Ollama** -- any locally installed model (models detected automatically via `GET /api/ollama/models`).
+
+The active provider is selected via the `LLM_PROVIDER` setting. The specific model is set via `LLM_MODEL`. All providers are called through a unified interface in `scorer.js`; the rest of the codebase is provider-agnostic.
+
+### Affiliation Detection
+
+Organization affiliations are detected through a three-layer approach:
+
+1. **Feed-level org tags** -- feeds from known organization sources (defined in `FEED_ORG_MAP` in `orgs.js`) automatically tag all their items with the org.
+2. **LLM-based detection** -- during scoring, the LLM receives the list of recognized organizations and identifies any that authored or are affiliated with the content. This is integrated into the scoring prompt so it runs in the same API call as relevance scoring.
+3. **Regex fallback** -- explicit affiliations in author strings (e.g., "University of Toronto", "Google Research") are caught by pattern matching as a fallback.
+
+Detected affiliations are stored as an array of org label strings on each item.
+
+### Critical Items
+
+An item is flagged as critical based on a composite score from three factors:
+
+- **Relevance** -- score >= 0.85.
+- **Freshness** -- published within the last 48 hours.
+- **Authority** -- the item comes from an org feed (per `FEED_ORG_MAP`), the user marked the feed as authoritative, or the item has detected organization affiliations.
+
+The critical item count is displayed in the dashboard header and is clickable to filter the item list.
 
 ---
 
@@ -153,6 +193,7 @@ ai-intel-hub/
   last_error: "string|null",   // Last error message
   item_count: 42,              // Items returned on last fetch
   avg_relevance: 0.72,         // Average relevance of items from this feed
+  authoritative: 0,            // 0/1 — user-designated authoritative source (boosts critical scoring)
   created_at: "ISO8601",
   updated_at: "ISO8601"
 }
@@ -175,7 +216,8 @@ ai-intel-hub/
   tags: ["agents", "MCP"],     // Auto-extracted + LLM-generated tags
   read: 0,                     // 0/1
   saved: 0,                    // 0/1
-  dismissed: 0                 // 0/1 (soft delete)
+  dismissed: 0,                // 0/1 (soft delete)
+  affiliations: ["OpenAI", "Stanford"]  // Array of org label strings (detected by LLM/feed/regex)
 }
 ```
 
@@ -268,6 +310,11 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 | `RELEVANCE_CONTEXT` | Strongly recommended | Generic | Describes the user's role, focus areas, and priorities. Directly controls relevance scoring quality. |
 | `DATA_DIR` | No | `./data/` | Where persistent data (db.json) is stored |
 | `NODE_ENV` | No | development | Set to `production` to serve frontend from Express |
+| `LLM_PROVIDER` | No | anthropic | LLM provider (anthropic, openai, gemini, ollama) |
+| `LLM_MODEL` | No | Provider default | Model to use for scoring and analysis |
+| `OPENAI_API_KEY` | For OpenAI | — | OpenAI API key |
+| `GEMINI_API_KEY` | For Gemini | — | Google Gemini API key |
+| `OLLAMA_BASE_URL` | For Ollama | `http://localhost:11434` | Ollama server endpoint |
 
 ---
 
@@ -294,7 +341,7 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 |--------|------|-------------|
 | POST | `/api/fetch` | Refresh all RSS feeds now |
 | POST | `/api/fetch/:feedId` | Refresh single feed |
-| POST | `/api/score` | Score all unscored items via Claude |
+| POST | `/api/score` | Score all unscored items via configured LLM |
 | POST | `/api/analyze` | Generate analysis `{mode, category?}` |
 
 ### Health & Stats
@@ -304,6 +351,12 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 | GET | `/api/health/feeds` | Per-feed health metrics |
 | POST | `/api/health/analyze` | LLM feed health analysis with suggestions |
 | GET | `/api/stats` | Dashboard statistics |
+
+### Organizations
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/orgs` | List recognized organizations for affiliation tagging |
+| GET | `/api/ollama/models` | List locally available Ollama models |
 
 ---
 

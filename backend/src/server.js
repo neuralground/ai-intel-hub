@@ -13,6 +13,7 @@ import {
 } from "./db.js";
 import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
 import { scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
+import { getOrgs } from "./orgs.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 import { detectSourceType } from "./source-types.js";
 
@@ -58,6 +59,11 @@ app.get("/api/health", (req, res) => {
 // ── Source types (for frontend display) ──────────────────────────────────────
 app.get("/api/source-types", (req, res) => {
   import("./source-types.js").then(m => res.json(m.default));
+});
+
+// ── Organizations ───────────────────────────────────────────────────────────
+app.get("/api/orgs", (req, res) => {
+  res.json(getOrgs());
 });
 
 // ── Feeds ───────────────────────────────────────────────────────────────────
@@ -155,7 +161,7 @@ app.delete("/api/feeds/:id", (req, res) => {
 
 // ── Items ───────────────────────────────────────────────────────────────────
 app.get("/api/items", (req, res) => {
-  const { category, minRelevance, limit, offset, saved, unread, search } = req.query;
+  const { category, minRelevance, limit, offset, saved, unread, search, critical } = req.query;
   const items = getItems({
     category,
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
@@ -163,12 +169,14 @@ app.get("/api/items", (req, res) => {
     offset: offset ? parseInt(offset) : 0,
     saved: saved === "true",
     unread: unread === "true",
+    critical: critical === "true",
     search,
   });
   const count = getItemCount({
     category,
     minRelevance: minRelevance ? parseFloat(minRelevance) : 0,
     unread: unread === "true",
+    critical: critical === "true",
     search,
   });
   res.json({ items, total: count });
@@ -409,7 +417,12 @@ cron.schedule("0 3 * * *", () => {
 // in DATA_DIR's parent if writable).
 
 const SETTINGS_KEYS = [
+  "LLM_PROVIDER",
+  "LLM_MODEL",
   "ANTHROPIC_API_KEY",
+  "OPENAI_API_KEY",
+  "GEMINI_API_KEY",
+  "OLLAMA_BASE_URL",
   "RELEVANCE_CONTEXT",
   "SCORING_INSTRUCTIONS",
   "FEED_REFRESH_INTERVAL",
@@ -442,8 +455,15 @@ function maskKey(key) {
 app.get("/api/settings", (req, res) => {
   const saved = loadSettingsFile();
   res.json({
+    llmProvider: saved.LLM_PROVIDER || process.env.LLM_PROVIDER || "anthropic",
+    llmModel: saved.LLM_MODEL || process.env.LLM_MODEL || "",
     anthropicApiKey: maskKey(saved.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ""),
     hasApiKey: !!(saved.ANTHROPIC_API_KEY || (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here")),
+    openaiApiKey: maskKey(saved.OPENAI_API_KEY || process.env.OPENAI_API_KEY || ""),
+    hasOpenaiKey: !!(saved.OPENAI_API_KEY || process.env.OPENAI_API_KEY),
+    geminiApiKey: maskKey(saved.GEMINI_API_KEY || process.env.GEMINI_API_KEY || ""),
+    hasGeminiKey: !!(saved.GEMINI_API_KEY || process.env.GEMINI_API_KEY),
+    ollamaBaseUrl: saved.OLLAMA_BASE_URL || process.env.OLLAMA_BASE_URL || "http://localhost:11434",
     relevanceContext: saved.RELEVANCE_CONTEXT || process.env.RELEVANCE_CONTEXT || "",
     scoringInstructions: saved.SCORING_INSTRUCTIONS || process.env.SCORING_INSTRUCTIONS || "",
     refreshInterval: saved.FEED_REFRESH_INTERVAL || process.env.FEED_REFRESH_INTERVAL || "30",
@@ -475,6 +495,19 @@ app.post("/api/settings", (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Ollama models endpoint ──────────────────────────────────────────────────
+app.get("/api/ollama/models", async (req, res) => {
+  const base = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+  try {
+    const r = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) throw new Error(`Ollama returned ${r.status}`);
+    const data = await r.json();
+    res.json({ models: (data.models || []).map(m => m.name) });
+  } catch (err) {
+    res.json({ models: [], error: err.message });
   }
 });
 

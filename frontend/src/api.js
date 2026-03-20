@@ -41,11 +41,11 @@ export const api = {
   analyzeFeedHealth: () => request("/health/analyze", { method: "POST" }),
 
   // Fetch/refresh
-  refreshAll: () => request("/fetch", { method: "POST" }),
-  refreshFeed: (id) => request(`/fetch/${id}`, { method: "POST" }),
+  refreshAll: (opts) => request("/fetch", { method: "POST", ...opts }),
+  refreshFeed: (id, opts) => request(`/fetch/${id}`, { method: "POST", ...opts }),
 
   // LLM
-  scoreItems: () => request("/score", { method: "POST" }),
+  scoreItems: (opts) => request("/score", { method: "POST", ...opts }),
   analyze: (mode, category) =>
     request("/analyze", { method: "POST", body: JSON.stringify({ mode, category }) }),
 
@@ -54,7 +54,13 @@ export const api = {
   acceptSuggestion: (id) => request(`/suggestions/${id}/accept`, { method: "POST" }),
   dismissSuggestion: (id) => request(`/suggestions/${id}/dismiss`, { method: "POST" }),
 
+  // Organizations
+  getOrgs: () => request("/orgs"),
+
   // Settings
   getSettings: () => request("/settings"),
   saveSettings: (settings) => request("/settings", { method: "POST", body: JSON.stringify(settings) }),
+
+  // LLM
+  getOllamaModels: () => request("/ollama/models"),
 };

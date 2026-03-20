@@ -2,6 +2,8 @@
 
 A personalized AI intelligence feed aggregator and analysis platform. Consolidates content from RSS feeds, Substacks, arXiv, AI lab blogs, and tracked X accounts into a single dashboard with LLM-powered relevance scoring, executive briefings, and feed health monitoring.
 
+For a detailed walkthrough of every feature, see the [User Guide](USER_GUIDE.md).
+
 ## How to Run
 
 Choose the mode that fits your use case:
@@ -215,6 +217,11 @@ Configure via `backend/.env` (client-server) or as environment variables (Docker
 | `RELEVANCE_CONTEXT` | Recommended | Generic | Your role and focus areas — controls all LLM scoring and analysis |
 | `DATA_DIR` | No | `./data/` | Directory for persistent data (`db.json`) |
 | `NODE_ENV` | No | `development` | Set to `production` to serve frontend from Express |
+| `LLM_PROVIDER` | No | `anthropic` | LLM provider (anthropic, openai, gemini, ollama) |
+| `LLM_MODEL` | No | Provider default | Model to use for scoring and analysis |
+| `OPENAI_API_KEY` | For OpenAI | — | OpenAI API key |
+| `GEMINI_API_KEY` | For Gemini | — | Google Gemini API key |
+| `OLLAMA_BASE_URL` | For Ollama | `http://localhost:11434` | Ollama server endpoint |
 
 The app works without an API key, but LLM-powered features (relevance scoring, executive briefings, feed health analysis) will be disabled. Feeds will still fetch and display with a default relevance of 0.5.
 
@@ -233,6 +240,11 @@ The desktop app stores configuration in `settings.json` (see [Desktop Data and S
 | `LINKEDIN_SESSION` | `LINKEDIN_SESSION` | LinkedIn session (set via browser login) |
 | `THREADS_SESSION` | `THREADS_SESSION` | Threads session (set via browser login) |
 | `YOUTUBE_SESSION` | `YOUTUBE_SESSION` | YouTube session (set via browser login) |
+| `LLM_PROVIDER` | `LLM_PROVIDER` | LLM provider: anthropic, openai, gemini, or ollama |
+| `LLM_MODEL` | `LLM_MODEL` | Model name (provider-specific) |
+| `OPENAI_API_KEY` | `OPENAI_API_KEY` | OpenAI API key |
+| `GEMINI_API_KEY` | `GEMINI_API_KEY` | Google Gemini API key |
+| `OLLAMA_BASE_URL` | `OLLAMA_BASE_URL` | Ollama server URL (default: http://localhost:11434) |
 
 Settings can be updated three ways:
 1. **Settings panel:** click the gear icon in the header (or Cmd+, / Ctrl+,)
@@ -262,7 +274,7 @@ Regardless of which mode you choose, the app does the same thing on startup:
 
 1. **Loads ~50 default feeds** across 5 categories (research, engineering, industry, policy, labs) including arXiv, Anthropic/OpenAI/DeepMind blogs, key Substacks, and industry publications
 2. **Fetches all RSS feeds** immediately (takes 10-30 seconds depending on network)
-3. **Scores items via Claude** if an API key is configured (batches of 15, takes 1-2 minutes for initial scoring)
+3. **Scores items via the configured LLM** if an API key is set (batches of 15, takes 1-2 minutes for initial scoring). The LLM provider is configurable -- Anthropic (default), OpenAI, Google Gemini, or Ollama for local models. See [Settings](USER_GUIDE.md#settings) in the User Guide.
 4. **Starts the refresh scheduler** — feeds are re-fetched and new items scored every 30 minutes (configurable)
 5. **Runs daily cleanup** at 3 AM, removing items older than 30 days (saved items are preserved)
 
@@ -350,13 +362,19 @@ Analysis modes: `briefing`, `risks`, `gaps`, `what-so-what-now-what`
 | `POST` | `/api/suggestions/:id/accept` | Accept a suggestion (creates feed) |
 | `POST` | `/api/suggestions/:id/dismiss` | Dismiss a suggestion |
 
+### Organizations
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/orgs` | List recognized organizations for affiliation tagging |
+| `GET` | `/api/ollama/models` | List locally available Ollama models |
+
 ### Settings
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/settings` | Read current settings (secrets masked) |
 | `POST` | `/api/settings` | Update settings (any combination of keys below) |
 
-Accepted keys for `POST /api/settings`: `ANTHROPIC_API_KEY`, `RELEVANCE_CONTEXT`, `SCORING_INSTRUCTIONS`, `FEED_REFRESH_INTERVAL`, `TWITTER_SESSION`, `SUBSTACK_SESSION`, `LINKEDIN_SESSION`, `THREADS_SESSION`, `YOUTUBE_SESSION`
+Accepted keys for `POST /api/settings`: `ANTHROPIC_API_KEY`, `RELEVANCE_CONTEXT`, `SCORING_INSTRUCTIONS`, `FEED_REFRESH_INTERVAL`, `LLM_PROVIDER`, `LLM_MODEL`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`, `TWITTER_SESSION`, `SUBSTACK_SESSION`, `LINKEDIN_SESSION`, `THREADS_SESSION`, `YOUTUBE_SESSION`
 
 ---
 
@@ -446,6 +464,21 @@ The desktop app uses a random available port, so this only affects client-server
 ### Custom tag patterns
 
 Edit the `tagPatterns` object in `backend/src/fetcher.js` to detect domain-specific topics.
+
+---
+
+## Testing
+
+```bash
+# Backend tests
+cd backend && npm test
+
+# Frontend tests
+cd frontend && npm test
+
+# Run all tests from project root
+npm test
+```
 
 ---
 

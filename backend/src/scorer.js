@@ -1,11 +1,22 @@
 import { getItems, getUnscoredItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds } from "./db.js";
 import { discoverFeedsFromContent, discoverFeedsFromSearch } from "./fetcher.js";
+import { getFeedOrg, getOrgNamesForPrompt, getOrgLabels } from "./orgs.js";
 
-const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-20250514";
+// ── LLM Provider Configuration ──────────────────────────────────────────────
 
-function getApiKey() {
-  return process.env.ANTHROPIC_API_KEY;
+const DEFAULT_MODELS = {
+  anthropic: "claude-sonnet-4-20250514",
+  openai: "gpt-4o",
+  gemini: "gemini-2.0-flash",
+  ollama: "llama3.2",
+};
+
+function getProvider() {
+  return process.env.LLM_PROVIDER || "anthropic";
+}
+
+function getModel() {
+  return process.env.LLM_MODEL || DEFAULT_MODELS[getProvider()] || DEFAULT_MODELS.anthropic;
 }
 
 function getRelevanceContext() {
@@ -19,14 +30,15 @@ function getScoringInstructions() {
   return process.env.SCORING_INSTRUCTIONS || "";
 }
 
-// ── Call Claude API ─────────────────────────────────────────────────────────
-async function callClaude(systemPrompt, userMessage, maxTokens = 1500) {
-  const apiKey = getApiKey();
+// ── Provider-specific API calls ─────────────────────────────────────────────
+
+async function callAnthropic(systemPrompt, userMessage, maxTokens) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === "sk-ant-your-key-here") {
     throw new Error("ANTHROPIC_API_KEY not configured");
   }
 
-  const response = await fetch(ANTHROPIC_API, {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -34,7 +46,7 @@ async function callClaude(systemPrompt, userMessage, maxTokens = 1500) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: getModel(),
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
@@ -43,12 +55,105 @@ async function callClaude(systemPrompt, userMessage, maxTokens = 1500) {
 
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`Claude API error ${response.status}: ${errBody}`);
+    throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
   }
-
   const data = await response.json();
   return data.content?.[0]?.text || "";
 }
+
+async function callOpenAI(systemPrompt, userMessage, maxTokens) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: getModel(),
+      max_tokens: maxTokens,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`OpenAI API error ${response.status}: ${errBody}`);
+  }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+async function callGemini(systemPrompt, userMessage, maxTokens) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+
+  const model = getModel();
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: userMessage }] }],
+        generationConfig: { maxOutputTokens: maxTokens },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errBody}`);
+  }
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+async function callOllama(systemPrompt, userMessage, maxTokens) {
+  const base = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+
+  const response = await fetch(`${base}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: getModel(),
+      stream: false,
+      options: { num_predict: maxTokens },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Ollama API error ${response.status}: ${errBody}`);
+  }
+  const data = await response.json();
+  return data.message?.content || "";
+}
+
+// ── Unified LLM call ────────────────────────────────────────────────────────
+
+const PROVIDERS = { anthropic: callAnthropic, openai: callOpenAI, gemini: callGemini, ollama: callOllama };
+
+async function callLLM(systemPrompt, userMessage, maxTokens = 1500) {
+  const provider = getProvider();
+  const fn = PROVIDERS[provider];
+  if (!fn) throw new Error(`Unknown LLM provider: ${provider}`);
+  console.log(`[LLM] Using ${provider} / ${getModel()}`);
+  return fn(systemPrompt, userMessage, maxTokens);
+}
+
+// Keep backward-compatible alias
+const callClaude = callLLM;
 
 // ── Score a batch of items for relevance ─────────────────────────────────────
 export async function scoreItems(items) {
@@ -56,24 +161,31 @@ export async function scoreItems(items) {
 
   const context = getRelevanceContext();
   const instructions = getScoringInstructions();
+  const validOrgLabels = new Set(getOrgLabels());
   const systemPrompt = `You are a relevance scoring engine for an AI intelligence feed.
 The reader is: ${context}
 ${instructions ? `\nAdditional scoring instructions: ${instructions}\n` : ""}
 Score each item from 0.0 to 1.0 for relevance to this reader. Also provide a brief reason (one sentence) explaining why it matters to them specifically.
 
-Respond ONLY with a JSON array of objects: [{"id": "...", "relevance": 0.85, "reason": "...", "tags": ["tag1", "tag2"]}]
+For each item, also identify any notable affiliations of the authors. If the authors field lists people from major AI labs, tech companies, or top research universities, return the organization names in an "affiliations" array. Use ONLY these recognized org names:
+${getOrgNamesForPrompt()}
+
+Only include affiliations you are confident about based on the authors listed. If no notable affiliations are identifiable, return an empty array. Do NOT guess.
+
+Respond ONLY with a JSON array of objects: [{"id": "...", "relevance": 0.85, "reason": "...", "tags": ["tag1", "tag2"], "affiliations": ["OrgName"]}]
 No other text. Valid JSON only.`;
 
   const itemList = items.map((i) => ({
     id: i.id,
     title: i.title,
     summary: (i.summary || "").slice(0, 200),
-    source: i.feedId,
+    authors: i.author || "",
+    source: i.feedId || i.feed_id,
     category: i.category,
   }));
 
   try {
-    const result = await callClaude(
+    const result = await callLLM(
       systemPrompt,
       `Score these items:\n${JSON.stringify(itemList, null, 2)}`,
       2000
@@ -90,12 +202,20 @@ No other text. Valid JSON only.`;
     for (const item of items) {
       const score = scoreMap.get(item.id);
       if (score) {
+        // Merge LLM-detected affiliations with feed-level org affiliation
+        const feedOrg = getFeedOrg(item.feedId || item.feed_id);
+        const llmAffs = (score.affiliations || []).filter(a => validOrgLabels.has(a));
+        const allAffs = feedOrg
+          ? [feedOrg.label, ...llmAffs.filter(a => a !== feedOrg.label)]
+          : llmAffs;
+
         const updatedItem = {
           ...item,
           relevance: Math.max(0, Math.min(1, score.relevance)),
           relevanceReason: score.reason || null,
           scored_at: new Date().toISOString(),
           tags: [...new Set([...(item.tags || []), ...(score.tags || [])])].slice(0, 10),
+          affiliations: allAffs.slice(0, 4),
         };
         upsertItem(updatedItem);
         updated.push(updatedItem);

@@ -1,6 +1,7 @@
 import Parser from "rss-parser";
 import crypto from "crypto";
 import { upsertItem, updateFeedStatus, getActiveFeeds, getItems } from "./db.js";
+import { getFeedOrg } from "./orgs.js";
 
 const rssParser = new Parser({
   timeout: 15000,
@@ -34,6 +35,65 @@ function extractSummary(item) {
   return text.length > 600 ? text.slice(0, 597) + "..." : text;
 }
 
+// ── Affiliation extraction from author strings ─────────────────────────────
+// Maps recognized org names/patterns to short display labels.
+// Only major AI labs, big tech, and top research universities.
+const AFFILIATIONS = [
+  // AI labs & big tech
+  { pattern: /\bGoogle\b|DeepMind|Google Brain/i, label: "Google" },
+  { pattern: /\bOpenAI\b/i, label: "OpenAI" },
+  { pattern: /\bAnthropic\b/i, label: "Anthropic" },
+  { pattern: /\bMeta\b|Facebook AI|\bFAIR\b/i, label: "Meta" },
+  { pattern: /\bMicrosoft\b|MSR\b/i, label: "Microsoft" },
+  { pattern: /\bApple\b/i, label: "Apple" },
+  { pattern: /\bAmazon\b|AWS AI/i, label: "Amazon" },
+  { pattern: /\bNVIDIA\b/i, label: "NVIDIA" },
+  { pattern: /\bxAI\b/i, label: "xAI" },
+  { pattern: /\bMistral\b/i, label: "Mistral" },
+  { pattern: /\bCohere\b/i, label: "Cohere" },
+  { pattern: /\bHugging\s*Face\b/i, label: "Hugging Face" },
+  { pattern: /\bBaidu\b|ERNIE/i, label: "Baidu" },
+  { pattern: /\bTencent\b/i, label: "Tencent" },
+  { pattern: /\bAlibaba\b|DAMO Academy/i, label: "Alibaba" },
+  { pattern: /\bByteDance\b/i, label: "ByteDance" },
+  { pattern: /\bSamsung\b/i, label: "Samsung" },
+  { pattern: /\bIntel\b(?! ligen)/i, label: "Intel" },
+  { pattern: /\bIBM\b/i, label: "IBM" },
+  { pattern: /\bSalesforce\b/i, label: "Salesforce" },
+  // Top universities
+  { pattern: /\bStanford\b/i, label: "Stanford" },
+  { pattern: /\bMIT\b|Massachusetts Institute of Technology/i, label: "MIT" },
+  { pattern: /\bCMU\b|Carnegie Mellon/i, label: "CMU" },
+  { pattern: /\bBerkeley\b|UC Berkeley/i, label: "Berkeley" },
+  { pattern: /\bHarvard\b/i, label: "Harvard" },
+  { pattern: /\bPrinceton\b/i, label: "Princeton" },
+  { pattern: /\bOxford\b/i, label: "Oxford" },
+  { pattern: /\bCambridge\b/i, label: "Cambridge" },
+  { pattern: /\bETH\b|ETH Z/i, label: "ETH" },
+  { pattern: /\bTsinghua\b/i, label: "Tsinghua" },
+  { pattern: /\bPeking\b/i, label: "Peking U" },
+  { pattern: /\bToronto\b/i, label: "U Toronto" },
+  { pattern: /\bMontreal\b|Montr[ée]al|MILA\b/i, label: "Mila" },
+  { pattern: /\bAllen Institute\b|AI2\b/i, label: "AI2" },
+];
+
+// Feed IDs that are aggregators (multi-author, not attributed blogs).
+const AGGREGATOR_FEEDS = new Set([
+  "arxiv-cs-ai", "arxiv-cs-lg", "arxiv-cs-cl", "arxiv-cs-cr", "arxiv-quant-ph",
+  "pwc", "papers-with-code", "semantic-scholar", "hf-papers",
+]);
+
+function extractAffiliations(authorStr, feedId) {
+  if (!authorStr || !AGGREGATOR_FEEDS.has(feedId)) return [];
+  const found = [];
+  for (const { pattern, label } of AFFILIATIONS) {
+    if (pattern.test(authorStr) && !found.includes(label)) {
+      found.push(label);
+    }
+  }
+  return found.slice(0, 4); // cap at 4
+}
+
 // ── Fetch a single RSS feed ─────────────────────────────────────────────────
 async function fetchRSSFeed(feed) {
   const result = { items: [], error: null };
@@ -46,13 +106,22 @@ async function fetchRSSFeed(feed) {
       const itemId = makeItemId(feed.id, entry);
       const published = entry.isoDate || entry.pubDate || new Date().toISOString();
 
+      const author = entry.creator || entry.author || "";
+      // Initial affiliations: from feed-level org + regex on author string
+      const feedOrg = getFeedOrg(feed.id);
+      const regexAffs = extractAffiliations(author, feed.id);
+      const initAffs = feedOrg
+        ? [feedOrg.label, ...regexAffs.filter(a => a !== feedOrg.label)]
+        : regexAffs;
+
       result.items.push({
         id: itemId,
         feedId: feed.id,
         title: (entry.title || "Untitled").trim(),
         summary: extractSummary(entry),
         url: entry.link || "",
-        author: entry.creator || entry.author || "",
+        author,
+        affiliations: initAffs.slice(0, 4),
         published,
         category,
         relevance: 0.5, // default; will be scored by LLM
