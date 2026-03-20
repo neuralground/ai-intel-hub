@@ -46,8 +46,8 @@ export const api = {
 
   // LLM
   scoreItems: (opts) => request("/score", { method: "POST", ...opts }),
-  analyze: (mode, category) =>
-    request("/analyze", { method: "POST", body: JSON.stringify({ mode, category }) }),
+  analyze: (mode, category, { force } = {}) =>
+    request("/analyze", { method: "POST", body: JSON.stringify({ mode, category, force }) }),
 
   // Suggestions
   getSuggestions: () => request("/suggestions"),

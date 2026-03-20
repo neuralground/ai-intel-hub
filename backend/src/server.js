@@ -367,9 +367,9 @@ app.post("/api/admin/rescore", async (req, res) => {
 // ── LLM Analysis ────────────────────────────────────────────────────────────
 app.post("/api/analyze", async (req, res) => {
   try {
-    const { mode, category } = req.body;
+    const { mode, category, force } = req.body;
     if (!mode) return res.status(400).json({ error: "mode is required" });
-    const result = await generateAnalysis(mode, category || null);
+    const result = await generateAnalysis(mode, category || null, { force: !!force });
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

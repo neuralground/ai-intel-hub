@@ -258,24 +258,26 @@ export async function scoreUnscoredItems(batchSize = 15) {
 }
 
 // ── Generate analysis briefing ──────────────────────────────────────────────
-export async function generateAnalysis(mode, category = null) {
-  // Check cache first
-  const cached = getCachedAnalysis(mode, category, 30);
-  if (cached) {
-    // Rebuild sourceItems from cached item IDs
-    const allItems = getItems({ limit: 500 });
-    const idSet = new Set(cached.item_ids || []);
-    const feedNameMap = Object.fromEntries(getAllFeeds().map(f => [f.id, f.name]));
-    const sourceItemMap = Object.fromEntries(
-      allItems.filter(it => idSet.has(it.id)).map(it => [it.id, {
-        id: it.id, title: it.title, summary: it.summary, url: it.url,
-        category: it.category, relevance: it.relevance,
-        relevance_reason: it.relevance_reason, feed_id: it.feed_id,
-        feed_name: feedNameMap[it.feed_id] || it.feed_id,
-        published: it.published, tags: it.tags, saved: it.saved,
-      }])
-    );
-    return { result: cached.result, cached: true, sourceItems: sourceItemMap };
+export async function generateAnalysis(mode, category = null, { force = false } = {}) {
+  // Check cache first (skip if force regenerate)
+  if (!force) {
+    const cached = getCachedAnalysis(mode, category, 30);
+    if (cached) {
+      // Rebuild sourceItems from cached item IDs
+      const allItems = getItems({ limit: 500 });
+      const idSet = new Set(cached.item_ids || []);
+      const feedNameMap = Object.fromEntries(getAllFeeds().map(f => [f.id, f.name]));
+      const sourceItemMap = Object.fromEntries(
+        allItems.filter(it => idSet.has(it.id)).map(it => [it.id, {
+          id: it.id, title: it.title, summary: it.summary, url: it.url,
+          category: it.category, relevance: it.relevance,
+          relevance_reason: it.relevance_reason, feed_id: it.feed_id,
+          feed_name: feedNameMap[it.feed_id] || it.feed_id,
+          published: it.published, tags: it.tags, saved: it.saved,
+        }])
+      );
+      return { result: cached.result, cached: true, generatedAt: cached.created_at, sourceItems: sourceItemMap };
+    }
   }
 
   // Each mode uses a different item pool to reduce redundancy
@@ -362,33 +364,37 @@ ${citationRule}
 Items:\n${itemSummaries}`,
     },
     risks: {
-      system: `You are an AI risk analyst for: ${context}\nFocus exclusively on risks, threats, and vulnerabilities — not opportunities or positive developments. Be specific about timeframes and impact. No preamble.`,
-      user: `Produce a focused risk assessment from these items. Only discuss items that present a genuine risk, threat, or vulnerability — skip items that are purely positive developments.
+      system: `You are an AI risk analyst for: ${context}\nYou produce risk landscape scans. Your job is to surface threats, not opportunities. Be specific about timeframes. No preamble.`,
+      user: `Scan these items and produce a risk landscape. This is a BROAD SCAN — cover as many distinct risk signals as possible, not deep analysis of individual items.
 
-**IMMEDIATE RISKS** (next 30 days) - What requires urgent attention or could catch us off-guard?
-**REGULATORY & COMPLIANCE** - New rules, guidance, deadlines, enforcement actions, or jurisdictional changes
-**TECHNOLOGY & ARCHITECTURE** - Capability shifts that could disrupt current technical decisions, deprecation risks, security vulnerabilities
-**VENDOR & COMPETITIVE** - Platform lock-in risks, pricing changes, competitive moves that affect our position
-**OPERATIONAL** - Workforce, security, process, reputational, or organizational risks
+For each risk category below, list 1-3 bullet points. Each bullet should be ONE concise sentence identifying a specific risk signal, with a likelihood/impact tag and a source citation. If a category has no risk signals, write "No signals detected."
 
-For each risk, assess: **Likelihood** (high/medium/low) and **Impact** (high/medium/low).
+**IMMEDIATE (next 30 days)** — What could catch us off-guard soon?
+**REGULATORY & COMPLIANCE** — New rules, enforcement, deadlines, jurisdictional shifts
+**TECHNOLOGY & ARCHITECTURE** — Deprecations, capability jumps that invalidate current plans, security issues
+**VENDOR & COMPETITIVE** — Lock-in, pricing, platform shifts, competitive moves
+**OPERATIONAL** — Workforce, process, reputational, organizational exposure
 
-Do NOT duplicate content from a daily summary — focus purely on the risk lens. If an item poses no meaningful risk, omit it.
+Format each bullet as: - [risk signal sentence] — **L**:high/med/low **I**:high/med/low [citation]
+
+Keep this scan BROAD and BRIEF — one sentence per risk, no paragraphs. A companion "What/So What/Now What" analysis provides deeper strategic analysis of the most important items.
 ${citationRule}
 Items:\n${itemSummaries}`,
     },
     "what-so-what-now-what": {
-      system: `You are a strategic advisor for: ${context}\nUse the What/So What/Now What decision framework. Be concrete and specific about actions. No preamble.`,
-      user: `Select the 3-5 MOST ACTIONABLE items — ones that require a decision or response — and analyze each through this framework:
+      system: `You are a strategic advisor for: ${context}\nYou produce deep-dive strategic analysis using the What/So What/Now What framework. Focus on decisions and actions, not just risks. No preamble.`,
+      user: `Select 3-5 items that MOST DEMAND A STRATEGIC RESPONSE — these could be opportunities, threats, or inflection points. Choose items where doing nothing has a cost OR where acting early creates advantage.
 
-For each item:
-**WHAT** — What specifically changed? (One factual sentence: a new capability, regulation, risk, or market shift)
-**SO WHAT** — Why should we care? (Direct implication for our strategy, architecture, competitive position, or compliance posture. Be specific, not generic.)
-**NOW WHAT** — What should we do? (A concrete action: prototype X, escalate to Y, monitor Z, deprioritize W. Include who should own it and a rough timeframe.)
+IMPORTANT: This analysis COMPLEMENTS a separate risk scan. Do NOT produce a risk list. Instead, provide DEEP STRATEGIC ANALYSIS of a few high-impact items. At least 1-2 selections should be opportunities or strategic openings, not just threats.
 
-Selection criteria: choose items where inaction has a cost. Skip items that are merely interesting — focus on items that demand a response.
+For each selected item, write a structured analysis:
 
-Do NOT overlap with a daily summary or risk assessment. This view is about decision-making and accountability.
+### [Item title or short description]
+**WHAT** — What specifically changed? (Factual: one sentence)
+**SO WHAT** — Why does this matter to us specifically? (2-3 sentences connecting this to our strategy, architecture, competitive position, or roadmap. Be concrete — name specific systems, teams, or initiatives affected.)
+**NOW WHAT** — What should we do? (A specific action with an owner, a timeframe, and a definition of done. "Monitor" is only acceptable if you specify what to watch for and when to escalate.)
+
+End with a **PRIORITIES** section that rank-orders the 3-5 items by urgency and names a single recommended "act first" item.
 ${citationRule}
 Items:\n${itemSummaries}`,
     },
@@ -410,7 +416,7 @@ Items:\n${itemSummaries}`,
       feed_name: feedNameMap[it.feed_id] || it.feed_id,
       published: it.published, tags: it.tags, saved: it.saved,
     }]));
-    return { result, cached: false, sourceItems: sourceItemMap };
+    return { result, cached: false, generatedAt: new Date().toISOString(), sourceItems: sourceItemMap };
   } catch (err) {
     throw new Error(`Analysis failed: ${err.message}`);
   }
