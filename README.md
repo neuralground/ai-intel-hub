@@ -345,7 +345,7 @@ All endpoints are available in every mode (client-server, Docker, and desktop). 
 | `POST` | `/api/score` | Score all unscored items via Claude |
 | `POST` | `/api/analyze` | Generate analysis `{mode, category?}` |
 
-Analysis modes: `briefing`, `risks`, `gaps`, `what-so-what-now-what`
+Analysis modes: `briefing` (Daily Summary), `risks` (Risk Scan), `gaps` (Coverage Gaps), `what-so-what-now-what` (WSNW)
 
 ### Health and Stats
 | Method | Path | Description |
@@ -370,6 +370,11 @@ Analysis modes: `briefing`, `risks`, `gaps`, `what-so-what-now-what`
 | `DELETE` | `/api/orgs/:id` | Remove a user-added organization |
 | `GET` | `/api/orgs/affiliations` | Distinct affiliations with item counts |
 | `GET` | `/api/ollama/models` | List locally available Ollama models |
+
+### Services
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/services/check` | Check connectivity of all configured service sessions |
 
 ### Admin
 | Method | Path | Description |

@@ -230,4 +230,15 @@ describe('api', () => {
       }));
     });
   });
+
+  describe('checkServices', () => {
+    it('calls POST /api/services/check', async () => {
+      mockOk({ ollama: true, lmStudio: false });
+      const result = await api.checkServices();
+      expect(result).toEqual({ ollama: true, lmStudio: false });
+      expect(mockFetch).toHaveBeenCalledWith('/api/services/check', expect.objectContaining({
+        method: 'POST',
+      }));
+    });
+  });
 });

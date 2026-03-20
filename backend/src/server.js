@@ -493,6 +493,36 @@ function maskKey(key) {
   return key.slice(0, 7) + "..." + key.slice(-4);
 }
 
+// ── Service connectivity checks ─────────────────────────────────────────────
+const SERVICE_CHECK_URLS = {
+  TWITTER_SESSION: { url: "https://api.x.com/1.1/account/verify_credentials.json", cookie: "auth_token" },
+  SUBSTACK_SESSION: { url: "https://substack.com/api/v1/user/self", cookie: "substack.sid" },
+  LINKEDIN_SESSION: { url: "https://www.linkedin.com/voyager/api/me", cookie: "li_at" },
+  THREADS_SESSION: { url: "https://www.threads.net/api/v1/accounts/current_user/", cookie: "sessionid" },
+  YOUTUBE_SESSION: { url: "https://www.youtube.com/account", cookie: "SID" },
+};
+
+app.post("/api/services/check", async (req, res) => {
+  const saved = loadSettingsFile();
+  const results = {};
+  const checks = Object.entries(SERVICE_CHECK_URLS).map(async ([key, { url, cookie }]) => {
+    const token = saved[key] || process.env[key];
+    if (!token) { results[key] = { configured: false }; return; }
+    try {
+      const r = await fetch(url, {
+        headers: { Cookie: `${cookie}=${token}`, "User-Agent": "AI-Intel-Hub/1.0" },
+        redirect: "manual",
+        signal: AbortSignal.timeout(5000),
+      });
+      results[key] = { configured: true, ok: r.status >= 200 && r.status < 400, status: r.status };
+    } catch (e) {
+      results[key] = { configured: true, ok: false, error: e.message };
+    }
+  });
+  await Promise.allSettled(checks);
+  res.json(results);
+});
+
 app.get("/api/settings", (req, res) => {
   const saved = loadSettingsFile();
   res.json({

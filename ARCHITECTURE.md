@@ -49,7 +49,7 @@ The app runs in two modes from the same codebase:
                          │  │                          │  │
                          │  │  scorer.js ─── LLM      │──┼──→ Anthropic / OpenAI /
                          │  │    Relevance scoring     │  │    Gemini / Ollama
-                         │  │    Executive briefings   │  │
+                         │  │    Daily summaries   │  │
                          │  │    Feed health analysis  │  │
                          │  │    Coverage gap detection │  │
                          │  │                          │  │
@@ -361,6 +361,11 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 | DELETE | `/api/orgs/:id` | Remove a user-added organization |
 | GET | `/api/orgs/affiliations` | Distinct affiliations with item counts |
 | GET | `/api/ollama/models` | List locally available Ollama models |
+
+### Services
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/services/check` | Check connectivity of all configured service sessions |
 
 ### Admin
 | Method | Path | Description |

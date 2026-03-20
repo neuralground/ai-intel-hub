@@ -54,6 +54,9 @@ export const api = {
   acceptSuggestion: (id) => request(`/suggestions/${id}/accept`, { method: "POST" }),
   dismissSuggestion: (id) => request(`/suggestions/${id}/dismiss`, { method: "POST" }),
 
+  // Services
+  checkServices: () => request("/services/check", { method: "POST" }),
+
   // Admin
   cleanupItems: (days) => request("/admin/cleanup", { method: "POST", body: JSON.stringify({ days }) }),
   rescoreAll: () => request("/admin/rescore", { method: "POST" }),

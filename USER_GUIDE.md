@@ -35,7 +35,7 @@ The sidebar sits on the left side and provides:
 
 - **Category filters** -- buttons for each of the six feed categories (including AI News and Announcements). Click one to filter the item list to that category. Click it again (or click "All") to clear the filter.
 - **Relevance slider** -- drag to set the minimum relevance threshold. Items scoring below this threshold are hidden. This is useful for cutting through noise when you only want high-signal content.
-- **Organizations filter** -- a scrollable list of organizations with item counts, positioned between the relevance slider and theme toggle. Select one or more organizations to filter the item list to items affiliated with those orgs. Multi-select is supported: click additional orgs to add them to the filter. A clear button at the top resets the organization filter. Each entry shows the org logo (when available) and the number of items affiliated with that org.
+- **Organizations filter** -- a scrollable list of organizations with item counts, positioned between the relevance slider and theme toggle. Select one or more organizations to filter the item list to items affiliated with those orgs. Multi-select is supported: click additional orgs to add them to the filter. A clear button at the top resets the organization filter. Each entry shows the org name as a text badge and the number of items affiliated with that org.
 - **Theme toggle** -- switch between System, Light, and Dark appearance modes.
 
 ### Item List
@@ -47,7 +47,7 @@ The main area of the dashboard displays feed items as a vertical list of cards. 
 - **Relevance percentage** -- a numeric score (0-100%) indicating how relevant the item is to your configured role and priorities. Color shifts from gray (low) through yellow (medium) to green (high).
 - **Feed name** -- which feed the item came from.
 - **Time** -- relative timestamp (e.g., "2h ago", "yesterday").
-- **Organization badges** -- small logo badges showing affiliated organizations detected in the content (see [Organization Affiliations](#organization-affiliations)).
+- **Organization badges** -- small text-only badges showing affiliated organizations detected in the content (see [Organization Affiliations](#organization-affiliations)).
 - **Summary snippet** -- a brief preview of the item content.
 
 Unread items appear with slightly bolder styling. Read items are visually dimmed.
@@ -138,7 +138,7 @@ The app uses a three-layer approach to detect which organizations are associated
 
 ### Org Badges
 
-When affiliations are detected, small badges with organization logos appear on the item card. Organizations with recognized logos (Google, OpenAI, Anthropic, Meta, Microsoft, Apple, Amazon, NVIDIA, Stanford, MIT, CMU, Berkeley) display their logo. Other organizations display their name in text.
+When affiliations are detected, small text-only badges appear on the item card showing the short organization name. The AI identifies both author affiliations to the organization and references in items to the organization, its products, or technologies.
 
 ### Recognized Organizations
 
@@ -160,14 +160,19 @@ The list of recognized organizations can be viewed and customized in Settings.
 
 ### The Analysis Panel
 
-Click the Analysis button in the header bar to open the briefing panel. Four analysis modes are available:
+Click the Analysis button in the header bar to open the briefing panel. Three analysis modes are available:
 
-- **Executive Briefing** -- a structured summary of the most important developments, organized into Critical Developments, Strategic Signals, and Action Items.
-- **Risk Scan** -- identifies Regulatory, Technology, Vendor, and Operational risks from recent content.
-- **Coverage Gaps** -- analyzes your feed coverage for blind spots, perspective bias, and suggests new sources to add.
-- **What / So What / Now What** -- a decision-oriented framework: what changed, why it matters, and what to do about it.
+- **Daily Summary** -- a wider-view structured summary mixing both fresh and older high-relevance items, organized into Critical Developments, Strategic Signals, and Action Items.
+- **Risk Scan** -- a broad bullet scan identifying Regulatory, Technology, Vendor, and Operational risks from recent content, each with likelihood and impact assessments.
+- **What / So What / Now What (WSNW)** -- deep strategic dives on 3-5 actionable items: what changed, why it matters, and what to do about it.
+
+A separate **Coverage Gaps** analysis is available in the Sources panel (see [Coverage Gap Detection](#coverage-gap-detection)).
 
 Each mode can be run for all categories or filtered to a specific category.
+
+### Generation Progress and Timestamps
+
+While an analysis is being generated, an indeterminate animated progress bar is displayed. Once complete, the analysis shows a timestamp indicating when it was generated (e.g., "Generated 5m ago (cached)"). A **Regenerate** button next to the timestamp lets you force a fresh analysis even if a cached version exists.
 
 ### Source References
 
@@ -175,7 +180,7 @@ Analysis text includes numbered references to the source items it drew from. Hov
 
 ### Caching
 
-Analysis results are cached for 30 minutes. Running the same analysis mode and category combination within that window returns the cached result instantly. After the cache expires, or if you switch categories, a fresh analysis is generated.
+Analysis results are cached for 30 minutes. Running the same analysis mode and category combination within that window returns the cached result instantly. After the cache expires, or if you switch categories, a fresh analysis is generated. Use the Regenerate button to bypass the cache on demand.
 
 ---
 
@@ -272,11 +277,11 @@ To switch providers:
 
 ### Recognized Organizations
 
-View and manage the list of organizations the system recognizes for affiliation tagging. This list is shared between the scorer, fetcher, and database modules.
+View and manage the list of organizations the system recognizes for affiliation tagging. The panel displays a scrollable one-per-row list of all recognized organizations. This list is shared between the scorer, fetcher, and database modules.
 
 To add a custom organization, click "Add Organization" and provide an ID, label, type, and optional aliases. After adding an org, the app prompts you to rescan existing items so that previously ingested content is re-evaluated for affiliations with the new org. User-added organizations are persisted in `settings.json` under the `USER_ORGS` key.
 
-To remove a user-added organization, click the delete button next to it. Built-in organizations cannot be removed.
+To remove a user-added organization, click the delete button next to it. A confirmation dialog appears before the deletion proceeds. Built-in organizations cannot be removed.
 
 ### Feed Refresh Interval
 
@@ -284,7 +289,7 @@ Set how often feeds are automatically refreshed, in minutes. The default is 30 m
 
 ### Connected Services
 
-Connect third-party platforms to pull in additional content:
+Connect third-party platforms to pull in additional content. The Connected Services section is a scrollable list showing all configured services.
 
 - **X/Twitter** -- tracks posts from specified accounts.
 - **Substack** -- access subscriber-only content from connected Substacks.
@@ -293,6 +298,10 @@ Connect third-party platforms to pull in additional content:
 - **YouTube** -- monitor specific channels.
 
 In the desktop app, clicking "Sign in" opens a browser login window for each service. No API keys or developer accounts are needed -- the app uses browser-based authentication.
+
+**Health checks:** When you open the Settings panel, each connected service automatically runs a health check. Services display one of three states: "Checking..." while the probe is in progress, "Connected" (green) when the session is active, or "Session expired" (red) when the session is no longer valid. Expired sessions show a **Reconnect** button to re-authenticate.
+
+**Custom services:** You can add services not in the default list by clicking "Add Service" and providing a name, cookie name, and description. This is useful for niche platforms or internal tools that use cookie-based authentication.
 
 ### Advanced
 

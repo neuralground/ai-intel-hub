@@ -46,6 +46,7 @@ vi.mock('../api.js', () => ({
     removeOrg: vi.fn().mockResolvedValue({ removed: true }),
     cleanupItems: vi.fn().mockResolvedValue({ removed: 0 }),
     rescoreAll: vi.fn().mockResolvedValue({ reset: 0, scored: 0 }),
+    checkServices: vi.fn().mockResolvedValue({}),
   },
 }));
 
@@ -153,7 +154,7 @@ describe('App', () => {
     expect(screen.getByText('UnknownOrg')).toBeInTheDocument();
   });
 
-  it('renders items with known org logo (SVG)', async () => {
+  it('renders items with org affiliation text badge', async () => {
     const mockItems = [{
       id: 'test-2', title: 'OpenAI Research Paper', summary: 'About GPT',
       feed_id: 'arxiv-cs-ai', category: 'research', relevance: 0.85,
@@ -165,9 +166,9 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('OpenAI Research Paper')).toBeInTheDocument();
     });
-    // OpenAI has a logo, so it renders an SVG, not the text "OpenAI" in the badge
-    const svgs = document.querySelectorAll('svg');
-    expect(svgs.length).toBeGreaterThan(0);
+    // Affiliation renders as a text badge with the org name
+    const badges = screen.getAllByText('OpenAI');
+    expect(badges.length).toBeGreaterThan(0);
   });
 
   it('shows critical count in header when stats.critical > 0', async () => {

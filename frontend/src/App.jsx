@@ -54,34 +54,17 @@ function healthLabel(status, avgInterval, hoursSince) {
   return `Healthy — last post ${since}${cadence ? `, ${cadence}` : ""}`;
 }
 
-// ── Org logo component for affiliation badges ──────────────────────────────
-const ORG_LOGOS = {
-  Google: (s) => <svg viewBox="0 0 24 24" width={s} height={s}><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>,
-  OpenAI: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="currentColor"><path d="M22.28 9.82a5.99 5.99 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A6.07 6.07 0 0 0 4.98 4.18 5.99 5.99 0 0 0 .98 7.08a6.05 6.05 0 0 0 .74 7.1 5.98 5.98 0 0 0 .52 4.91 6.05 6.05 0 0 0 6.51 2.9A5.99 5.99 0 0 0 13.26 24a6.06 6.06 0 0 0 5.77-4.21 5.99 5.99 0 0 0 4-2.9 6.06 6.06 0 0 0-.75-7.07zM13.26 22.43a4.48 4.48 0 0 1-2.88-1.04l.14-.08 4.78-2.76a.8.8 0 0 0 .39-.68v-6.74l2.02 1.17a.07.07 0 0 1 .04.05v5.58a4.5 4.5 0 0 1-4.49 4.5zM3.6 18.3a4.47 4.47 0 0 1-.54-3.01l.14.08 4.78 2.76a.77.77 0 0 0 .78 0l5.84-3.37v2.33a.08.08 0 0 1-.03.06l-4.84 2.79a4.5 4.5 0 0 1-6.14-1.65zM2.34 7.9a4.49 4.49 0 0 1 2.37-1.97V11.6a.77.77 0 0 0 .39.68l5.82 3.35-2.02 1.17a.08.08 0 0 1-.07 0l-4.83-2.79A4.5 4.5 0 0 1 2.34 7.87zm16.6 3.86l-5.83-3.39L15.12 7.2a.08.08 0 0 1 .07 0l4.83 2.79a4.49 4.49 0 0 1-.68 8.1v-5.68a.79.79 0 0 0-.4-.66zm2.01-3.02l-.14-.09-4.77-2.78a.78.78 0 0 0-.79 0L9.41 9.23V6.9a.07.07 0 0 1 .03-.06l4.83-2.79a4.5 4.5 0 0 1 6.68 4.66zM8.3 12.86l-2.02-1.16a.08.08 0 0 1-.04-.06V6.08a4.5 4.5 0 0 1 7.38-3.46l-.14.08-4.78 2.76a.8.8 0 0 0-.39.68zm1.1-2.37l2.6-1.5 2.6 1.5v3l-2.6 1.5-2.6-1.5z"/></svg>,
-  Anthropic: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="currentColor"><path d="M13.83 3.52h3.6L24 20.48h-3.6l-6.57-16.96zm-7.26 0h3.77L16.9 20.48h-3.67l-1.47-3.64H5.04l-1.5 3.64H0L6.57 3.52zm1.04 5.67l-2.56 6.18h5.24l-2.68-6.18z"/></svg>,
-  Meta: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="currentColor"><path d="M6.92 6.2c-.84 0-1.63.55-2.38 1.63-.98 1.41-1.85 3.53-2.42 5.22-.4 1.18-.56 2.09-.56 2.72 0 1.09.42 1.79 1.28 1.79.85 0 1.84-.84 3.08-2.7.7-1.06 1.4-2.3 2.02-3.5L9.4 8.7c-.65-1.29-1.45-2.5-2.48-2.5zm10.16 0c-1.03 0-1.83 1.21-2.48 2.5l1.46 2.66c.62 1.2 1.32 2.44 2.02 3.5 1.24 1.86 2.23 2.7 3.08 2.7.86 0 1.28-.7 1.28-1.79 0-.63-.16-1.54-.56-2.72-.57-1.69-1.44-3.81-2.42-5.22-.75-1.08-1.54-1.63-2.38-1.63zM12 10.47c-.55 1-1.12 2.02-1.7 3l-.24.42.24.44c.58.98 1.15 2 1.7 3 .55-1 1.12-2.02 1.7-3l.24-.44-.24-.42c-.58-.98-1.15-2-1.7-3z"/></svg>,
-  Microsoft: (s) => <svg viewBox="0 0 24 24" width={s} height={s}><path fill="#F25022" d="M1 1h10v10H1z"/><path fill="#7FBA00" d="M13 1h10v10H13z"/><path fill="#00A4EF" d="M1 13h10v10H1z"/><path fill="#FFB900" d="M13 13h10v10H13z"/></svg>,
-  Apple: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>,
-  Amazon: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="currentColor"><path d="M.045 18.02c.07-.116.196-.064.28-.022.312.15.624.313.95.442 1.172.467 2.397.784 3.668.95a13.5 13.5 0 0 0 4.59-.06c1.27-.237 2.47-.67 3.6-1.27.065-.032.13-.078.196-.078.08 0 .12.063.12.14 0 .054-.03.103-.07.152-.512.613-1.143 1.105-1.842 1.487-1.13.612-2.35 1.002-3.61 1.186a13.4 13.4 0 0 1-4.12-.114C2.67 20.6 1.57 20.16.62 19.48c-.104-.074-.24-.167-.24-.3 0-.04.01-.12.045-.16zm6.612-5.48c0-.8.02-1.46.06-1.99.04-.54.13-.99.26-1.35.14-.37.33-.65.58-.85.24-.2.56-.35.95-.44.4-.1.87-.14 1.42-.14.55 0 1 .05 1.39.14.38.1.7.24.94.44.25.2.43.48.57.85.13.36.22.81.26 1.35.04.53.06 1.19.06 1.99s-.02 1.46-.06 1.99c-.04.54-.13.99-.26 1.35-.14.37-.33.65-.57.85-.24.2-.56.35-.94.44-.39.1-.84.14-1.39.14-.55 0-1.02-.05-1.42-.14-.39-.1-.71-.24-.95-.44-.25-.2-.44-.48-.58-.85-.13-.36-.22-.81-.26-1.35-.04-.53-.06-1.19-.06-1.99z"/></svg>,
-  NVIDIA: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="#76B900"><path d="M8.95 8.57V6.35c.18-.02.36-.03.55-.03 3.37 0 6.06 2.88 6.06 5.93 0 .17 0 .33-.02.5h2.25c.01-.16.02-.33.02-.5 0-4.5-3.73-8.13-8.3-8.15h-.56V2L5 5.29l3.95 3.28zm0 6.85V17.65c.18.02.36.03.55.03 3.37 0 6.06-2.88 6.06-5.93 0-.17 0-.33-.02-.5h2.25c.01.16.02.33.02.5 0 4.5-3.73 8.13-8.3 8.15h-.56v2.1L5 18.71l3.95-3.29z"/></svg>,
-  Stanford: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="#8C1515"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5zm0 2.18L18.82 7.5v8.18L12 19.36 5.18 15.68V7.5L12 4.18zM12 8a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm-2 3v6h1v-2.5h2V17h1v-6h-1v2.5h-2V11h-1z"/></svg>,
-  MIT: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="#A31F34"><rect x="1" y="3" width="4" height="18"/><rect x="7" y="3" width="4" height="10"/><rect x="13" y="3" width="4" height="18"/><rect x="19" y="3" width="4" height="4"/><rect x="19" y="9" width="4" height="12"/></svg>,
-  CMU: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="#C41230"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm-4 12v-1c0-2 4-3.1 4-3.1s4 1.1 4 3.1v1H8z"/></svg>,
-  Berkeley: (s) => <svg viewBox="0 0 24 24" width={s} height={s} fill="#003262"><path d="M12 2L3 7v2h18V7L12 2zm-7 9v6l7 5 7-5v-6l-7 3-7-3z"/></svg>,
-};
-
+// ── Org badge (text-only) for affiliation display on items ──────────────────
 function OrgBadge({ name, size = 10 }) {
-  const Logo = ORG_LOGOS[name];
   return (
     <span style={{
-      display: "inline-flex", alignItems: "center", gap: 3,
+      display: "inline-flex", alignItems: "center",
       padding: "0px 5px", borderRadius: 3, fontSize: size - 1,
       background: "var(--accent-bg-subtle, rgba(79,142,247,0.08))",
       color: "var(--text-muted)", fontFamily: "'JetBrains Mono', monospace", fontWeight: 500,
       lineHeight: 1.6,
     }}>
-      {Logo && <span style={{ display: "inline-flex", flexShrink: 0 }}>{Logo(size)}</span>}
-      {!Logo && name}
+      {name}
     </span>
   );
 }
@@ -940,13 +923,15 @@ const SERVICES = [
 const isElectron = !!(window.electronAPI?.isElectron);
 
 // ── Service Connect Card ────────────────────────────────────────────────────
-function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect }) {
+function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect, health }) {
   const [showManual, setShowManual] = useState(false);
   const [token, setToken] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState(null);
 
   const useNativeAuth = isElectron && service.electronAuth;
+  // health: undefined (not checked), { ok: true }, { ok: false, error/status }
+  const stale = connected && health && !health.ok;
 
   const handleNativeConnect = async () => {
     setConnecting(true);
@@ -985,8 +970,17 @@ function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect 
           </div>
         </div>
         {connected ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ color: "#10B981", fontSize: 10, fontFamily: mono }}>Connected</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {health === undefined ? (
+              <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>Checking...</span>
+            ) : stale ? (
+              <>
+                <span style={{ color: "#EF4444", fontSize: 10, fontFamily: mono }}>Session expired</span>
+                <button onClick={() => { setShowManual(true); }} style={{ padding: "4px 10px", background: "var(--accent)", border: "none", borderRadius: 5, color: "white", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>Reconnect</button>
+              </>
+            ) : (
+              <span style={{ color: "#10B981", fontSize: 10, fontFamily: mono }}>Connected</span>
+            )}
             <button onClick={() => onDisconnect(service)} style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 10, fontFamily: mono, cursor: "pointer" }}>Disconnect</button>
           </div>
         ) : (
@@ -1011,8 +1005,8 @@ function ServiceCard({ service, connected, maskedToken, onConnect, onDisconnect 
         </div>
       )}
 
-      {/* Manual token entry (web mode, or as fallback) */}
-      {!connected && (showManual || (useNativeAuth && error)) && (
+      {/* Manual token entry (web mode, reconnect, or as fallback) */}
+      {((!connected && (showManual || (useNativeAuth && error))) || (stale && showManual)) && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
           <div style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, marginBottom: 8 }}>
             {useNativeAuth && error ? "Sign-in didn't work? You can paste the token manually:" : service.manualHelpText}
@@ -1088,6 +1082,96 @@ const LLM_PROVIDERS = [
   },
 ];
 
+// ── Connected Services Section (Settings sub-panel) ─────────────────────────
+function ConnectedServicesSection({ settings, onConnect, onDisconnect }) {
+  const [serviceHealth, setServiceHealth] = useState({}); // { TWITTER_SESSION: { ok, ... } }
+  const [showAddService, setShowAddService] = useState(false);
+  const [newService, setNewService] = useState({ name: "", cookieName: "", checkUrl: "", description: "" });
+  const [customServices, setCustomServices] = useState([]);
+
+  const hint = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
+  const lbl = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
+  const inp = { padding: "6px 10px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-primary)", fontSize: 12, fontFamily: sans, outline: "none", width: "100%" };
+  const btnBase = { padding: "5px 12px", borderRadius: 5, fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600 };
+
+  // Check service health on mount
+  useEffect(() => {
+    api.checkServices().then(setServiceHealth).catch(console.error);
+  }, []);
+
+  const allServices = [...SERVICES, ...customServices];
+
+  const handleAddService = () => {
+    if (!newService.name.trim()) return;
+    const id = newService.name.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const envKey = id.toUpperCase().replace(/-/g, "_") + "_SESSION";
+    const settingsKey = id.replace(/-([a-z])/g, (_, c) => c.toUpperCase()) + "Session";
+    const svc = {
+      id,
+      name: newService.name.trim(),
+      settingsKey,
+      envKey,
+      description: newService.description.trim() || `Connect to ${newService.name.trim()}.`,
+      electronAuth: false,
+      manualPlaceholder: newService.cookieName ? `Paste ${newService.cookieName} cookie value...` : "Paste session token...",
+      manualHelpText: newService.cookieName
+        ? `In your browser: log in to the service, then open DevTools (F12) > Application > Cookies and copy the '${newService.cookieName}' value.`
+        : "Paste the session token or cookie value for this service.",
+    };
+    setCustomServices(prev => [...prev, svc]);
+    setNewService({ name: "", cookieName: "", checkUrl: "", description: "" });
+    setShowAddService(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600 }}>Connected Services</div>
+        <button onClick={() => setShowAddService(!showAddService)} style={{ ...btnBase, background: "none", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
+          {showAddService ? "Cancel" : "+ Add"}
+        </button>
+      </div>
+      <div style={hint}>Connect to third-party services for authenticated feed access. Service health is checked when settings are opened.</div>
+
+      {/* Add service form */}
+      {showAddService && (
+        <div style={{ marginTop: 8, padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: 6, border: "1px solid var(--border)" }}>
+          <div style={{ marginBottom: 6 }}>
+            <label style={lbl}>SERVICE NAME</label>
+            <input value={newService.name} onChange={e => setNewService(s => ({ ...s, name: e.target.value }))} placeholder="e.g. Bluesky" style={inp} />
+          </div>
+          <div style={{ marginBottom: 6 }}>
+            <label style={lbl}>COOKIE NAME (optional)</label>
+            <input value={newService.cookieName} onChange={e => setNewService(s => ({ ...s, cookieName: e.target.value }))} placeholder="e.g. session_token" style={inp} />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={lbl}>DESCRIPTION (optional)</label>
+            <input value={newService.description} onChange={e => setNewService(s => ({ ...s, description: e.target.value }))} placeholder="e.g. Access Bluesky posts and threads" style={inp} />
+          </div>
+          <button onClick={handleAddService} disabled={!newService.name.trim()}
+            style={{ ...btnBase, background: newService.name.trim() ? "var(--accent)" : "var(--bg-input)", border: "none", color: newService.name.trim() ? "white" : "var(--text-disabled)" }}>
+            Add Service
+          </button>
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, maxHeight: 320, overflow: "auto" }}>
+        {allServices.map(svc => (
+          <ServiceCard
+            key={svc.id}
+            service={svc}
+            connected={!!settings[svc.settingsKey]}
+            maskedToken={settings[svc.settingsKey]}
+            onConnect={onConnect}
+            onDisconnect={onDisconnect}
+            health={serviceHealth[svc.envKey]}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Organizations Manager (Settings sub-panel) ─────────────────────────────
 function OrgManager({ orgs, onUpdate }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -1097,10 +1181,11 @@ function OrgManager({ orgs, onUpdate }) {
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
-  const [confirmRescan, setConfirmRescan] = useState(false); // after adding, offer rescan
+  const [confirmRescan, setConfirmRescan] = useState(false);
   const [lastAdded, setLastAdded] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null); // org id to confirm delete
 
-  const label = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
+  const lbl = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
   const hint = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
   const inp = { padding: "6px 10px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-primary)", fontSize: 12, fontFamily: sans, outline: "none", width: "100%" };
   const btnBase = { padding: "5px 12px", borderRadius: 5, fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600 };
@@ -1122,7 +1207,8 @@ function OrgManager({ orgs, onUpdate }) {
     setAdding(false);
   };
 
-  const handleRemove = async (orgId) => {
+  const handleDelete = async (orgId) => {
+    setConfirmDelete(null);
     try {
       await api.removeOrg(orgId);
       onUpdate();
@@ -1140,8 +1226,8 @@ function OrgManager({ orgs, onUpdate }) {
     setScanning(false);
   };
 
-  // Separate builtins from user-added (builtins have known IDs from the 34 defaults)
   const BUILTIN_IDS = new Set(["google","openai","anthropic","meta","microsoft","apple","amazon","nvidia","xai","mistral","cohere","huggingface","baidu","tencent","alibaba","bytedance","samsung","intel","ibm","salesforce","stanford","mit","cmu","berkeley","harvard","princeton","oxford","cambridge","eth","tsinghua","peking","toronto","mila","ai2"]);
+  const typeLabel = { company: "Company", lab: "AI Lab", university: "University", other: "Other" };
 
   return (
     <div>
@@ -1151,17 +1237,17 @@ function OrgManager({ orgs, onUpdate }) {
           {showAdd ? "Cancel" : "+ Add"}
         </button>
       </div>
-      <div style={hint}>The AI identifies author affiliations with these organizations during scoring. Items from affiliated authors show org badges and count toward the sidebar filter.</div>
+      <div style={hint}>During scoring, the AI identifies author affiliations with these organizations and references to their products or technologies. Matched items show org tags and appear in the sidebar filter. Uncheck an organization to hide it from the filter.</div>
 
       {/* Add new org form */}
       {showAdd && (
         <div style={{ marginTop: 8, padding: "10px 12px", background: "var(--bg-elevated)", borderRadius: 6, border: "1px solid var(--border)" }}>
           <div style={{ marginBottom: 6 }}>
-            <label style={label}>NAME</label>
+            <label style={lbl}>NAME</label>
             <input value={newLabel} onChange={e => setNewLabel(e.target.value)} placeholder="e.g. Stability AI" style={inp} />
           </div>
           <div style={{ marginBottom: 6 }}>
-            <label style={label}>TYPE</label>
+            <label style={lbl}>TYPE</label>
             <select value={newType} onChange={e => setNewType(e.target.value)} style={{ ...inp, cursor: "pointer", appearance: "auto" }}>
               <option value="company">Company</option>
               <option value="lab">AI Lab</option>
@@ -1170,7 +1256,7 @@ function OrgManager({ orgs, onUpdate }) {
             </select>
           </div>
           <div style={{ marginBottom: 8 }}>
-            <label style={label}>ALIASES (comma-separated, optional)</label>
+            <label style={lbl}>ALIASES (comma-separated, optional)</label>
             <input value={newAliases} onChange={e => setNewAliases(e.target.value)} placeholder="e.g. Stability, SDXL Team" style={inp} />
           </div>
           <button onClick={handleAdd} disabled={adding || !newLabel.trim()}
@@ -1184,9 +1270,9 @@ function OrgManager({ orgs, onUpdate }) {
       {confirmRescan && (
         <div style={{ marginTop: 8, padding: "8px 12px", background: "var(--accent-bg-subtle, rgba(79,142,247,0.06))", border: "1px solid var(--accent)", borderRadius: 6 }}>
           <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>
-            Added <strong>{lastAdded}</strong>. Scan existing items for this affiliation?
+            Added <strong>{lastAdded}</strong>. Scan existing items for this organization?
           </div>
-          <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>This will re-score all items so the LLM can detect affiliations with the new organization. This may take several minutes.</div>
+          <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>This will re-score all items so the AI can detect affiliations and references to the new organization. This may take several minutes.</div>
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={handleRescan} style={{ ...btnBase, background: "var(--accent)", border: "none", color: "white" }}>Scan now</button>
             <button onClick={() => setConfirmRescan(false)} style={{ ...btnBase, background: "none", border: "1px solid var(--border)", color: "var(--text-muted)" }}>Skip</button>
@@ -1201,22 +1287,37 @@ function OrgManager({ orgs, onUpdate }) {
         <div style={{ marginTop: 6, color: "#10B981", fontSize: 10, fontFamily: mono }}>{scanResult}</div>
       )}
 
-      {/* Org list */}
-      <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+      {/* Delete confirmation */}
+      {confirmDelete && (() => {
+        const org = orgs.find(o => o.id === confirmDelete);
+        return (
+          <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(239,68,68,0.06)", border: "1px solid #EF444440", borderRadius: 6 }}>
+            <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>
+              Remove <strong>{org?.label}</strong> from the organization list?
+            </div>
+            <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>This organization will no longer be detected during scoring. Existing affiliation tags on items will remain until the next rescore.</div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => handleDelete(confirmDelete)} style={{ ...btnBase, background: "#EF4444", border: "none", color: "white" }}>Remove</button>
+              <button onClick={() => setConfirmDelete(null)} style={{ ...btnBase, background: "none", border: "1px solid var(--border)", color: "var(--text-muted)" }}>Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Org list — scrollable, one per row */}
+      <div style={{ marginTop: 8, maxHeight: 260, overflow: "auto", border: "1px solid var(--border)", borderRadius: 6 }}>
         {orgs.map(o => (
-          <span key={o.id} style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            padding: "3px 8px", borderRadius: 4,
-            background: "var(--bg-input)", border: "1px solid var(--border)",
-            fontSize: 10, fontFamily: mono, color: "var(--text-secondary)",
+          <div key={o.id} style={{
+            display: "flex", alignItems: "center", padding: "6px 10px",
+            borderBottom: "1px solid var(--border)",
           }}>
-            {ORG_LOGOS[o.label] && <span style={{ display: "inline-flex" }}>{ORG_LOGOS[o.label](11)}</span>}
-            {o.label}
-            <span style={{ color: "var(--text-faint)", fontSize: 8 }}>{o.type}</span>
+            <span style={{ flex: 1, fontSize: 11, fontFamily: sans, color: "var(--text-secondary)", fontWeight: 500 }}>{o.label}</span>
+            <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, marginRight: 10 }}>{typeLabel[o.type] || o.type}</span>
             {!BUILTIN_IDS.has(o.id) && (
-              <button onClick={() => handleRemove(o.id)} title="Remove" style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 10, padding: 0, marginLeft: 2, lineHeight: 1 }}>✕</button>
+              <button onClick={() => setConfirmDelete(o.id)} title="Remove organization"
+                style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 11, padding: "2px 4px", lineHeight: 1 }}>✕</button>
             )}
-          </span>
+          </div>
         ))}
       </div>
     </div>
@@ -1580,22 +1681,7 @@ function SettingsPanel({ onClose }) {
         <OrgManager orgs={orgs} onUpdate={() => api.getOrgs().then(setOrgs).catch(console.error)} />
 
         {/* Connected Services */}
-        <div>
-          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 6 }}>Connected Services</div>
-          <div style={hint}>Connect to third-party services for authenticated feed access.</div>
-          <div style={{ marginTop: 10 }}>
-            {SERVICES.map(svc => (
-              <ServiceCard
-                key={svc.id}
-                service={svc}
-                connected={!!settings[svc.settingsKey]}
-                maskedToken={settings[svc.settingsKey]}
-                onConnect={handleServiceConnect}
-                onDisconnect={handleServiceDisconnect}
-              />
-            ))}
-          </div>
-        </div>
+        <ConnectedServicesSection settings={settings} onConnect={handleServiceConnect} onDisconnect={handleServiceDisconnect} />
 
         {/* Advanced */}
         <AdvancedSection />
@@ -1980,7 +2066,6 @@ export default function App() {
             <div style={{ maxHeight: 180, overflow: "auto", marginTop: 6 }}>
               {orgCounts.map(({ label, count }) => {
                 const selected = selectedOrgs.includes(label);
-                const Logo = ORG_LOGOS[label];
                 return (
                   <button key={label} onClick={() => setSelectedOrgs(prev =>
                     selected ? prev.filter(o => o !== label) : [...prev, label]
@@ -1990,10 +2075,7 @@ export default function App() {
                     background: selected ? "var(--accent-bg)" : "transparent",
                     cursor: "pointer", textAlign: "left",
                   }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 5, color: selected ? "var(--accent)" : "var(--text-secondary)", fontSize: 11, fontFamily: sans, fontWeight: selected ? 600 : 400 }}>
-                      {Logo && <span style={{ display: "inline-flex", flexShrink: 0 }}>{Logo(11)}</span>}
-                      {label}
-                    </span>
+                    <span style={{ color: selected ? "var(--accent)" : "var(--text-secondary)", fontSize: 11, fontFamily: sans, fontWeight: selected ? 600 : 400 }}>{label}</span>
                     <span style={{ fontSize: 9, color: "var(--text-faint)", fontFamily: mono }}>{count}</span>
                   </button>
                 );
