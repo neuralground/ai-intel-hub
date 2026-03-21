@@ -124,9 +124,10 @@ export function getDistinctAffiliations() {
     .map(([label, o]) => {
       const avgRel = o.count > 0 ? o.totalRelevance / o.count : 0;
       const ageHours = (now - o.latestTs) / 3600000;
-      const freshness = 1 / (1 + Math.pow(ageHours / 168, 2)); // midpoint 7d
-      // Composite: freshness (40%) + avg relevance (30%) + log count (30%)
-      const score = freshness * 0.4 + avgRel * 0.3 + Math.min(1, Math.log10(o.count + 1) / 2) * 0.3;
+      // Steep penalty for stale: near-zero at 30d, midpoint at 3d
+      const freshness = ageHours > 720 ? 0 : 1 / (1 + Math.pow(ageHours / 72, 3));
+      // Composite: freshness (50%) + avg relevance (30%) + log count (20%)
+      const score = freshness * 0.5 + avgRel * 0.3 + Math.min(1, Math.log10(o.count + 1) / 2) * 0.2;
       return { label, count: o.count, score };
     })
     .sort((a, b) => b.score - a.score);

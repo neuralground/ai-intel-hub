@@ -2180,12 +2180,19 @@ export default function App() {
 
           <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>RECENCY</div>
           <div style={{ padding: "0 8px" }}>
-            <input type="range" min="0" max="6" step="1" value={[0, 1, 3, 7, 14, 30, 0].indexOf(maxAgeDays) >= 0 ? [0, 1, 3, 7, 14, 30, 0].indexOf(maxAgeDays) : 0}
-              onChange={e => setMaxAgeDays([0, 1, 3, 7, 14, 30][parseInt(e.target.value)] || 0)}
-              style={{ width: "100%", accentColor: "var(--accent)" }} />
-            <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono, textAlign: "center" }}>
-              {maxAgeDays === 0 ? "All time" : maxAgeDays === 1 ? "Last 24h" : `Last ${maxAgeDays}d`}
-            </div>
+            {(() => {
+              // Stops from loosest (left) to tightest (right), matching relevance slider direction
+              const stops = [0, 30, 14, 7, 3, 1, 1/3]; // 0 = all time
+              const labels = ["All time", "30d", "14d", "7d", "3d", "24h", "8h"];
+              const idx = stops.indexOf(maxAgeDays);
+              const val = idx >= 0 ? idx : stops.length - 1;
+              return (<>
+                <input type="range" min="0" max={stops.length - 1} step="1" value={val}
+                  onChange={e => setMaxAgeDays(stops[parseInt(e.target.value)])}
+                  style={{ width: "100%", accentColor: "var(--accent)", direction: "ltr" }} />
+                <div style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono, textAlign: "center" }}>{labels[val]}</div>
+              </>);
+            })()}
           </div>
 
           {/* Organizations filter */}
@@ -2218,16 +2225,27 @@ export default function App() {
 
           {/* Sources filter */}
           {(() => {
+            // Compute per-source stats from actual items for accurate ranking
             const now = Date.now();
+            const sourceStats = {};
+            for (const item of allItems) {
+              const fid = item.feed_id;
+              if (!sourceStats[fid]) sourceStats[fid] = { count: 0, totalRel: 0, latestTs: 0 };
+              sourceStats[fid].count++;
+              sourceStats[fid].totalRel += item.relevance || 0;
+              const ts = new Date(item.published).getTime();
+              if (ts > sourceStats[fid].latestTs) sourceStats[fid].latestTs = ts;
+            }
             const sourceScore = (f) => {
-              const count = f.live_items || f.item_count || 0;
-              const avgRel = f.computed_avg_relevance || f.avg_relevance || 0;
-              const latestTs = f.latest_item ? new Date(f.latest_item).getTime() : 0;
-              const ageHours = latestTs ? (now - latestTs) / 3600000 : 999;
-              const freshness = 1 / (1 + Math.pow(ageHours / 168, 2)); // midpoint 7d
-              return freshness * 0.4 + avgRel * 0.3 + Math.min(1, Math.log10(count + 1) / 2) * 0.3;
+              const s = sourceStats[f.id];
+              if (!s) return 0;
+              const avgRel = s.count > 0 ? s.totalRel / s.count : 0;
+              const ageHours = s.latestTs ? (now - s.latestTs) / 3600000 : 9999;
+              // Steep penalty for stale sources: near-zero at 30d, midpoint at 3d
+              const freshness = ageHours > 720 ? 0 : 1 / (1 + Math.pow(ageHours / 72, 3));
+              return freshness * 0.5 + avgRel * 0.3 + Math.min(1, Math.log10(s.count + 1) / 2) * 0.2;
             };
-            const activeFeeds = feeds.filter(f => f.active && (f.item_count > 0 || f.live_items > 0))
+            const activeFeeds = feeds.filter(f => f.active && sourceStats[f.id]?.count > 0)
               .sort((a, b) => sourceScore(b) - sourceScore(a));
             if (activeFeeds.length === 0) return null;
             return (<>
