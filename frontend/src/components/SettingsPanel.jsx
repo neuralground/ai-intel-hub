@@ -153,11 +153,36 @@ function ConnectedServicesSection({ settings, onConnect, onDisconnect }) {
 
 // ── Organizations Manager (Settings sub-panel) ─────────────────────────────
 const ORG_TYPE_META = {
-  company: { label: "Companies", color: "#4F8EF7", icon: "C" },
-  lab: { label: "AI Labs", color: "#8B5CF6", icon: "L" },
-  university: { label: "Universities", color: "#10B981", icon: "U" },
-  other: { label: "Other", color: "#6B7280", icon: "O" },
+  company: { label: "Companies", color: "#4F8EF7" },
+  lab: { label: "AI Labs", color: "#8B5CF6" },
+  university: { label: "Universities", color: "#10B981" },
+  other: { label: "Other", color: "#6B7280" },
 };
+
+// Favicon helper: extracts domain from org URL and returns a Google favicon URL
+function orgFaviconUrl(org) {
+  if (!org.url) return null;
+  try {
+    const domain = new URL(org.url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+  } catch { return null; }
+}
+
+// Org icon component: shows favicon with fallback to colored initial
+function OrgIcon({ org, color, size = 30 }) {
+  const [imgError, setImgError] = useState(false);
+  const faviconUrl = orgFaviconUrl(org);
+
+  return (
+    <div style={{ width: size, height: size, borderRadius: 6, background: "var(--bg-input)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+      {faviconUrl && !imgError ? (
+        <img src={faviconUrl} width={size - 8} height={size - 8} alt="" onError={() => setImgError(true)} style={{ borderRadius: 2 }} />
+      ) : (
+        <span style={{ color, fontSize: size * 0.45, fontWeight: 700, fontFamily: mono }}>{org.label.charAt(0)}</span>
+      )}
+    </div>
+  );
+}
 
 const BUILTIN_IDS = new Set(["google","openai","anthropic","meta","microsoft","apple","amazon","nvidia","xai","mistral","cohere","huggingface","baidu","tencent","alibaba","bytedance","samsung","intel","ibm","salesforce","stanford","mit","cmu","berkeley","harvard","princeton","oxford","cambridge","eth","tsinghua","peking","toronto","mila","ai2"]);
 
@@ -165,6 +190,7 @@ function OrgManager({ orgs, onUpdate }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newType, setNewType] = useState("company");
+  const [newUrl, setNewUrl] = useState("");
   const [newAliases, setNewAliases] = useState("");
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -184,11 +210,12 @@ function OrgManager({ orgs, onUpdate }) {
     setAdding(true);
     const id = newLabel.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
     const aliases = newAliases.split(",").map(a => a.trim()).filter(Boolean);
+    const url = newUrl.trim() || undefined;
     try {
-      const r = await api.addOrg({ id, label: newLabel.trim(), type: newType, aliases });
+      const r = await api.addOrg({ id, label: newLabel.trim(), type: newType, url, aliases });
       if (r.added) {
         setLastAdded(newLabel.trim());
-        setNewLabel(""); setNewAliases(""); setShowAdd(false);
+        setNewLabel(""); setNewUrl(""); setNewAliases(""); setShowAdd(false);
         setConfirmRescan(true);
         onUpdate();
       }
@@ -199,6 +226,10 @@ function OrgManager({ orgs, onUpdate }) {
   const handleDelete = async (orgId) => {
     setConfirmDelete(null);
     try { await api.removeOrg(orgId); onUpdate(); } catch (e) { console.error(e); }
+  };
+
+  const handleToggleActive = async (orgId, active) => {
+    try { await api.updateOrg(orgId, { active }); onUpdate(); } catch (e) { console.error(e); }
   };
 
   const handleRescan = async () => {
@@ -244,6 +275,10 @@ function OrgManager({ orgs, onUpdate }) {
               {groupOrder.map(t => <option key={t} value={t}>{ORG_TYPE_META[t]?.label || t}</option>)}
             </select>
           </div>
+          <div style={{ marginBottom: 6 }}>
+            <label style={lbl}>WEBSITE URL (for logo)</label>
+            <input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="e.g. https://stability.ai" style={inp} />
+          </div>
           <div style={{ marginBottom: 8 }}>
             <label style={lbl}>ALIASES (comma-separated, optional)</label>
             <input value={newAliases} onChange={e => setNewAliases(e.target.value)} placeholder="e.g. Stability, SDXL Team" style={inp} />
@@ -272,12 +307,23 @@ function OrgManager({ orgs, onUpdate }) {
       {/* Delete confirmation */}
       {confirmDelete && (() => {
         const org = orgs.find(o => o.id === confirmDelete);
+        const isBuiltin = BUILTIN_IDS.has(confirmDelete);
         return (
           <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(239,68,68,0.06)", border: "1px solid #EF444440", borderRadius: 6 }}>
-            <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>Remove <strong>{org?.label}</strong>?</div>
-            <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>This organization will no longer be detected during scoring.</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>
+              {isBuiltin ? <>Deactivate <strong>{org?.label}</strong>?</> : <>Delete <strong>{org?.label}</strong>?</>}
+            </div>
+            <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>
+              {isBuiltin
+                ? "This is a built-in organization. It will be deactivated and hidden from scoring and filters, but can be reactivated later."
+                : "This will permanently remove the organization. It will no longer be detected during scoring. Existing affiliation tags on items will remain until the next rescore."}
+            </div>
             <div style={{ display: "flex", gap: 6 }}>
-              <button onClick={() => handleDelete(confirmDelete)} style={{ ...btnBase, background: "#EF4444", border: "none", color: "white" }}>Remove</button>
+              {isBuiltin ? (
+                <button onClick={() => { handleToggleActive(confirmDelete, false); setConfirmDelete(null); }} style={{ ...btnBase, background: "#F59E0B", border: "none", color: "white" }}>Deactivate</button>
+              ) : (
+                <button onClick={() => handleDelete(confirmDelete)} style={{ ...btnBase, background: "#EF4444", border: "none", color: "white" }}>Delete</button>
+              )}
               <button onClick={() => setConfirmDelete(null)} style={{ ...btnBase, background: "none", border: "1px solid var(--border)", color: "var(--text-muted)" }}>Cancel</button>
             </div>
           </div>
@@ -298,18 +344,20 @@ function OrgManager({ orgs, onUpdate }) {
                 <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono }}>{groups[type].length}</span>
               </button>
               {!isCollapsed && groups[type].map(o => (
-                <div key={o.id} style={{ padding: "8px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 4, display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 6, background: meta.color + "18", border: `1px solid ${meta.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <span style={{ color: meta.color, fontSize: 13, fontWeight: 700, fontFamily: mono }}>{o.label.charAt(0)}</span>
-                  </div>
+                <div key={o.id} style={{ padding: "8px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 4, display: "flex", alignItems: "center", gap: 10, opacity: o.active === false ? 0.5 : 1 }}>
+                  <OrgIcon org={o} color={meta.color} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ color: "var(--text-primary)", fontSize: 12, fontWeight: 500, fontFamily: sans }}>{o.label}</div>
                     {o.aliases?.length > 0 && <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.aliases.join(", ")}</div>}
                   </div>
-                  {!BUILTIN_IDS.has(o.id) && (
-                    <button onClick={() => setConfirmDelete(o.id)} title="Remove"
-                      style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-faint)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>Remove</button>
-                  )}
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <button onClick={() => handleToggleActive(o.id, !o.active)} title={o.active !== false ? "Deactivate" : "Activate"}
+                      style={{ padding: "3px 8px", background: "transparent", border: `1px solid ${o.active !== false ? "var(--border)" : "var(--accent)"}`, borderRadius: 4, color: o.active !== false ? "var(--text-faint)" : "var(--accent)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>
+                      {o.active !== false ? "On" : "Off"}
+                    </button>
+                    <button onClick={() => setConfirmDelete(o.id)} title="Delete organization"
+                      style={{ padding: "3px 6px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-faint)", fontSize: 11, cursor: "pointer", lineHeight: 1 }}>✕</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -344,22 +392,23 @@ function EmbeddingStatus() {
     api.saveSettings({ [envKey]: String(value) }).catch(console.error);
   };
 
-  if (!status || !settings) return null;
+  if (!status && !settings) return null;
+  const s = settings || { enabled: true, threshold: 0.82, windowDays: 7 };
 
   const hintStyle = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
   const label = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
 
   const sensitivityLabels = { 0.70: "Broad", 0.76: "Moderate", 0.82: "Default", 0.88: "Strict", 0.94: "Very strict" };
   const closestLabel = Object.entries(sensitivityLabels).reduce((best, [k, v]) =>
-    Math.abs(k - settings.threshold) < Math.abs(best[0] - settings.threshold) ? [k, v] : best, [0.82, "Default"])[1];
+    Math.abs(k - s.threshold) < Math.abs(best[0] - s.threshold) ? [k, v] : best, [0.82, "Default"])[1];
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600 }}>Deduplication</div>
         <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-          <span style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>{settings.enabled ? "On" : "Off"}</span>
-          <input type="checkbox" checked={settings.enabled} onChange={e => saveSetting("enabled", e.target.checked)}
+          <span style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>{s.enabled ? "On" : "Off"}</span>
+          <input type="checkbox" checked={s.enabled} onChange={e => saveSetting("enabled", e.target.checked)}
             style={{ accentColor: "var(--accent)", width: 14, height: 14, cursor: "pointer" }} />
         </label>
       </div>
@@ -369,25 +418,26 @@ function EmbeddingStatus() {
       <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--bg-elevated)", borderRadius: 5, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{
           width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-          background: status.ready ? "#10B981" : status.loading ? "var(--accent)" : status.error ? "#EF4444" : "var(--text-faint)",
-          animation: status.loading ? "pulse 1.5s infinite" : "none",
+          background: !status ? "var(--text-faint)" : status.ready ? "#10B981" : status.loading ? "var(--accent)" : status.error ? "#EF4444" : "var(--text-faint)",
+          animation: (!status || status.loading) ? "pulse 1.5s infinite" : "none",
         }} />
         <span style={{ color: "var(--text-secondary)", fontSize: 10, fontFamily: mono }}>
-          {status.ready ? "Model ready"
-            : status.loading ? `Downloading model${status.progress?.progress ? ` (${status.progress.progress}%)` : "..."}`
-            : status.error ? "Model failed"
-            : "Initializing..."}
+          {!status ? "Checking embedding model..."
+            : status.ready ? "Embedding model ready"
+            : status.loading ? `Downloading embedding model${status.progress?.progress ? ` (${status.progress.progress}%)` : "..."}`
+            : status.error ? "Embedding model failed to load"
+            : "Initializing embedding model..."}
         </span>
-        {status.error && <span style={{ color: "#EF4444", fontSize: 9, fontFamily: mono }}>{status.error}</span>}
+        {status?.error && <span style={{ color: "#EF4444", fontSize: 9, fontFamily: mono, marginLeft: 4 }}>{status.error}</span>}
       </div>
 
       {/* Controls — only show when enabled */}
-      {settings.enabled && (
+      {s.enabled && (
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
           <div>
             <label style={label}>SENSITIVITY — {closestLabel}</label>
             <div style={{ padding: "0 4px" }}>
-              <input type="range" min="0.70" max="0.94" step="0.02" value={settings.threshold}
+              <input type="range" min="0.70" max="0.94" step="0.02" value={s.threshold}
                 onChange={e => saveSetting("threshold", parseFloat(e.target.value))}
                 style={{ width: "100%", accentColor: "var(--accent)" }} />
               <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-faint)", fontSize: 8, fontFamily: mono }}>
@@ -401,9 +451,9 @@ function EmbeddingStatus() {
               {[3, 7, 14, 30].map(d => (
                 <button key={d} onClick={() => saveSetting("windowDays", d)} style={{
                   padding: "3px 10px", borderRadius: 4, fontSize: 10, fontFamily: mono, cursor: "pointer",
-                  background: settings.windowDays === d ? "var(--accent-bg)" : "var(--bg-input)",
-                  border: `1px solid ${settings.windowDays === d ? "var(--accent)" : "var(--border)"}`,
-                  color: settings.windowDays === d ? "var(--accent)" : "var(--text-muted)", fontWeight: settings.windowDays === d ? 600 : 400,
+                  background: s.windowDays === d ? "var(--accent-bg)" : "var(--bg-input)",
+                  border: `1px solid ${s.windowDays === d ? "var(--accent)" : "var(--border)"}`,
+                  color: s.windowDays === d ? "var(--accent)" : "var(--text-muted)", fontWeight: s.windowDays === d ? 600 : 400,
                 }}>{d}d</button>
               ))}
             </div>
@@ -546,6 +596,25 @@ function AdvancedSection() {
   );
 }
 
+// ── Collapsible Section Wrapper ──────────────────────────────────────────────
+function SettingsSection({ title, subtitle, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+      <button onClick={() => setOpen(!open)} style={{
+        display: "flex", alignItems: "center", gap: 8, width: "100%",
+        background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left",
+      }}>
+        <span style={{ color: "var(--text-primary)", fontSize: 13, fontFamily: mono, fontWeight: 600 }}>
+          {open ? "▾" : "▸"} {title}
+        </span>
+        {subtitle && <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono, fontWeight: 400 }}>{subtitle}</span>}
+      </button>
+      {open && <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 18 }}>{children}</div>}
+    </div>
+  );
+}
+
 // ── Settings Panel ──────────────────────────────────────────────────────────
 function SettingsPanel({ onClose, themeMode, setThemeMode }) {
   const [settings, setSettings] = useState(null);
@@ -562,6 +631,8 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
       setForm({
         llmProvider: s.llmProvider || "anthropic",
         llmModel: s.llmModel || "",
+        analysisProvider: s.analysisProvider || "",
+        analysisModel: s.analysisModel || "",
         anthropicKey: "",
         openaiKey: "",
         geminiKey: "",
@@ -570,8 +641,8 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
         scoringInstructions: s.scoringInstructions || "",
         refreshInterval: s.refreshInterval || "30",
       });
-      // If Ollama is selected, fetch models
-      if ((s.llmProvider || "anthropic") === "ollama") {
+      // If Ollama is selected for either role, fetch models
+      if ((s.llmProvider || "anthropic") === "ollama" || s.analysisProvider === "ollama") {
         fetchOllamaModels();
       }
     }).catch(console.error);
@@ -595,11 +666,23 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
     if (providerId === "ollama") fetchOllamaModels();
   };
 
+  const handleAnalysisProviderChange = (providerId) => {
+    const provider = LLM_PROVIDERS.find(p => p.id === providerId);
+    setForm(f => ({
+      ...f,
+      analysisProvider: providerId,
+      analysisModel: provider?.models?.[0] || "",
+    }));
+    if (providerId === "ollama") fetchOllamaModels();
+  };
+
   const handleSave = async () => {
     setSaving(true);
     const updates = {};
-    if (form.llmProvider !== (settings?.llmProvider || "anthropic")) updates.LLM_PROVIDER = form.llmProvider;
+    updates.LLM_PROVIDER = form.llmProvider;
     if (form.llmModel) updates.LLM_MODEL = form.llmModel;
+    updates.LLM_ANALYSIS_PROVIDER = form.analysisProvider || "";
+    updates.LLM_ANALYSIS_MODEL = form.analysisModel || "";
     if (form.anthropicKey) updates.ANTHROPIC_API_KEY = form.anthropicKey;
     if (form.openaiKey) updates.OPENAI_API_KEY = form.openaiKey;
     if (form.geminiKey) updates.GEMINI_API_KEY = form.geminiKey;
@@ -647,7 +730,8 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
       </div>
 
       <div style={{ flex: 1, overflow: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 18 }}>
-        {/* Your Role */}
+
+        {/* ── Section 1: Profile (always open) ── */}
         <div>
           <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>Your Role</div>
           <label style={label}>RELEVANCE CONTEXT</label>
@@ -655,7 +739,6 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
           <div style={hint}>This tells the LLM who you are so it can score items for your specific needs. Be specific about your role, industry, and focus areas.</div>
         </div>
 
-        {/* Scoring Instructions */}
         <div>
           <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>Scoring Instructions</div>
           <label style={label}>PRIORITIZATION & FILTERING</label>
@@ -663,127 +746,191 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
           <div style={hint}>Additional instructions for how items should be scored, filtered, or recommended. These are appended to the scoring prompt.</div>
         </div>
 
-        {/* LLM Provider */}
-        <div>
-          <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 10 }}>LLM Provider</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 14 }}>
-            {LLM_PROVIDERS.map(p => {
-              const selected = form.llmProvider === p.id;
-              const hasKey = p.id === "anthropic" ? settings.hasApiKey
-                : p.id === "openai" ? settings.hasOpenaiKey
-                : p.id === "gemini" ? settings.hasGeminiKey
-                : p.id === "ollama";
-              return (
-                <button key={p.id} onClick={() => handleProviderChange(p.id)} style={{
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-                  padding: "12px 8px", borderRadius: 8, cursor: "pointer",
-                  background: selected ? "var(--accent-bg)" : "var(--bg-input)",
-                  border: selected ? "2px solid var(--accent)" : "2px solid var(--border)",
-                  transition: "all 0.15s ease",
-                }}>
-                  <p.logo size={28} color={selected ? "var(--accent)" : "var(--text-muted)"} />
-                  <span style={{ fontSize: 10, fontFamily: mono, fontWeight: 600, color: selected ? "var(--accent)" : "var(--text-muted)" }}>{p.name}</span>
-                  {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981" }} />}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Model selector */}
-          {(() => {
-            const provider = LLM_PROVIDERS.find(p => p.id === form.llmProvider);
-            if (!provider) return null;
-            const models = form.llmProvider === "ollama" ? ollamaModels : provider.models;
-            return (
-              <div style={{ marginBottom: 12 }}>
-                <label style={label}>MODEL</label>
-                {models.length > 0 ? (
-                  <select value={form.llmModel} onChange={e => setForm(f => ({ ...f, llmModel: e.target.value }))}
-                    style={{ ...inp, cursor: "pointer", appearance: "auto" }}>
-                    {models.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                ) : (
-                  <input value={form.llmModel} onChange={e => setForm(f => ({ ...f, llmModel: e.target.value }))}
-                    placeholder={form.llmProvider === "ollama" ? "e.g. llama3.2, mistral, gemma2" : "model name"}
-                    style={inp} />
-                )}
-                {form.llmProvider === "ollama" && ollamaError && (
-                  <div style={{ ...hint, color: "#EF4444" }}>Could not reach Ollama: {ollamaError}</div>
-                )}
-                {form.llmProvider === "ollama" && !ollamaError && ollamaModels.length > 0 && (
-                  <div style={{ ...hint, color: "#10B981" }}>{ollamaModels.length} model{ollamaModels.length !== 1 ? "s" : ""} available locally</div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Provider-specific auth */}
-          {(() => {
-            const provider = LLM_PROVIDERS.find(p => p.id === form.llmProvider);
-            if (!provider) return null;
-
-            if (provider.authType === "apiKey") {
-              const formKey = form.llmProvider === "anthropic" ? "anthropicKey"
-                : form.llmProvider === "openai" ? "openaiKey" : "geminiKey";
-              const hasKey = form.llmProvider === "anthropic" ? settings.hasApiKey
-                : form.llmProvider === "openai" ? settings.hasOpenaiKey : settings.hasGeminiKey;
-              const maskedKey = form.llmProvider === "anthropic" ? settings.anthropicApiKey
-                : form.llmProvider === "openai" ? settings.openaiApiKey : settings.geminiApiKey;
-              return (
-                <div>
-                  <label style={label}>API KEY {hasKey && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
-                  <input type="password" value={form[formKey]}
-                    onChange={e => setForm(f => ({ ...f, [formKey]: e.target.value }))}
-                    placeholder={hasKey ? maskedKey : provider.keyPlaceholder} style={inp} />
-                  <div style={hint}>Leave blank to keep current key.</div>
-                </div>
-              );
-            }
-
-            if (provider.authType === "local") {
-              return (
-                <div>
-                  <label style={label}>OLLAMA SERVER URL</label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input value={form.ollamaUrl}
-                      onChange={e => setForm(f => ({ ...f, ollamaUrl: e.target.value }))}
-                      placeholder="http://localhost:11434" style={{ ...inp, flex: 1 }} />
-                    <button onClick={fetchOllamaModels} style={{
-                      padding: "8px 14px", background: "var(--bg-input)", border: "1px solid var(--border)",
-                      borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontFamily: mono, cursor: "pointer",
-                    }}>Test</button>
-                  </div>
-                  <div style={hint}>Ollama runs locally — no API key needed. Install from ollama.com.</div>
-                </div>
-              );
-            }
-            return null;
-          })()}
-        </div>
-
-        {/* Refresh Interval */}
-        <div>
-          <label style={label}>SOURCE REFRESH INTERVAL (MINUTES)</label>
-          <input type="number" min="5" max="1440" value={form.refreshInterval} onChange={e => setForm(f => ({ ...f, refreshInterval: e.target.value }))} style={{ ...inp, width: 120 }} />
-        </div>
-
-        {/* Theme */}
         <div>
           <label style={label}>THEME</label>
           <ThemeToggle mode={themeMode} setMode={setThemeMode} />
         </div>
 
-        {/* Organizations */}
-        <OrgManager orgs={orgs} onUpdate={() => api.getOrgs().then(setOrgs).catch(console.error)} />
+        {/* ── Section 2: AI Engine (collapsible) ── */}
+        <SettingsSection title="AI Engine" subtitle="LLM, deduplication, refresh">
 
-        {/* Connected Services */}
-        <ConnectedServicesSection settings={settings} onConnect={handleServiceConnect} onDisconnect={handleServiceDisconnect} />
+          {/* ── Scoring Model ── */}
+          <div>
+            <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 4 }}>Scoring Model</div>
+            <div style={hint}>Used for scoring items, extracting affiliations, and feed health analysis.</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 10, marginBottom: 14 }}>
+              {LLM_PROVIDERS.map(p => {
+                const selected = form.llmProvider === p.id;
+                const hasKey = p.id === "anthropic" ? settings.hasApiKey
+                  : p.id === "openai" ? settings.hasOpenaiKey
+                  : p.id === "gemini" ? settings.hasGeminiKey
+                  : p.id === "ollama";
+                return (
+                  <button key={p.id} onClick={() => handleProviderChange(p.id)} style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                    padding: "12px 8px", borderRadius: 8, cursor: "pointer",
+                    background: selected ? "var(--accent-bg)" : "var(--bg-input)",
+                    border: selected ? "2px solid var(--accent)" : "2px solid var(--border)",
+                    transition: "all 0.15s ease",
+                  }}>
+                    <p.logo size={28} color={selected ? "var(--accent)" : "var(--text-muted)"} />
+                    <span style={{ fontSize: 10, fontFamily: mono, fontWeight: 600, color: selected ? "var(--accent)" : "var(--text-muted)" }}>{p.name}</span>
+                    {hasKey && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981" }} />}
+                  </button>
+                );
+              })}
+            </div>
 
-        {/* Deduplication */}
-        <EmbeddingStatus />
+            {/* Model selector */}
+            {(() => {
+              const provider = LLM_PROVIDERS.find(p => p.id === form.llmProvider);
+              if (!provider) return null;
+              const models = form.llmProvider === "ollama" ? ollamaModels : provider.models;
+              return (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={label}>MODEL</label>
+                  {models.length > 0 ? (
+                    <select value={form.llmModel} onChange={e => setForm(f => ({ ...f, llmModel: e.target.value }))}
+                      style={{ ...inp, cursor: "pointer", appearance: "auto" }}>
+                      {models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.llmModel} onChange={e => setForm(f => ({ ...f, llmModel: e.target.value }))}
+                      placeholder={form.llmProvider === "ollama" ? "e.g. llama3.2, mistral, gemma2" : "model name"}
+                      style={inp} />
+                  )}
+                  {form.llmProvider === "ollama" && ollamaError && (
+                    <div style={{ ...hint, color: "#EF4444" }}>Could not reach Ollama: {ollamaError}</div>
+                  )}
+                  {form.llmProvider === "ollama" && !ollamaError && ollamaModels.length > 0 && (
+                    <div style={{ ...hint, color: "#10B981" }}>{ollamaModels.length} model{ollamaModels.length !== 1 ? "s" : ""} available locally</div>
+                  )}
+                </div>
+              );
+            })()}
 
-        {/* Advanced */}
-        <AdvancedSection />
+            {/* Provider-specific auth — shown for whichever providers are in use */}
+            {(() => {
+              // Collect unique providers that need auth shown
+              const activeProviderIds = new Set([form.llmProvider]);
+              if (form.analysisProvider && form.analysisProvider !== form.llmProvider) activeProviderIds.add(form.analysisProvider);
+              const authSections = [];
+
+              for (const pid of activeProviderIds) {
+                const provider = LLM_PROVIDERS.find(p => p.id === pid);
+                if (!provider) continue;
+
+                if (provider.authType === "apiKey") {
+                  const formKey = pid === "anthropic" ? "anthropicKey" : pid === "openai" ? "openaiKey" : "geminiKey";
+                  const hasKey = pid === "anthropic" ? settings.hasApiKey : pid === "openai" ? settings.hasOpenaiKey : settings.hasGeminiKey;
+                  const maskedKey = pid === "anthropic" ? settings.anthropicApiKey : pid === "openai" ? settings.openaiApiKey : settings.geminiApiKey;
+                  authSections.push(
+                    <div key={pid}>
+                      <label style={label}>{provider.name.toUpperCase()} API KEY {hasKey && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
+                      <input type="password" value={form[formKey]}
+                        onChange={e => setForm(f => ({ ...f, [formKey]: e.target.value }))}
+                        placeholder={hasKey ? maskedKey : provider.keyPlaceholder} style={inp} />
+                      <div style={hint}>Leave blank to keep current key.</div>
+                    </div>
+                  );
+                }
+
+                if (provider.authType === "local") {
+                  authSections.push(
+                    <div key={pid}>
+                      <label style={label}>OLLAMA SERVER URL</label>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input value={form.ollamaUrl}
+                          onChange={e => setForm(f => ({ ...f, ollamaUrl: e.target.value }))}
+                          placeholder="http://localhost:11434" style={{ ...inp, flex: 1 }} />
+                        <button onClick={fetchOllamaModels} style={{
+                          padding: "8px 14px", background: "var(--bg-input)", border: "1px solid var(--border)",
+                          borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontFamily: mono, cursor: "pointer",
+                        }}>Test</button>
+                      </div>
+                      <div style={hint}>Ollama runs locally — no API key needed. Install from ollama.com.</div>
+                    </div>
+                  );
+                }
+              }
+              return authSections.length > 0 ? <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{authSections}</div> : null;
+            })()}
+          </div>
+
+          {/* ── Analysis Model ── */}
+          <div>
+            <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600, marginBottom: 4 }}>Analysis Model</div>
+            <div style={hint}>Used for Intel Brief and Coverage Analysis. Defaults to the scoring model when set to "Same".</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8, marginTop: 10, marginBottom: 14 }}>
+              {/* "Same as scoring" option */}
+              <button onClick={() => setForm(f => ({ ...f, analysisProvider: "", analysisModel: "" }))} style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                padding: "12px 8px", borderRadius: 8, cursor: "pointer",
+                background: !form.analysisProvider ? "var(--accent-bg)" : "var(--bg-input)",
+                border: !form.analysisProvider ? "2px solid var(--accent)" : "2px solid var(--border)",
+                transition: "all 0.15s ease",
+              }}>
+                <span style={{ fontSize: 18, lineHeight: 1 }}>=</span>
+                <span style={{ fontSize: 10, fontFamily: mono, fontWeight: 600, color: !form.analysisProvider ? "var(--accent)" : "var(--text-muted)" }}>Same</span>
+              </button>
+              {LLM_PROVIDERS.map(p => {
+                const selected = form.analysisProvider === p.id;
+                return (
+                  <button key={p.id} onClick={() => handleAnalysisProviderChange(p.id)} style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                    padding: "12px 8px", borderRadius: 8, cursor: "pointer",
+                    background: selected ? "var(--accent-bg)" : "var(--bg-input)",
+                    border: selected ? "2px solid var(--accent)" : "2px solid var(--border)",
+                    transition: "all 0.15s ease",
+                  }}>
+                    <p.logo size={28} color={selected ? "var(--accent)" : "var(--text-muted)"} />
+                    <span style={{ fontSize: 10, fontFamily: mono, fontWeight: 600, color: selected ? "var(--accent)" : "var(--text-muted)" }}>{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Analysis model selector — only when a separate provider is chosen */}
+            {form.analysisProvider && (() => {
+              const provider = LLM_PROVIDERS.find(p => p.id === form.analysisProvider);
+              if (!provider) return null;
+              const models = form.analysisProvider === "ollama" ? ollamaModels : provider.models;
+              return (
+                <div>
+                  <label style={label}>MODEL</label>
+                  {models.length > 0 ? (
+                    <select value={form.analysisModel} onChange={e => setForm(f => ({ ...f, analysisModel: e.target.value }))}
+                      style={{ ...inp, cursor: "pointer", appearance: "auto" }}>
+                      {models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.analysisModel} onChange={e => setForm(f => ({ ...f, analysisModel: e.target.value }))}
+                      placeholder={form.analysisProvider === "ollama" ? "e.g. llama3.2, mistral, gemma2" : "model name"}
+                      style={inp} />
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          <EmbeddingStatus />
+
+          <div>
+            <label style={label}>SOURCE REFRESH INTERVAL (MINUTES)</label>
+            <input type="number" min="5" max="1440" value={form.refreshInterval} onChange={e => setForm(f => ({ ...f, refreshInterval: e.target.value }))} style={{ ...inp, width: 120 }} />
+          </div>
+        </SettingsSection>
+
+        {/* ── Section 3: Organizations (collapsible) ── */}
+        <SettingsSection title="Organizations" subtitle="tracked entities">
+          <OrgManager orgs={orgs} onUpdate={() => api.getOrgs().then(setOrgs).catch(console.error)} />
+        </SettingsSection>
+
+        {/* ── Section 4: Connections (collapsible) ── */}
+        <SettingsSection title="Connections" subtitle="services and tools">
+          <ConnectedServicesSection settings={settings} onConnect={handleServiceConnect} onDisconnect={handleServiceDisconnect} />
+          <AdvancedSection />
+        </SettingsSection>
       </div>
 
       {/* Save bar */}

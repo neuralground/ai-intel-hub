@@ -68,6 +68,7 @@ export const api = {
   getOrgs: () => request("/orgs"),
   getOrgAffiliations: () => request("/orgs/affiliations"),
   addOrg: (org) => request("/orgs", { method: "POST", body: JSON.stringify(org) }),
+  updateOrg: (id, data) => request(`/orgs/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   removeOrg: (id) => request(`/orgs/${id}`, { method: "DELETE" }),
 
   // Settings

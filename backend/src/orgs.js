@@ -11,41 +11,41 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const BUILTIN_ORGS = [
   // AI labs & big tech
-  { id: "google", label: "Google", type: "company", aliases: ["Google DeepMind", "DeepMind", "Google Brain", "Google Research"] },
-  { id: "openai", label: "OpenAI", type: "lab", aliases: [] },
-  { id: "anthropic", label: "Anthropic", type: "lab", aliases: [] },
-  { id: "meta", label: "Meta", type: "company", aliases: ["Meta AI", "Facebook AI", "FAIR"] },
-  { id: "microsoft", label: "Microsoft", type: "company", aliases: ["Microsoft Research", "MSR"] },
-  { id: "apple", label: "Apple", type: "company", aliases: ["Apple MLR"] },
-  { id: "amazon", label: "Amazon", type: "company", aliases: ["AWS", "AWS AI", "Amazon Science"] },
-  { id: "nvidia", label: "NVIDIA", type: "company", aliases: ["Nvidia Research"] },
-  { id: "xai", label: "xAI", type: "lab", aliases: [] },
-  { id: "mistral", label: "Mistral", type: "lab", aliases: ["Mistral AI"] },
-  { id: "cohere", label: "Cohere", type: "lab", aliases: [] },
-  { id: "huggingface", label: "Hugging Face", type: "lab", aliases: ["HuggingFace"] },
-  { id: "baidu", label: "Baidu", type: "company", aliases: ["ERNIE", "Baidu Research"] },
-  { id: "tencent", label: "Tencent", type: "company", aliases: ["Tencent AI Lab"] },
-  { id: "alibaba", label: "Alibaba", type: "company", aliases: ["DAMO Academy", "Alibaba Cloud"] },
-  { id: "bytedance", label: "ByteDance", type: "company", aliases: [] },
-  { id: "samsung", label: "Samsung", type: "company", aliases: ["Samsung AI"] },
-  { id: "intel", label: "Intel", type: "company", aliases: ["Intel Labs"] },
-  { id: "ibm", label: "IBM", type: "company", aliases: ["IBM Research"] },
-  { id: "salesforce", label: "Salesforce", type: "company", aliases: ["Salesforce AI Research"] },
+  { id: "google", label: "Google", type: "company", url: "https://google.com", aliases: ["Google DeepMind", "DeepMind", "Google Brain", "Google Research"] },
+  { id: "openai", label: "OpenAI", type: "lab", url: "https://openai.com", aliases: [] },
+  { id: "anthropic", label: "Anthropic", type: "lab", url: "https://anthropic.com", aliases: [] },
+  { id: "meta", label: "Meta", type: "company", url: "https://meta.com", aliases: ["Meta AI", "Facebook AI", "FAIR"] },
+  { id: "microsoft", label: "Microsoft", type: "company", url: "https://microsoft.com", aliases: ["Microsoft Research", "MSR"] },
+  { id: "apple", label: "Apple", type: "company", url: "https://apple.com", aliases: ["Apple MLR"] },
+  { id: "amazon", label: "Amazon", type: "company", url: "https://amazon.com", aliases: ["AWS", "AWS AI", "Amazon Science"] },
+  { id: "nvidia", label: "NVIDIA", type: "company", url: "https://nvidia.com", aliases: ["Nvidia Research"] },
+  { id: "xai", label: "xAI", type: "lab", url: "https://x.ai", aliases: [] },
+  { id: "mistral", label: "Mistral", type: "lab", url: "https://mistral.ai", aliases: ["Mistral AI"] },
+  { id: "cohere", label: "Cohere", type: "lab", url: "https://cohere.com", aliases: [] },
+  { id: "huggingface", label: "Hugging Face", type: "lab", url: "https://huggingface.co", aliases: ["HuggingFace"] },
+  { id: "baidu", label: "Baidu", type: "company", url: "https://baidu.com", aliases: ["ERNIE", "Baidu Research"] },
+  { id: "tencent", label: "Tencent", type: "company", url: "https://tencent.com", aliases: ["Tencent AI Lab"] },
+  { id: "alibaba", label: "Alibaba", type: "company", url: "https://alibaba.com", aliases: ["DAMO Academy", "Alibaba Cloud"] },
+  { id: "bytedance", label: "ByteDance", type: "company", url: "https://bytedance.com", aliases: [] },
+  { id: "samsung", label: "Samsung", type: "company", url: "https://samsung.com", aliases: ["Samsung AI"] },
+  { id: "intel", label: "Intel", type: "company", url: "https://intel.com", aliases: ["Intel Labs"] },
+  { id: "ibm", label: "IBM", type: "company", url: "https://ibm.com", aliases: ["IBM Research"] },
+  { id: "salesforce", label: "Salesforce", type: "company", url: "https://salesforce.com", aliases: ["Salesforce AI Research"] },
   // Top universities
-  { id: "stanford", label: "Stanford", type: "university", aliases: ["Stanford University", "Stanford HAI"] },
-  { id: "mit", label: "MIT", type: "university", aliases: ["Massachusetts Institute of Technology", "MIT CSAIL"] },
-  { id: "cmu", label: "CMU", type: "university", aliases: ["Carnegie Mellon", "Carnegie Mellon University"] },
-  { id: "berkeley", label: "Berkeley", type: "university", aliases: ["UC Berkeley", "University of California Berkeley", "BAIR"] },
-  { id: "harvard", label: "Harvard", type: "university", aliases: ["Harvard University"] },
-  { id: "princeton", label: "Princeton", type: "university", aliases: ["Princeton University"] },
-  { id: "oxford", label: "Oxford", type: "university", aliases: ["University of Oxford"] },
-  { id: "cambridge", label: "Cambridge", type: "university", aliases: ["University of Cambridge"] },
-  { id: "eth", label: "ETH", type: "university", aliases: ["ETH Zürich", "ETH Zurich"] },
-  { id: "tsinghua", label: "Tsinghua", type: "university", aliases: ["Tsinghua University"] },
-  { id: "peking", label: "Peking U", type: "university", aliases: ["Peking University"] },
-  { id: "toronto", label: "U Toronto", type: "university", aliases: ["University of Toronto"] },
-  { id: "mila", label: "Mila", type: "university", aliases: ["Montreal", "Montréal", "MILA", "Université de Montréal"] },
-  { id: "ai2", label: "AI2", type: "lab", aliases: ["Allen Institute", "Allen Institute for AI"] },
+  { id: "stanford", label: "Stanford", type: "university", url: "https://stanford.edu", aliases: ["Stanford University", "Stanford HAI"] },
+  { id: "mit", label: "MIT", type: "university", url: "https://mit.edu", aliases: ["Massachusetts Institute of Technology", "MIT CSAIL"] },
+  { id: "cmu", label: "CMU", type: "university", url: "https://cmu.edu", aliases: ["Carnegie Mellon", "Carnegie Mellon University"] },
+  { id: "berkeley", label: "Berkeley", type: "university", url: "https://berkeley.edu", aliases: ["UC Berkeley", "University of California Berkeley", "BAIR"] },
+  { id: "harvard", label: "Harvard", type: "university", url: "https://harvard.edu", aliases: ["Harvard University"] },
+  { id: "princeton", label: "Princeton", type: "university", url: "https://princeton.edu", aliases: ["Princeton University"] },
+  { id: "oxford", label: "Oxford", type: "university", url: "https://ox.ac.uk", aliases: ["University of Oxford"] },
+  { id: "cambridge", label: "Cambridge", type: "university", url: "https://cam.ac.uk", aliases: ["University of Cambridge"] },
+  { id: "eth", label: "ETH", type: "university", url: "https://ethz.ch", aliases: ["ETH Zürich", "ETH Zurich"] },
+  { id: "tsinghua", label: "Tsinghua", type: "university", url: "https://tsinghua.edu.cn", aliases: ["Tsinghua University"] },
+  { id: "peking", label: "Peking U", type: "university", url: "https://pku.edu.cn", aliases: ["Peking University"] },
+  { id: "toronto", label: "U Toronto", type: "university", url: "https://utoronto.ca", aliases: ["University of Toronto"] },
+  { id: "mila", label: "Mila", type: "university", url: "https://mila.quebec", aliases: ["Montreal", "Montréal", "MILA", "Université de Montréal"] },
+  { id: "ai2", label: "AI2", type: "lab", url: "https://allenai.org", aliases: ["Allen Institute", "Allen Institute for AI"] },
 ];
 
 // Map feed IDs to their org affiliation (for direct-source feeds)
@@ -90,11 +90,37 @@ function saveUserOrgs(orgs) {
   fs.writeFileSync(file, JSON.stringify(s, null, 2));
 }
 
-// Merged list: builtins + user-added
+function loadDeactivatedOrgs() {
+  try {
+    const s = JSON.parse(fs.readFileSync(getSettingsFile(), "utf-8"));
+    return new Set(s.DEACTIVATED_ORGS || []);
+  } catch { return new Set(); }
+}
+
+function saveDeactivatedOrgs(ids) {
+  const file = getSettingsFile();
+  let s = {};
+  try { s = JSON.parse(fs.readFileSync(file, "utf-8")); } catch { /* */ }
+  s.DEACTIVATED_ORGS = [...ids];
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(s, null, 2));
+}
+
+// Merged list: builtins + user-added, with active flag
 export function getOrgs() {
   const userOrgs = loadUserOrgs();
+  const deactivated = loadDeactivatedOrgs();
   const builtinIds = new Set(BUILTIN_ORGS.map(o => o.id));
-  return [...BUILTIN_ORGS, ...userOrgs.filter(o => !builtinIds.has(o.id))];
+  const all = [...BUILTIN_ORGS, ...userOrgs.filter(o => !builtinIds.has(o.id))];
+  return all.map(o => ({ ...o, active: !deactivated.has(o.id) }));
+}
+
+export function setOrgActive(id, active) {
+  const deactivated = loadDeactivatedOrgs();
+  if (active) deactivated.delete(id);
+  else deactivated.add(id);
+  saveDeactivatedOrgs(deactivated);
+  return { ok: true };
 }
 
 export function getOrgById(id) {
@@ -102,7 +128,7 @@ export function getOrgById(id) {
 }
 
 export function getOrgLabels() {
-  return getOrgs().map(o => o.label);
+  return getOrgs().filter(o => o.active).map(o => o.label);
 }
 
 export function addOrg(org) {
@@ -134,5 +160,5 @@ export function getFeedOrg(feedId) {
 
 // Build the list of all org names/aliases for LLM prompt
 export function getOrgNamesForPrompt() {
-  return getOrgs().map(o => o.label + (o.aliases.length ? ` (also: ${o.aliases.join(", ")})` : "")).join("\n");
+  return getOrgs().filter(o => o.active).map(o => o.label + (o.aliases.length ? ` (also: ${o.aliases.join(", ")})` : "")).join("\n");
 }

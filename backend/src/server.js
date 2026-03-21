@@ -14,7 +14,7 @@ import {
 } from "./db.js";
 import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
 import { scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
-import { getOrgs, addOrg, removeOrg } from "./orgs.js";
+import { getOrgs, addOrg, removeOrg, setOrgActive } from "./orgs.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 import { detectSourceType } from "./source-types.js";
 import { initEmbeddings, getModelStatus, embedItems, clusterByEmbedding, isReady as embeddingsReady } from "./embeddings.js";
@@ -77,6 +77,15 @@ app.post("/api/orgs", (req, res) => {
   if (!id || !label) return res.status(400).json({ error: "id and label are required" });
   const result = addOrg({ id, label, type: type || "other", aliases: aliases || [] });
   res.json(result);
+});
+
+app.put("/api/orgs/:id", (req, res) => {
+  const { active } = req.body;
+  if (active !== undefined) {
+    const result = setOrgActive(req.params.id, !!active);
+    return res.json(result);
+  }
+  res.status(400).json({ error: "No valid fields to update" });
 });
 
 app.delete("/api/orgs/:id", (req, res) => {
@@ -472,6 +481,8 @@ cron.schedule("0 3 * * *", () => {
 const SETTINGS_KEYS = [
   "LLM_PROVIDER",
   "LLM_MODEL",
+  "LLM_ANALYSIS_PROVIDER",
+  "LLM_ANALYSIS_MODEL",
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "GEMINI_API_KEY",
@@ -543,6 +554,8 @@ app.get("/api/settings", (req, res) => {
   res.json({
     llmProvider: saved.LLM_PROVIDER || process.env.LLM_PROVIDER || "anthropic",
     llmModel: saved.LLM_MODEL || process.env.LLM_MODEL || "",
+    analysisProvider: saved.LLM_ANALYSIS_PROVIDER || process.env.LLM_ANALYSIS_PROVIDER || "",
+    analysisModel: saved.LLM_ANALYSIS_MODEL || process.env.LLM_ANALYSIS_MODEL || "",
     anthropicApiKey: maskKey(saved.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY || ""),
     hasApiKey: !!(saved.ANTHROPIC_API_KEY || (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here")),
     openaiApiKey: maskKey(saved.OPENAI_API_KEY || process.env.OPENAI_API_KEY || ""),

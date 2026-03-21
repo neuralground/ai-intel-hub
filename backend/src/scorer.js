@@ -19,6 +19,14 @@ function getModel() {
   return process.env.LLM_MODEL || DEFAULT_MODELS[getProvider()] || DEFAULT_MODELS.anthropic;
 }
 
+function getAnalysisProvider() {
+  return process.env.LLM_ANALYSIS_PROVIDER || getProvider();
+}
+
+function getAnalysisModel() {
+  return process.env.LLM_ANALYSIS_MODEL || DEFAULT_MODELS[getAnalysisProvider()] || getModel();
+}
+
 function getRelevanceContext() {
   return (
     process.env.RELEVANCE_CONTEXT ||
@@ -32,7 +40,7 @@ function getScoringInstructions() {
 
 // ── Provider-specific API calls ─────────────────────────────────────────────
 
-async function callAnthropic(systemPrompt, userMessage, maxTokens) {
+async function callAnthropic(systemPrompt, userMessage, maxTokens, modelOverride) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey === "sk-ant-your-key-here") {
     throw new Error("ANTHROPIC_API_KEY not configured");
@@ -46,7 +54,7 @@ async function callAnthropic(systemPrompt, userMessage, maxTokens) {
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: getModel(),
+      model: modelOverride || getModel(),
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
@@ -61,7 +69,7 @@ async function callAnthropic(systemPrompt, userMessage, maxTokens) {
   return data.content?.[0]?.text || "";
 }
 
-async function callOpenAI(systemPrompt, userMessage, maxTokens) {
+async function callOpenAI(systemPrompt, userMessage, maxTokens, modelOverride) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
 
@@ -72,7 +80,7 @@ async function callOpenAI(systemPrompt, userMessage, maxTokens) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: getModel(),
+      model: modelOverride || getModel(),
       max_tokens: maxTokens,
       messages: [
         { role: "system", content: systemPrompt },
@@ -89,11 +97,11 @@ async function callOpenAI(systemPrompt, userMessage, maxTokens) {
   return data.choices?.[0]?.message?.content || "";
 }
 
-async function callGemini(systemPrompt, userMessage, maxTokens) {
+async function callGemini(systemPrompt, userMessage, maxTokens, modelOverride) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
-  const model = getModel();
+  const model = modelOverride || getModel();
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
@@ -115,14 +123,14 @@ async function callGemini(systemPrompt, userMessage, maxTokens) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
-async function callOllama(systemPrompt, userMessage, maxTokens) {
+async function callOllama(systemPrompt, userMessage, maxTokens, modelOverride) {
   const base = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 
   const response = await fetch(`${base}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: getModel(),
+      model: modelOverride || getModel(),
       stream: false,
       options: { num_predict: maxTokens },
       messages: [
@@ -150,6 +158,15 @@ async function callLLM(systemPrompt, userMessage, maxTokens = 1500) {
   if (!fn) throw new Error(`Unknown LLM provider: ${provider}`);
   console.log(`[LLM] Using ${provider} / ${getModel()}`);
   return fn(systemPrompt, userMessage, maxTokens);
+}
+
+async function callAnalysisLLM(systemPrompt, userMessage, maxTokens = 2000) {
+  const provider = getAnalysisProvider();
+  const model = getAnalysisModel();
+  const fn = PROVIDERS[provider];
+  if (!fn) throw new Error(`Unknown LLM provider: ${provider}`);
+  console.log(`[LLM:analysis] Using ${provider} / ${model}`);
+  return fn(systemPrompt, userMessage, maxTokens, model);
 }
 
 // Keep backward-compatible alias
@@ -404,7 +421,7 @@ Items:\n${itemSummaries}`,
   if (!prompt) throw new Error(`Unknown analysis mode: ${mode}`);
 
   try {
-    const result = await callClaude(prompt.system, prompt.user, 2000);
+    const result = await callAnalysisLLM(prompt.system, prompt.user, 2000);
     const itemIds = sourceItems.map((i) => i.id);
     cacheAnalysis(mode, category, result, itemIds);
     // Include source items so the frontend can render item popovers
