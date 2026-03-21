@@ -10,12 +10,14 @@ import {
   getItems, getItemCount, markItem, setItemFeedback, deleteItem, getStats,
   getFeedHealth, getSuggestions, getSuggestionById, addSuggestion, updateSuggestionStatus,
   cleanupOldItems, getDistinctAffiliations,
+  getItemsWithoutEmbedding, updateItemEmbedding, updateItemCluster, getRecentItemsWithEmbeddings, saveDb,
 } from "./db.js";
 import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
 import { scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
 import { getOrgs, addOrg, removeOrg } from "./orgs.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 import { detectSourceType } from "./source-types.js";
+import { initEmbeddings, getModelStatus, embedItems, clusterByEmbedding, isReady as embeddingsReady } from "./embeddings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -204,7 +206,9 @@ app.get("/api/items", (req, res) => {
     feedIds: feedIdsList,
     search,
   });
-  res.json({ items, total: count });
+  // Strip embedding vectors from response (too large) but keep cluster_id
+  const cleaned = items.map(({ embedding, ...rest }) => rest);
+  res.json({ items: cleaned, total: count });
 });
 
 app.post("/api/items/:id/read", (req, res) => {
@@ -445,6 +449,8 @@ cron.schedule(`*/${refreshInterval} * * * *`, async () => {
     if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
       await scoreUnscoredItems();
     }
+    // Embed and cluster
+    await runEmbedAndCluster();
   } catch (err) {
     console.error("[Cron] Feed refresh failed:", err.message);
   }
@@ -474,6 +480,9 @@ const SETTINGS_KEYS = [
   "SCORING_INSTRUCTIONS",
   "FEED_REFRESH_INTERVAL",
   "ITEM_RETENTION_DAYS",
+  "DEDUP_ENABLED",
+  "DEDUP_THRESHOLD",
+  "DEDUP_WINDOW_DAYS",
   "SUBSTACK_SESSION",
   "TWITTER_SESSION",
   "LINKEDIN_SESSION",
@@ -545,6 +554,9 @@ app.get("/api/settings", (req, res) => {
     scoringInstructions: saved.SCORING_INSTRUCTIONS || process.env.SCORING_INSTRUCTIONS || "",
     refreshInterval: saved.FEED_REFRESH_INTERVAL || process.env.FEED_REFRESH_INTERVAL || "30",
     retentionDays: saved.ITEM_RETENTION_DAYS || process.env.ITEM_RETENTION_DAYS || "7",
+    dedupEnabled: (saved.DEDUP_ENABLED ?? process.env.DEDUP_ENABLED ?? "true") !== "false",
+    dedupThreshold: parseFloat(saved.DEDUP_THRESHOLD || process.env.DEDUP_THRESHOLD || "0.82"),
+    dedupWindowDays: parseInt(saved.DEDUP_WINDOW_DAYS || process.env.DEDUP_WINDOW_DAYS || "7"),
     substackSession: maskKey(saved.SUBSTACK_SESSION || ""),
     twitterSession: maskKey(saved.TWITTER_SESSION || ""),
     linkedinSession: maskKey(saved.LINKEDIN_SESSION || ""),
@@ -607,6 +619,51 @@ if (process.env.NODE_ENV === "production" || process.env.ELECTRON_MODE) {
   });
 }
 
+// ── Embeddings & Clustering ─────────────────────────────────────────────────
+app.get("/api/embeddings/status", (req, res) => {
+  res.json(getModelStatus());
+});
+
+async function runEmbedAndCluster() {
+  if (!embeddingsReady()) return;
+  // Read dedup settings
+  const saved = loadSettingsFile();
+  const enabled = (saved.DEDUP_ENABLED ?? "true") !== "false";
+  if (!enabled) return;
+  const threshold = parseFloat(saved.DEDUP_THRESHOLD || "0.82");
+  const windowDays = parseInt(saved.DEDUP_WINDOW_DAYS || "7");
+
+  try {
+    // Embed items that don't have embeddings yet
+    const unembedded = getItemsWithoutEmbedding(200);
+    if (unembedded.length > 0) {
+      console.log(`[Embeddings] Embedding ${unembedded.length} items...`);
+      const results = await embedItems(unembedded);
+      for (const { id, embedding } of results) {
+        updateItemEmbedding(id, embedding);
+      }
+      console.log(`[Embeddings] Embedded ${results.length} items`);
+    }
+
+    // Cluster recent items
+    const recent = getRecentItemsWithEmbeddings(windowDays);
+    if (recent.length > 0) {
+      const clusters = clusterByEmbedding(recent, threshold);
+      for (const [itemId, clusterId] of Object.entries(clusters)) {
+        updateItemCluster(itemId, clusterId);
+      }
+      const uniqueClusters = new Set(Object.values(clusters)).size;
+      const clusteredCount = Object.keys(clusters).length;
+      if (clusteredCount > uniqueClusters) {
+        console.log(`[Embeddings] Clustered ${clusteredCount} items into ${uniqueClusters} groups (threshold: ${threshold}, window: ${windowDays}d)`);
+      }
+    }
+    saveDb();
+  } catch (err) {
+    console.error(`[Embeddings] Error: ${err.message}`);
+  }
+}
+
 // ── Start ───────────────────────────────────────────────────────────────────
 
 /**
@@ -632,14 +689,19 @@ export function createServer(port) {
 ╚══════════════════════════════════════════════╝
       `);
 
+      // Start embedding model download in background (non-blocking)
+      initEmbeddings().catch(e => console.error("[Startup] Embedding init failed:", e.message));
+
       // Initial fetch on startup
       console.log("[Startup] Running initial feed fetch...");
-      fetchAllFeeds().then((result) => {
+      fetchAllFeeds().then(async (result) => {
         console.log(`[Startup] Fetched ${result.totalNew} new items from ${result.feeds.length} feeds`);
         if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
           console.log("[Startup] Scoring items...");
-          scoreUnscoredItems().then((r) => console.log(`[Startup] Scored ${r.scored} items`));
+          await scoreUnscoredItems().then((r) => console.log(`[Startup] Scored ${r.scored} items`));
         }
+        // Embed and cluster after scoring
+        runEmbedAndCluster();
       });
 
       resolve(server);

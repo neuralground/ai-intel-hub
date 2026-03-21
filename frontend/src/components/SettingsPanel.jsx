@@ -152,6 +152,15 @@ function ConnectedServicesSection({ settings, onConnect, onDisconnect }) {
 }
 
 // ── Organizations Manager (Settings sub-panel) ─────────────────────────────
+const ORG_TYPE_META = {
+  company: { label: "Companies", color: "#4F8EF7", icon: "C" },
+  lab: { label: "AI Labs", color: "#8B5CF6", icon: "L" },
+  university: { label: "Universities", color: "#10B981", icon: "U" },
+  other: { label: "Other", color: "#6B7280", icon: "O" },
+};
+
+const BUILTIN_IDS = new Set(["google","openai","anthropic","meta","microsoft","apple","amazon","nvidia","xai","mistral","cohere","huggingface","baidu","tencent","alibaba","bytedance","samsung","intel","ibm","salesforce","stanford","mit","cmu","berkeley","harvard","princeton","oxford","cambridge","eth","tsinghua","peking","toronto","mila","ai2"]);
+
 function OrgManager({ orgs, onUpdate }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newLabel, setNewLabel] = useState("");
@@ -162,7 +171,8 @@ function OrgManager({ orgs, onUpdate }) {
   const [scanResult, setScanResult] = useState(null);
   const [confirmRescan, setConfirmRescan] = useState(false);
   const [lastAdded, setLastAdded] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null); // org id to confirm delete
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [collapsed, setCollapsed] = useState({}); // { company: true, ... }
 
   const lbl = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
   const hint = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
@@ -188,10 +198,7 @@ function OrgManager({ orgs, onUpdate }) {
 
   const handleDelete = async (orgId) => {
     setConfirmDelete(null);
-    try {
-      await api.removeOrg(orgId);
-      onUpdate();
-    } catch (e) { console.error(e); }
+    try { await api.removeOrg(orgId); onUpdate(); } catch (e) { console.error(e); }
   };
 
   const handleRescan = async () => {
@@ -205,8 +212,14 @@ function OrgManager({ orgs, onUpdate }) {
     setScanning(false);
   };
 
-  const BUILTIN_IDS = new Set(["google","openai","anthropic","meta","microsoft","apple","amazon","nvidia","xai","mistral","cohere","huggingface","baidu","tencent","alibaba","bytedance","samsung","intel","ibm","salesforce","stanford","mit","cmu","berkeley","harvard","princeton","oxford","cambridge","eth","tsinghua","peking","toronto","mila","ai2"]);
-  const typeLabel = { company: "Company", lab: "AI Lab", university: "University", other: "Other" };
+  // Group orgs by type
+  const groups = {};
+  for (const o of orgs) {
+    const t = o.type || "other";
+    if (!groups[t]) groups[t] = [];
+    groups[t].push(o);
+  }
+  const groupOrder = ["company", "lab", "university", "other"];
 
   return (
     <div>
@@ -216,7 +229,7 @@ function OrgManager({ orgs, onUpdate }) {
           {showAdd ? "Cancel" : "+ Add"}
         </button>
       </div>
-      <div style={hint}>During scoring, the AI identifies author affiliations with these organizations and references to their products or technologies. Matched items show org tags and appear in the sidebar filter. Uncheck an organization to hide it from the filter.</div>
+      <div style={hint}>During scoring, the AI identifies author affiliations with these organizations and references to their products or technologies.</div>
 
       {/* Add new org form */}
       {showAdd && (
@@ -228,10 +241,7 @@ function OrgManager({ orgs, onUpdate }) {
           <div style={{ marginBottom: 6 }}>
             <label style={lbl}>TYPE</label>
             <select value={newType} onChange={e => setNewType(e.target.value)} style={{ ...inp, cursor: "pointer", appearance: "auto" }}>
-              <option value="company">Company</option>
-              <option value="lab">AI Lab</option>
-              <option value="university">University</option>
-              <option value="other">Other</option>
+              {groupOrder.map(t => <option key={t} value={t}>{ORG_TYPE_META[t]?.label || t}</option>)}
             </select>
           </div>
           <div style={{ marginBottom: 8 }}>
@@ -245,36 +255,27 @@ function OrgManager({ orgs, onUpdate }) {
         </div>
       )}
 
-      {/* Rescan prompt after adding */}
+      {/* Rescan prompt */}
       {confirmRescan && (
         <div style={{ marginTop: 8, padding: "8px 12px", background: "var(--accent-bg-subtle, rgba(79,142,247,0.06))", border: "1px solid var(--accent)", borderRadius: 6 }}>
-          <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>
-            Added <strong>{lastAdded}</strong>. Scan existing items for this organization?
-          </div>
-          <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>This will re-score all items so the AI can detect affiliations and references to the new organization. This may take several minutes.</div>
+          <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>Added <strong>{lastAdded}</strong>. Scan existing items?</div>
+          <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>Re-scores all items to detect affiliations with the new organization. May take several minutes.</div>
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={handleRescan} style={{ ...btnBase, background: "var(--accent)", border: "none", color: "white" }}>Scan now</button>
             <button onClick={() => setConfirmRescan(false)} style={{ ...btnBase, background: "none", border: "1px solid var(--border)", color: "var(--text-muted)" }}>Skip</button>
           </div>
         </div>
       )}
-
-      {scanning && (
-        <div style={{ marginTop: 6, color: "var(--accent)", fontSize: 10, fontFamily: mono }}>Scanning items... this may take a few minutes</div>
-      )}
-      {scanResult && (
-        <div style={{ marginTop: 6, color: "#10B981", fontSize: 10, fontFamily: mono }}>{scanResult}</div>
-      )}
+      {scanning && <div style={{ marginTop: 6, color: "var(--accent)", fontSize: 10, fontFamily: mono }}>Scanning items...</div>}
+      {scanResult && <div style={{ marginTop: 6, color: "#10B981", fontSize: 10, fontFamily: mono }}>{scanResult}</div>}
 
       {/* Delete confirmation */}
       {confirmDelete && (() => {
         const org = orgs.find(o => o.id === confirmDelete);
         return (
           <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(239,68,68,0.06)", border: "1px solid #EF444440", borderRadius: 6 }}>
-            <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>
-              Remove <strong>{org?.label}</strong> from the organization list?
-            </div>
-            <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>This organization will no longer be detected during scoring. Existing affiliation tags on items will remain until the next rescore.</div>
+            <div style={{ color: "var(--text-primary)", fontSize: 11, marginBottom: 6 }}>Remove <strong>{org?.label}</strong>?</div>
+            <div style={{ color: "var(--text-muted)", fontSize: 10, marginBottom: 8 }}>This organization will no longer be detected during scoring.</div>
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={() => handleDelete(confirmDelete)} style={{ ...btnBase, background: "#EF4444", border: "none", color: "white" }}>Remove</button>
               <button onClick={() => setConfirmDelete(null)} style={{ ...btnBase, background: "none", border: "1px solid var(--border)", color: "var(--text-muted)" }}>Cancel</button>
@@ -283,22 +284,132 @@ function OrgManager({ orgs, onUpdate }) {
         );
       })()}
 
-      {/* Org list — scrollable, one per row */}
-      <div style={{ marginTop: 8, maxHeight: 260, overflow: "auto", border: "1px solid var(--border)", borderRadius: 6 }}>
-        {orgs.map(o => (
-          <div key={o.id} style={{
-            display: "flex", alignItems: "center", padding: "6px 10px",
-            borderBottom: "1px solid var(--border)",
-          }}>
-            <span style={{ flex: 1, fontSize: 11, fontFamily: sans, color: "var(--text-secondary)", fontWeight: 500 }}>{o.label}</span>
-            <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, marginRight: 10 }}>{typeLabel[o.type] || o.type}</span>
-            {!BUILTIN_IDS.has(o.id) && (
-              <button onClick={() => setConfirmDelete(o.id)} title="Remove organization"
-                style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 11, padding: "2px 4px", lineHeight: 1 }}>✕</button>
-            )}
-          </div>
-        ))}
+      {/* Org list — grouped by type, collapsible */}
+      <div style={{ marginTop: 10, maxHeight: 400, overflow: "auto" }}>
+        {groupOrder.filter(t => groups[t]?.length > 0).map(type => {
+          const meta = ORG_TYPE_META[type] || ORG_TYPE_META.other;
+          const isCollapsed = collapsed[type];
+          return (
+            <div key={type} style={{ marginBottom: 8 }}>
+              <button onClick={() => setCollapsed(c => ({ ...c, [type]: !c[type] }))}
+                style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "6px 0", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                <span style={{ color: meta.color, fontSize: 10, fontFamily: mono, fontWeight: 600 }}>{isCollapsed ? "▸" : "▾"}</span>
+                <span style={{ color: meta.color, fontSize: 11, fontFamily: mono, fontWeight: 600 }}>{meta.label}</span>
+                <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono }}>{groups[type].length}</span>
+              </button>
+              {!isCollapsed && groups[type].map(o => (
+                <div key={o.id} style={{ padding: "8px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 4, display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 6, background: meta.color + "18", border: `1px solid ${meta.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ color: meta.color, fontSize: 13, fontWeight: 700, fontFamily: mono }}>{o.label.charAt(0)}</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: "var(--text-primary)", fontSize: 12, fontWeight: 500, fontFamily: sans }}>{o.label}</div>
+                    {o.aliases?.length > 0 && <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.aliases.join(", ")}</div>}
+                  </div>
+                  {!BUILTIN_IDS.has(o.id) && (
+                    <button onClick={() => setConfirmDelete(o.id)} title="Remove"
+                      style={{ padding: "3px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-faint)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>Remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+// ── Embedding / Clustering Status + Controls ─────────────────────────────────
+function EmbeddingStatus() {
+  const [status, setStatus] = useState(null);
+  const [settings, setSettings] = useState(null);
+
+  useEffect(() => {
+    api.getEmbeddingStatus().then(setStatus).catch(() => {});
+    api.getSettings().then(s => setSettings({
+      enabled: s.dedupEnabled !== false,
+      threshold: s.dedupThreshold || 0.82,
+      windowDays: s.dedupWindowDays || 7,
+    })).catch(() => {});
+    const interval = setInterval(() => {
+      api.getEmbeddingStatus().then(setStatus).catch(() => {});
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const saveSetting = (key, value) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+    const envKey = key === "enabled" ? "DEDUP_ENABLED" : key === "threshold" ? "DEDUP_THRESHOLD" : "DEDUP_WINDOW_DAYS";
+    api.saveSettings({ [envKey]: String(value) }).catch(console.error);
+  };
+
+  if (!status || !settings) return null;
+
+  const hintStyle = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
+  const label = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
+
+  const sensitivityLabels = { 0.70: "Broad", 0.76: "Moderate", 0.82: "Default", 0.88: "Strict", 0.94: "Very strict" };
+  const closestLabel = Object.entries(sensitivityLabels).reduce((best, [k, v]) =>
+    Math.abs(k - settings.threshold) < Math.abs(best[0] - settings.threshold) ? [k, v] : best, [0.82, "Default"])[1];
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div style={{ color: "var(--text-primary)", fontSize: 12, fontFamily: mono, fontWeight: 600 }}>Deduplication</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+          <span style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>{settings.enabled ? "On" : "Off"}</span>
+          <input type="checkbox" checked={settings.enabled} onChange={e => saveSetting("enabled", e.target.checked)}
+            style={{ accentColor: "var(--accent)", width: 14, height: 14, cursor: "pointer" }} />
+        </label>
+      </div>
+      <div style={hintStyle}>Items covering the same story across multiple sources are grouped together, showing the most relevant version with links to the others.</div>
+
+      {/* Model status */}
+      <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--bg-elevated)", borderRadius: 5, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{
+          width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+          background: status.ready ? "#10B981" : status.loading ? "var(--accent)" : status.error ? "#EF4444" : "var(--text-faint)",
+          animation: status.loading ? "pulse 1.5s infinite" : "none",
+        }} />
+        <span style={{ color: "var(--text-secondary)", fontSize: 10, fontFamily: mono }}>
+          {status.ready ? "Model ready"
+            : status.loading ? `Downloading model${status.progress?.progress ? ` (${status.progress.progress}%)` : "..."}`
+            : status.error ? "Model failed"
+            : "Initializing..."}
+        </span>
+        {status.error && <span style={{ color: "#EF4444", fontSize: 9, fontFamily: mono }}>{status.error}</span>}
+      </div>
+
+      {/* Controls — only show when enabled */}
+      {settings.enabled && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div>
+            <label style={label}>SENSITIVITY — {closestLabel}</label>
+            <div style={{ padding: "0 4px" }}>
+              <input type="range" min="0.70" max="0.94" step="0.02" value={settings.threshold}
+                onChange={e => saveSetting("threshold", parseFloat(e.target.value))}
+                style={{ width: "100%", accentColor: "var(--accent)" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-faint)", fontSize: 8, fontFamily: mono }}>
+                <span>Broad</span><span>Strict</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label style={label}>TIME WINDOW</label>
+            <div style={{ display: "flex", gap: 4 }}>
+              {[3, 7, 14, 30].map(d => (
+                <button key={d} onClick={() => saveSetting("windowDays", d)} style={{
+                  padding: "3px 10px", borderRadius: 4, fontSize: 10, fontFamily: mono, cursor: "pointer",
+                  background: settings.windowDays === d ? "var(--accent-bg)" : "var(--bg-input)",
+                  border: `1px solid ${settings.windowDays === d ? "var(--accent)" : "var(--border)"}`,
+                  color: settings.windowDays === d ? "var(--accent)" : "var(--text-muted)", fontWeight: settings.windowDays === d ? 600 : 400,
+                }}>{d}d</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -667,6 +778,9 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
 
         {/* Connected Services */}
         <ConnectedServicesSection settings={settings} onConnect={handleServiceConnect} onDisconnect={handleServiceDisconnect} />
+
+        {/* Deduplication */}
+        <EmbeddingStatus />
 
         {/* Advanced */}
         <AdvancedSection />

@@ -16,6 +16,7 @@ export default function App() {
   const feedNameMap = Object.fromEntries(feeds.map(f => [f.id, f.name]));
   const feedName = (id) => feedNameMap[id] || id;
   const [stats, setStats] = useState({});
+  const [llmInfo, setLlmInfo] = useState(null); // { provider, model }
   const [category, setCategory] = useState("all");
   const [minRelevance, setMinRelevance] = useState(0);
   const [maxAgeDays, setMaxAgeDays] = useState(0); // 0 = no limit
@@ -27,8 +28,8 @@ export default function App() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 25;
 
-  // Client-side filtering: relevance, recency, orgs, sources applied locally
-  const filteredItems = useMemo(() => {
+  // Client-side filtering + dedup clustering
+  const { filteredItems, clusterMap } = useMemo(() => {
     let r = allItems;
     if (minRelevance > 0) r = r.filter(i => i.relevance >= minRelevance);
     if (maxAgeDays > 0) {
@@ -43,7 +44,38 @@ export default function App() {
       const feedSet = new Set(selectedFeedIds);
       r = r.filter(i => feedSet.has(i.feed_id));
     }
-    return r;
+
+    // Build cluster map: clusterId → [items], then keep only the best item per cluster
+    const clusters = {};
+    const unclustered = [];
+    for (const item of r) {
+      if (item.cluster_id) {
+        if (!clusters[item.cluster_id]) clusters[item.cluster_id] = [];
+        clusters[item.cluster_id].push(item);
+      } else {
+        unclustered.push(item);
+      }
+    }
+
+    // For each cluster, pick the highest-relevance item as primary
+    const cMap = {}; // primaryId → [otherItems]
+    const primaries = [];
+    for (const items of Object.values(clusters)) {
+      if (items.length === 1) {
+        unclustered.push(items[0]);
+        continue;
+      }
+      items.sort((a, b) => b.relevance - a.relevance);
+      const [primary, ...others] = items;
+      primaries.push(primary);
+      cMap[primary.id] = others;
+    }
+
+    // Merge and re-sort by the original order (filteredItems was already sorted by server)
+    const idOrder = new Map(r.map((item, i) => [item.id, i]));
+    const result = [...unclustered, ...primaries].sort((a, b) => (idOrder.get(a.id) || 0) - (idOrder.get(b.id) || 0));
+
+    return { filteredItems: result, clusterMap: cMap };
   }, [allItems, minRelevance, maxAgeDays, selectedOrgs, selectedFeedIds]);
 
   const totalItems = filteredItems.length;
@@ -63,7 +95,7 @@ export default function App() {
   // Relevance, recency, orgs, sources, pagination applied client-side.
   const loadData = useCallback(async () => {
     try {
-      const [itemsRes, feedsRes, statsRes, affRes] = await Promise.all([
+      const [itemsRes, feedsRes, statsRes, affRes, settingsRes] = await Promise.all([
         api.getItems({
           category: category !== "all" ? category : undefined,
           search: search || undefined,
@@ -74,11 +106,13 @@ export default function App() {
         api.getFeeds(),
         api.getStats(),
         api.getOrgAffiliations(),
+        api.getSettings(),
       ]);
       setAllItems(itemsRes.items);
       setFeeds(feedsRes);
       setStats(statsRes);
       setOrgCounts(affRes);
+      if (settingsRes) setLlmInfo({ provider: settingsRes.llmProvider || "anthropic", model: settingsRes.llmModel || "" });
       setLastRefresh(new Date());
     } catch (err) {
       console.error("Failed to load data:", err);
@@ -398,6 +432,11 @@ export default function App() {
 
         {/* Main content */}
         <main style={{ flex: 1, padding: "20px 28px", maxWidth: 880 }}>
+          {llmInfo && (
+            <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic", marginBottom: 6 }}>
+              Powered by {llmInfo.provider}{llmInfo.model ? ` / ${llmInfo.model}` : ""}
+            </div>
+          )}
           <div style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "var(--text-primary)", fontSize: 13, fontFamily: mono, fontWeight: 500 }}>
               {criticalOnly ? "CRITICAL ITEMS" : category === "all" ? "ALL SOURCES" : CATEGORIES[category]?.label.toUpperCase()}
@@ -454,6 +493,11 @@ export default function App() {
                   {item.affiliations?.length > 0 && item.affiliations.map(a => (
                     <OrgBadge key={a} name={a} size={10} />
                   ))}
+                  {clusterMap[item.id] && (
+                    <span style={{ padding: "0px 5px", borderRadius: 3, fontSize: 9, background: "var(--bg-elevated)", color: "var(--text-muted)", fontFamily: mono, fontWeight: 500 }}>
+                      {clusterMap[item.id].length + 1} sources
+                    </span>
+                  )}
                   {item.saved ? <span style={{ fontSize: 10 }}>★</span> : null}
                   {item.feedback === 1 && <span style={{ fontSize: 10 }}>👍</span>}
                   {item.feedback === -1 && <span style={{ fontSize: 10 }}>👎</span>}
@@ -471,6 +515,18 @@ export default function App() {
                       <div style={{ padding: "8px 12px", background: "var(--accent-bg-subtle)", border: "1px solid var(--accent-border)", borderRadius: 6, marginBottom: 8 }}>
                         <div style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, marginBottom: 3, fontWeight: 600 }}>WHY THIS MATTERS</div>
                         <div style={{ color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.5 }}>{item.relevance_reason}</div>
+                      </div>
+                    )}
+                    {clusterMap[item.id] && (
+                      <div style={{ padding: "6px 10px", background: "var(--bg-elevated)", borderRadius: 6, marginBottom: 8, border: "1px solid var(--border)" }}>
+                        <div style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4 }}>ALSO COVERED BY</div>
+                        {clusterMap[item.id].map(other => (
+                          <div key={other.id} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                            <span style={{ color: "var(--text-muted)", fontSize: 11, fontFamily: sans, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{feedName(other.feed_id)}</span>
+                            <span style={{ color: "var(--text-faint)", fontSize: 9, fontFamily: mono }}>{timeAgo(other.published)}</span>
+                            {other.url && <a href={other.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: "var(--accent)", fontSize: 9, fontFamily: mono, textDecoration: "none" }}>open</a>}
+                          </div>
+                        ))}
                       </div>
                     )}
                     {item.tags && item.tags.length > 0 && (

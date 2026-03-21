@@ -87,6 +87,7 @@ export function upsertItem(item) {
     scored_at: item.scored_at || null,
     tags: item.tags || [], read: item.read ?? 0, saved: item.saved ?? 0, dismissed: item.dismissed ?? 0,
     feedback: item.feedback ?? null, feedback_boost: item.feedback_boost ?? 0,
+    embedding: item.embedding || null, cluster_id: item.cluster_id || null,
   };
   const idx = store.items.findIndex(i => i.id === n.id);
   if (idx >= 0) {
@@ -101,6 +102,8 @@ export function upsertItem(item) {
       scored_at: ex.scored_at || n.scored_at,
       tags: n.tags.length > 0 ? n.tags : ex.tags,
       affiliations: n.affiliations?.length > 0 ? n.affiliations : (ex.affiliations || []),
+      embedding: n.embedding || ex.embedding || null,
+      cluster_id: n.cluster_id ?? ex.cluster_id ?? null,
     };
   } else { store.items.push(n); }
   save();
@@ -399,6 +402,30 @@ export function cleanupOldItems(daysToKeep = 7) {
   }
   if (before !== store.items.length) save();
   return { changes: before - store.items.length };
+}
+
+// ── Embedding / clustering helpers ───────────────────────────────────────────
+export function getItemsWithoutEmbedding(limit = 100) {
+  return store.items.filter(i => !i.dismissed && !i.embedding).slice(0, limit);
+}
+
+export function updateItemEmbedding(itemId, embedding) {
+  const item = store.items.find(i => i.id === itemId);
+  if (item) { item.embedding = embedding; }
+}
+
+export function updateItemCluster(itemId, clusterId) {
+  const item = store.items.find(i => i.id === itemId);
+  if (item) { item.cluster_id = clusterId; }
+}
+
+export function saveDb() { save(); }
+
+// Get items with embeddings for clustering (recent items only)
+export function getRecentItemsWithEmbeddings(daysBack = 7) {
+  const cutoff = new Date(Date.now() - daysBack * 86400000).toISOString();
+  return store.items.filter(i => !i.dismissed && i.embedding && i.published > cutoff)
+    .map(i => ({ id: i.id, embedding: i.embedding, feed_id: i.feed_id, relevance: i.relevance }));
 }
 
 export default store;

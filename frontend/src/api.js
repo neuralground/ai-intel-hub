@@ -61,6 +61,9 @@ export const api = {
   cleanupItems: (days) => request("/admin/cleanup", { method: "POST", body: JSON.stringify({ days }) }),
   rescoreAll: () => request("/admin/rescore", { method: "POST" }),
 
+  // Embeddings
+  getEmbeddingStatus: () => request("/embeddings/status"),
+
   // Organizations
   getOrgs: () => request("/orgs"),
   getOrgAffiliations: () => request("/orgs/affiliations"),
