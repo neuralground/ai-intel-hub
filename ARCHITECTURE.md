@@ -226,7 +226,9 @@ ai-intel-hub/
   read: 0,                     // 0/1
   saved: 0,                    // 0/1
   dismissed: 0,                // 0/1 (soft delete)
-  affiliations: ["OpenAI", "Stanford"]  // Array of org label strings (detected by LLM/feed/regex)
+  affiliations: ["OpenAI", "Stanford"], // Array of org label strings (detected by LLM/feed/regex)
+  embedding: [0.012, -0.034, ...],     // Float32 vector (length depends on model) for semantic dedup
+  cluster_id: "a3f8c2e1..."            // ID of canonical item in dedup cluster (null if unique)
 }
 ```
 
@@ -325,6 +327,11 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 | `OPENAI_API_KEY` | For OpenAI | — | OpenAI API key |
 | `GEMINI_API_KEY` | For Gemini | — | Google Gemini API key |
 | `OLLAMA_BASE_URL` | For Ollama | `http://localhost:11434` | Ollama server endpoint |
+| `LLM_ANALYSIS_PROVIDER` | No | Same as `LLM_PROVIDER` | Separate provider for analysis/briefings (allows different model than scoring) |
+| `LLM_ANALYSIS_MODEL` | No | Same as `LLM_MODEL` | Model to use for analysis when `LLM_ANALYSIS_PROVIDER` is set |
+| `DEDUP_ENABLED` | No | `false` | Enable semantic deduplication of items via embeddings |
+| `DEDUP_THRESHOLD` | No | `0.75` | Cosine similarity threshold for considering items duplicates (0.0–1.0) |
+| `DEDUP_WINDOW_DAYS` | No | `7` | Only compare items within this many days of each other |
 
 ---
 
@@ -376,11 +383,24 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 |--------|------|-------------|
 | POST | `/api/services/check` | Check connectivity of all configured service sessions |
 
+### Embeddings & Dedup
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/embeddings/debug` | Debug info: embedding stats, cluster counts, threshold |
+| POST | `/api/embeddings/run` | Trigger embedding generation and dedup clustering |
+
+### LLM
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/llm/test` | Test LLM connectivity and return model info |
+
 ### Admin
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/admin/cleanup` | Clear old items `{days}` (0 = all non-saved) |
-| POST | `/api/admin/rescore` | Reset scores and re-run LLM scoring |
+| POST | `/api/admin/rescore` | Reset all scores to unscored state (does not re-run scoring) |
+| GET | `/api/admin/rescore/stream` | SSE endpoint: re-score all items with progress events and cancel support |
+| POST | `/api/admin/rescore/cancel` | Cancel an in-progress streaming rescore |
 
 ---
 
@@ -428,10 +448,8 @@ Implemented: `scored_at` tracking prevents re-scoring. Upsert preserves existing
 ### ~~T8: Multi-model support~~ — DONE
 Implemented: Multi-provider LLM (Anthropic, OpenAI, Gemini, Ollama) with per-provider model selection.
 
-### T9: Deduplication and clustering — OPEN
-**What:** Detect near-duplicate items across sources and cluster them, showing the best source and noting cross-source coverage. A development that appears across 5 sources is both important (signal) and redundant (noise).
-**Where:** New module `backend/src/dedup.js`. Use embedding similarity or title/URL fuzzy matching.
-**Complexity:** Medium-high. High impact.
+### ~~T9: Deduplication and clustering~~ — DONE
+Implemented: Semantic deduplication via `backend/src/embeddings.js`. Items are embedded using the configured LLM provider, then clustered using union-find with configurable cosine similarity threshold (`DEDUP_THRESHOLD`, default 0.75). Clusters link duplicates to a canonical item via `cluster_id`. Dedup controls exposed in Settings panel; debug endpoint at `GET /api/embeddings/debug`.
 
 ---
 

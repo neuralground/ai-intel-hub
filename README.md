@@ -1,6 +1,6 @@
 # AI Intelligence Hub
 
-A personalized AI intelligence source aggregator and analysis platform. Consolidates content from RSS sources, Substacks, arXiv, AI lab blogs, and tracked X accounts into a single dashboard with LLM-powered relevance scoring, daily summaries, and source health monitoring.
+A personalized AI intelligence source aggregator and analysis platform. Consolidates content from RSS sources, Substacks, arXiv, AI lab blogs, and tracked X accounts into a single dashboard with LLM-powered relevance scoring, semantic deduplication, daily summaries, and source health monitoring. Supports dual LLM model configuration — use a fast model for scoring and a more capable one for analysis.
 
 For a detailed walkthrough of every feature, see the [User Guide](USER_GUIDE.md).
 
@@ -59,6 +59,8 @@ The settings file stores your configuration as JSON:
   "ANTHROPIC_API_KEY": "sk-ant-...",
   "RELEVANCE_CONTEXT": "Your role and focus areas...",
   "SCORING_INSTRUCTIONS": "Prioritize agentic AI developments...",
+  "LLM_ANALYSIS_PROVIDER": "anthropic",
+  "LLM_ANALYSIS_MODEL": "claude-sonnet-4-20250514",
   "FEED_REFRESH_INTERVAL": "30",
   "TWITTER_SESSION": "...",
   "SUBSTACK_SESSION": "...",
@@ -218,7 +220,9 @@ Configure via `backend/.env` (client-server) or as environment variables (Docker
 | `DATA_DIR` | No | `./data/` | Directory for persistent data (`db.json`) |
 | `NODE_ENV` | No | `development` | Set to `production` to serve frontend from Express |
 | `LLM_PROVIDER` | No | `anthropic` | LLM provider (anthropic, openai, gemini, ollama) |
-| `LLM_MODEL` | No | Provider default | Model to use for scoring and analysis |
+| `LLM_MODEL` | No | Provider default | Model to use for scoring (and analysis, if no analysis-specific override) |
+| `LLM_ANALYSIS_PROVIDER` | No | Same as `LLM_PROVIDER` | Separate LLM provider for analysis/summaries (anthropic, openai, gemini, ollama) |
+| `LLM_ANALYSIS_MODEL` | No | Same as `LLM_MODEL` | Separate model for analysis/summaries (e.g. use a more capable model than scoring) |
 | `OPENAI_API_KEY` | For OpenAI | — | OpenAI API key |
 | `GEMINI_API_KEY` | For Gemini | — | Google Gemini API key |
 | `OLLAMA_BASE_URL` | For Ollama | `http://localhost:11434` | Ollama server endpoint |
@@ -242,6 +246,8 @@ The desktop app stores configuration in `settings.json` (see [Desktop Data and S
 | `YOUTUBE_SESSION` | `YOUTUBE_SESSION` | YouTube session (set via browser login) |
 | `LLM_PROVIDER` | `LLM_PROVIDER` | LLM provider: anthropic, openai, gemini, or ollama |
 | `LLM_MODEL` | `LLM_MODEL` | Model name (provider-specific) |
+| `LLM_ANALYSIS_PROVIDER` | `LLM_ANALYSIS_PROVIDER` | Separate provider for analysis (defaults to scoring provider) |
+| `LLM_ANALYSIS_MODEL` | `LLM_ANALYSIS_MODEL` | Separate model for analysis (defaults to scoring model) |
 | `OPENAI_API_KEY` | `OPENAI_API_KEY` | OpenAI API key |
 | `GEMINI_API_KEY` | `GEMINI_API_KEY` | Google Gemini API key |
 | `OLLAMA_BASE_URL` | `OLLAMA_BASE_URL` | Ollama server URL (default: http://localhost:11434) |
@@ -388,7 +394,7 @@ Analysis modes: `briefing` (Daily Summary), `risks` (Risk Scan), `gaps` (Coverag
 | `GET` | `/api/settings` | Read current settings (secrets masked) |
 | `POST` | `/api/settings` | Update settings (any combination of keys below) |
 
-Accepted keys for `POST /api/settings`: `ANTHROPIC_API_KEY`, `RELEVANCE_CONTEXT`, `SCORING_INSTRUCTIONS`, `FEED_REFRESH_INTERVAL`, `LLM_PROVIDER`, `LLM_MODEL`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`, `TWITTER_SESSION`, `SUBSTACK_SESSION`, `LINKEDIN_SESSION`, `THREADS_SESSION`, `YOUTUBE_SESSION`
+Accepted keys for `POST /api/settings`: `ANTHROPIC_API_KEY`, `RELEVANCE_CONTEXT`, `SCORING_INSTRUCTIONS`, `FEED_REFRESH_INTERVAL`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_ANALYSIS_PROVIDER`, `LLM_ANALYSIS_MODEL`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`, `TWITTER_SESSION`, `SUBSTACK_SESSION`, `LINKEDIN_SESSION`, `THREADS_SESSION`, `YOUTUBE_SESSION`
 
 ---
 

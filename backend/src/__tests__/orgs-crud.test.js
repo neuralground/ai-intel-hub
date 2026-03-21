@@ -48,6 +48,17 @@ describe('orgs CRUD', () => {
     expect(found.label).toBe('Test Lab');
   });
 
+  it('addOrg with url persists the url field', () => {
+    const orgWithUrl = { id: 'url-lab', label: 'URL Lab', type: 'lab', url: 'https://urllab.ai', aliases: [] };
+    const result = addOrg(orgWithUrl);
+    expect(result).toEqual({ added: true });
+    const found = getOrgs().find(o => o.id === 'url-lab');
+    expect(found).toBeDefined();
+    expect(found.url).toBe('https://urllab.ai');
+    // Clean up
+    removeOrg('url-lab');
+  });
+
   it('removeOrg returns {removed: false, reason: "builtin"} for builtin orgs', () => {
     const result = removeOrg('openai');
     expect(result).toEqual({ removed: false, reason: 'builtin' });

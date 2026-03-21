@@ -101,7 +101,7 @@ export default function App() {
           search: search || undefined,
           unread: criticalOnly ? undefined : true,
           critical: criticalOnly || undefined,
-          limit: 500,
+          limit: 5000,
         }),
         api.getFeeds(),
         api.getStats(),
@@ -252,8 +252,11 @@ export default function App() {
             </div>
           </div>
         </div>
-        <input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
-          style={{ padding: "7px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, flex: 1, minWidth: 120, fontFamily: sans, outline: "none" }} />
+        <div style={{ position: "relative", flex: 1, minWidth: 120 }}>
+          <input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
+            style={{ padding: "7px 14px", paddingRight: search ? 30 : 14, background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, width: "100%", fontFamily: sans, outline: "none", boxSizing: "border-box" }} />
+          {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}>✕</button>}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           <button onClick={handleRefresh} disabled={refreshing} title="Refresh all sources and score new items"
             style={{ padding: "7px 14px", background: refreshing ? "var(--accent)" : "var(--accent-bg)", border: "none", borderRadius: 8, color: refreshing ? "white" : "var(--accent)", cursor: refreshing ? "default" : "pointer", fontSize: 13, fontFamily: mono, fontWeight: 600, display: "flex", alignItems: "center", gap: 6, opacity: refreshing ? 0.8 : 1 }}>

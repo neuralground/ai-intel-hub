@@ -24,6 +24,8 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const [gapsSourceItems, setGapsSourceItems] = useState({});
   const [gapsLoading, setGapsLoading] = useState(false);
   const [gapsError, setGapsError] = useState(null);
+  const [gapsGeneratedAt, setGapsGeneratedAt] = useState(null);
+  const [gapsCached, setGapsCached] = useState(false);
   const [gapsAddedFeeds, setGapsAddedFeeds] = useState(new Set());
   const [gapsAddingFeed, setGapsAddingFeed] = useState(null);
   const [gapsHoverItem, setGapsHoverItem] = useState(null);
@@ -75,21 +77,27 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
 
   const refreshHealth = () => api.getFeedHealth().then(setHealthData).catch(() => {});
 
-  const toggleCoverageGaps = async () => {
-    if (showGaps) { setShowGaps(false); return; }
-    setShowGaps(true);
-    if (gapsResult) return; // already have results
+  const runCoverageGaps = async (force = false) => {
     setGapsLoading(true);
     setGapsError(null);
     try {
-      const data = await api.analyze("gaps", null);
+      const data = await api.analyze("gaps", null, { force });
       setGapsResult(data.result);
       if (data.sourceItems) setGapsSourceItems(data.sourceItems);
+      if (data.generatedAt) setGapsGeneratedAt(data.generatedAt);
+      setGapsCached(!!data.cached);
     } catch (e) {
       console.error("[Coverage Gaps]", e);
       setGapsError(e.message || "Analysis failed");
     }
     setGapsLoading(false);
+  };
+
+  const toggleCoverageGaps = async () => {
+    if (showGaps) { setShowGaps(false); return; }
+    setShowGaps(true);
+    if (gapsResult) return; // already have results
+    runCoverageGaps();
   };
 
   const handleGapsAddFeed = async (url, name) => {
@@ -131,15 +139,22 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
     const suggestions = [];
     const seen = new Set();
     // Match [Name](#feed-URL) — reason  OR  [Name](https://...) — reason
-    const regex = /\[([^\]]+)\]\((#feed-|https?:\/\/)([^)]+)\)\s*—?\s*(.*)/g;
+    const linkRegex = /\[([^\]]+)\]\((#feed-|https?:\/\/)([^)]+)\)\s*[—\-–]?\s*(.*)/g;
     let m;
-    while ((m = regex.exec(md)) !== null) {
+    while ((m = linkRegex.exec(md)) !== null) {
       const url = m[2] === "#feed-" ? m[3] : m[2] + m[3];
-      // Skip item references and non-feed URLs
       if (url.startsWith("#item-")) continue;
       if (seen.has(url)) continue;
       seen.add(url);
       suggestions.push({ name: m[1], url, reason: m[4].trim() });
+    }
+    // Also match bare URLs on suggestion lines: "- Name: https://... — reason" or "- Name (https://...) — reason"
+    const bareRegex = /[-•]\s*([^:\n(]+?)(?::\s*|\s*\()(https?:\/\/[^\s)]+)\)?\s*[—\-–]?\s*(.*)/g;
+    while ((m = bareRegex.exec(md)) !== null) {
+      const url = m[2];
+      if (seen.has(url)) continue;
+      seen.add(url);
+      suggestions.push({ name: m[1].trim(), url, reason: m[3].trim() });
     }
     return suggestions;
   };
@@ -341,7 +356,18 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
             {gapsError && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 11, padding: "8px 10px", background: "var(--error-bg)", borderRadius: 5 }}>⚠ {gapsError}</div>}
             {gapsResult && (
               <div style={{ color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7, fontFamily: sans }}>
-                {llmLabel && <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic", marginBottom: 8 }}>Powered by {llmLabel}</div>}
+                {llmLabel && <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic", marginBottom: 4 }}>Powered by {llmLabel}</div>}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>
+                    {gapsGeneratedAt ? `Generated ${timeAgo(gapsGeneratedAt)}` : ""}
+                    {gapsCached && " (cached)"}
+                  </span>
+                  <button onClick={() => runCoverageGaps(true)} disabled={gapsLoading} style={{
+                    padding: "3px 10px", background: "none", border: "1px solid var(--border)",
+                    borderRadius: 4, color: "var(--text-muted)", fontSize: 9, fontFamily: mono, cursor: "pointer",
+                    opacity: gapsLoading ? 0.5 : 1,
+                  }}>Regenerate</button>
+                </div>
                 <Markdown components={{
                   h3: ({ children }) => <h3 style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, fontFamily: mono, marginTop: 16, marginBottom: 6 }}>{children}</h3>,
                   p: ({ children }) => <p style={{ marginTop: 0, marginBottom: 8 }}>{children}</p>,

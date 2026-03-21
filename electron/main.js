@@ -292,16 +292,22 @@ function captureCookie(config) {
       } catch { /* ignore */ }
     };
 
-    authWin.webContents.on("did-navigate", checkCookie);
-    authWin.webContents.on("did-navigate-in-page", checkCookie);
-    const interval = setInterval(checkCookie, 2000);
+    // Clear stale cookies so we don't immediately close on an expired session
+    authSession.cookies.flushStore()
+      .then(() => authSession.clearStorageData({ storages: ["cookies"] }))
+      .then(() => {
+        authWin.webContents.on("did-navigate", checkCookie);
+        authWin.webContents.on("did-navigate-in-page", checkCookie);
+        const interval = setInterval(checkCookie, 2000);
 
-    authWin.on("closed", () => {
-      clearInterval(interval);
-      if (!resolved) resolve({ ok: false, error: "Window closed before login completed" });
-    });
+        authWin.on("closed", () => {
+          clearInterval(interval);
+          if (!resolved) resolve({ ok: false, error: "Window closed before login completed" });
+        });
 
-    authWin.loadURL(config.loginUrl);
+        authWin.loadURL(config.loginUrl);
+      })
+      .catch(() => authWin.loadURL(config.loginUrl));
   });
 }
 

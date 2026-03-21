@@ -395,7 +395,7 @@ function EmbeddingStatus() {
     fetchStatus();
     api.getSettings().then(s => setSettings({
       enabled: s.dedupEnabled !== false,
-      threshold: s.dedupThreshold || 0.82,
+      threshold: s.dedupThreshold || 0.75,
       windowDays: s.dedupWindowDays || 7,
     })).catch(() => {});
     const interval = setInterval(fetchStatus, 5000);
@@ -409,14 +409,14 @@ function EmbeddingStatus() {
   };
 
   if (!status && !settings) return null;
-  const s = settings || { enabled: true, threshold: 0.82, windowDays: 7 };
+  const s = settings || { enabled: true, threshold: 0.75, windowDays: 7 };
 
   const hintStyle = { color: "var(--text-muted)", fontSize: 10, marginTop: 3, lineHeight: 1.4 };
   const label = { color: "var(--text-faint)", fontSize: 9, fontFamily: mono, fontWeight: 600, marginBottom: 4, display: "block", letterSpacing: "0.05em" };
 
-  const sensitivityLabels = { 0.70: "Broad", 0.76: "Moderate", 0.82: "Default", 0.88: "Strict", 0.94: "Very strict" };
+  const sensitivityLabels = { 0.60: "Very broad", 0.67: "Broad", 0.75: "Default", 0.82: "Strict", 0.90: "Very strict" };
   const closestLabel = Object.entries(sensitivityLabels).reduce((best, [k, v]) =>
-    Math.abs(k - s.threshold) < Math.abs(best[0] - s.threshold) ? [k, v] : best, [0.82, "Default"])[1];
+    Math.abs(k - s.threshold) < Math.abs(best[0] - s.threshold) ? [k, v] : best, [0.75, "Default"])[1];
 
   return (
     <div>
@@ -456,7 +456,7 @@ function EmbeddingStatus() {
           <div>
             <label style={label}>SENSITIVITY — {closestLabel}</label>
             <div style={{ padding: "0 4px" }}>
-              <input type="range" min="0.70" max="0.94" step="0.02" value={s.threshold}
+              <input type="range" min="0.60" max="0.90" step="0.02" value={s.threshold}
                 onChange={e => saveSetting("threshold", parseFloat(e.target.value))}
                 style={{ width: "100%", accentColor: "var(--accent)" }} />
               <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-faint)", fontSize: 8, fontFamily: mono }}>
@@ -484,7 +484,8 @@ function EmbeddingStatus() {
 }
 
 // ── Advanced Settings Sub-panel ─────────────────────────────────────────────
-function AdvancedSection() {
+function AdvancedSection({ llmProvider }) {
+  const isLocal = llmProvider === "ollama";
   const [expanded, setExpanded] = useState(false);
   const [cleanupDays, setCleanupDays] = useState("7");
   const [confirm, setConfirm] = useState(null); // 'cleanup' | 'cleanup-all' | 'rescore'
@@ -508,17 +509,50 @@ function AdvancedSection() {
     setRunning(null);
   };
 
+  const [rescoreProgress, setRescoreProgress] = useState(null); // { pct, message, eta }
+  const [rescoreEvtSource, setRescoreEvtSource] = useState(null);
+
   const handleRescore = async () => {
     setConfirm(null);
     setRunning("rescore");
     setResult(null);
+    setRescoreProgress({ pct: 0, message: "Starting..." });
     try {
-      const r = await api.rescoreAll();
-      setResult({ message: `Reset ${r.reset} items, re-scored ${r.scored}`, type: "ok" });
+      const evtSource = new EventSource("/api/admin/rescore/stream");
+      setRescoreEvtSource(evtSource);
+      evtSource.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        setRescoreProgress({ pct: data.pct || 0, message: data.message, eta: data.eta });
+        if (data.step === "done" || data.step === "cancelled") {
+          evtSource.close();
+          setRescoreEvtSource(null);
+          setResult({ message: data.message, type: data.step === "done" ? "ok" : "ok" });
+          setRunning(null);
+          setRescoreProgress(null);
+        } else if (data.step === "error") {
+          evtSource.close();
+          setRescoreEvtSource(null);
+          setResult({ message: data.message, type: "error" });
+          setRunning(null);
+          setRescoreProgress(null);
+        }
+      };
+      evtSource.onerror = () => {
+        evtSource.close();
+        setRescoreEvtSource(null);
+        setResult({ message: "Connection lost during rescore", type: "error" });
+        setRunning(null);
+        setRescoreProgress(null);
+      };
     } catch (e) {
       setResult({ message: e.message, type: "error" });
+      setRunning(null);
+      setRescoreProgress(null);
     }
-    setRunning(null);
+  };
+
+  const handleCancelRescore = () => {
+    fetch("/api/admin/rescore/cancel", { method: "POST" }).catch(() => {});
   };
 
   if (!expanded) {
@@ -572,6 +606,17 @@ function AdvancedSection() {
           style={{ ...btnBase, background: "transparent", border: "1px solid var(--border)", color: "var(--text-muted)" }}>
           {running === "rescore" ? "Scoring..." : "Re-score all items"}
         </button>
+        {rescoreProgress && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${rescoreProgress.pct}%`, background: "var(--accent)", borderRadius: 2, transition: "width 0.5s ease" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+              <span style={{ color: "var(--text-muted)", fontSize: 10, fontFamily: mono }}>{rescoreProgress.message}</span>
+              <button onClick={handleCancelRescore} style={{ padding: "2px 8px", background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--text-faint)", fontSize: 9, fontFamily: mono, cursor: "pointer" }}>Cancel</button>
+            </div>
+          </div>
+        )}
         <div style={hint}>Resets all relevance scores and re-runs LLM scoring from scratch. Useful after changing your role, scoring instructions, or LLM provider.</div>
       </div>
 
@@ -594,7 +639,9 @@ function AdvancedSection() {
           </div>
           <div style={{ color: "var(--text-muted)", fontSize: 11, marginBottom: 10, lineHeight: 1.5 }}>
             {confirm === "rescore"
-              ? "This will reset all relevance scores, affiliations, and tags, then re-run LLM scoring. This may take several minutes and use API credits."
+              ? (isLocal
+                ? "This will reset all relevance scores, affiliations, and tags, then re-run LLM scoring locally. This may take several minutes and is CPU-intensive — consider plugging in your computer if on battery."
+                : "This will reset all relevance scores, affiliations, and tags, then re-run LLM scoring. This may take several minutes and will use API credits.")
               : confirm === "cleanup-all"
                 ? "This will permanently remove all items from the database except saved items. This cannot be undone."
                 : `This will permanently remove all items published more than ${cleanupDays} days ago. Saved items are preserved.`}
@@ -1032,7 +1079,7 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
         {/* ── Section 4: Connections (collapsible) ── */}
         <SettingsSection id="connections" title="Connections" subtitle="services and tools">
           <ConnectedServicesSection settings={settings} onConnect={handleServiceConnect} onDisconnect={handleServiceDisconnect} />
-          <AdvancedSection />
+          <AdvancedSection llmProvider={form.llmProvider} />
         </SettingsSection>
       </div>
 

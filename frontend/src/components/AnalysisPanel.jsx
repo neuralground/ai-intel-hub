@@ -97,7 +97,15 @@ export default function AnalysisPanel({ category, onClose }) {
   //   feed:URL → shows source name + inline Add button
   //   other    → opens externally
   const renderLink = ({ href, children }) => {
-    const itemMatch = href?.match(/^#item-(.+)$/);
+    // Match #item-ID or item:ID formats
+    const itemMatch = href?.match(/^(?:#item-|item:)(.+)$/);
+    if (!itemMatch) {
+      // Also check if href is an actual URL that matches a source item
+      const matchedItem = Object.values(sourceItems).find(it => it.url && href === it.url);
+      if (matchedItem) {
+        return renderLink({ href: `#item-${matchedItem.id}`, children });
+      }
+    }
     if (itemMatch) {
       const itemId = itemMatch[1];
       const found = sourceItems[itemId];

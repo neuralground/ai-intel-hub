@@ -13,11 +13,11 @@ import {
   getItemsWithoutEmbedding, updateItemEmbedding, updateItemCluster, getRecentItemsWithEmbeddings, saveDb,
 } from "./db.js";
 import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
-import { scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
-import { getOrgs, addOrg, removeOrg, setOrgActive } from "./orgs.js";
+import { scoreItems, scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
+import { getOrgs, getOrgLabels, addOrg, removeOrg, setOrgActive } from "./orgs.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 import { detectSourceType } from "./source-types.js";
-import { initEmbeddings, getModelStatus, embedItems, clusterByEmbedding, isReady as embeddingsReady } from "./embeddings.js";
+import { initEmbeddings, getModelStatus, embedItems, clusterByEmbedding, isReady as embeddingsReady, onReady as onEmbeddingsReady } from "./embeddings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -25,6 +25,16 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// ── LLM availability check ──────────────────────────────────────────────────
+function isLLMConfigured() {
+  const provider = process.env.LLM_PROVIDER || "anthropic";
+  if (provider === "anthropic") return !!(process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here");
+  if (provider === "openai") return !!process.env.OPENAI_API_KEY;
+  if (provider === "gemini") return !!process.env.GEMINI_API_KEY;
+  if (provider === "ollama") return true; // local, always available
+  return false;
+}
 
 // ── Initialize and sync default feeds ────────────────────────────────────────
 function initializeFeeds() {
@@ -69,7 +79,9 @@ app.get("/api/orgs", (req, res) => {
 });
 
 app.get("/api/orgs/affiliations", (req, res) => {
-  res.json(getDistinctAffiliations());
+  const activeLabels = new Set(getOrgLabels());
+  const all = getDistinctAffiliations();
+  res.json(all.filter(a => activeLabels.has(a.label)));
 });
 
 app.post("/api/orgs", (req, res) => {
@@ -151,7 +163,7 @@ app.post("/api/feeds", async (req, res) => {
       fetchSingleFeed(feed.id)
         .then(r => {
           console.log(`[Auto-fetch] ${feed.name}: ${r.newItems} new items`);
-          if (r.newItems > 0 && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
+          if (r.newItems > 0 && isLLMConfigured()) {
             return scoreUnscoredItems();
           }
         })
@@ -215,8 +227,12 @@ app.get("/api/items", (req, res) => {
     feedIds: feedIdsList,
     search,
   });
-  // Strip embedding vectors from response (too large) but keep cluster_id
-  const cleaned = items.map(({ embedding, ...rest }) => rest);
+  // Strip embedding vectors and filter out deactivated org affiliations
+  const activeLabels = new Set(getOrgLabels());
+  const cleaned = items.map(({ embedding, ...rest }) => ({
+    ...rest,
+    affiliations: (rest.affiliations || []).filter(a => activeLabels.has(a)),
+  }));
   res.json({ items: cleaned, total: count });
 });
 
@@ -371,15 +387,85 @@ app.post("/api/admin/cleanup", (req, res) => {
 });
 
 app.post("/api/admin/rescore", async (req, res) => {
+  // Legacy endpoint — just resets scores; actual scoring happens via SSE stream
+  const { resetScores } = await import("./db.js");
+  const reset = resetScores();
+  res.json({ ok: true, reset: reset.count, scored: 0 });
+});
+
+// Track active rescore so it can be cancelled
+let activeRescore = null;
+
+app.get("/api/admin/rescore/stream", async (req, res) => {
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  // Set up cancellation
+  let cancelled = false;
+  activeRescore = { cancel: () => { cancelled = true; } };
+  req.on("close", () => { cancelled = true; activeRescore = null; });
+
   try {
-    // Reset scored_at on all items so they get re-scored
-    const { resetScores } = await import("./db.js");
+    const { resetScores, getUnscoredItems: getUnscored } = await import("./db.js");
+
+    // Step 1: reset scores
+    send({ step: "reset", message: "Resetting scores..." });
     const reset = resetScores();
-    // Now score them
-    const result = await scoreUnscoredItems();
-    res.json({ ok: true, reset: reset.count, scored: result.scored });
+    const totalItems = reset.count;
+    const batchSize = 15;
+    const totalBatches = Math.ceil(totalItems / batchSize);
+    send({ step: "reset", message: `Reset ${totalItems} items — scoring in ${totalBatches} batches` });
+
+    // Step 2: score in batches with timing
+    let totalScored = 0;
+    let batchNum = 0;
+    const startTime = Date.now();
+
+    while (!cancelled) {
+      const unscored = getUnscored(batchSize);
+      if (unscored.length === 0) break;
+      batchNum++;
+
+      const pct = Math.round((totalScored / totalItems) * 100);
+      const elapsed = (Date.now() - startTime) / 1000;
+      const rate = totalScored > 0 ? elapsed / totalScored : 0;
+      const remaining = (totalItems - totalScored) * rate;
+      const eta = totalScored > 0 ? (remaining < 60 ? `${Math.round(remaining)}s left` : `~${Math.round(remaining / 60)}m left`) : "";
+
+      send({ step: "scoring", batch: batchNum, totalBatches, scored: totalScored, total: totalItems, pct, eta,
+        message: `Batch ${batchNum} of ${totalBatches}${eta ? ` — ${eta}` : ""}` });
+
+      const scored = await scoreItems(unscored);
+      totalScored += scored.length;
+
+      // Rate limit between batches
+      if (unscored.length === batchSize && !cancelled) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    if (cancelled) {
+      send({ step: "cancelled", scored: totalScored, total: totalItems,
+        message: `Cancelled after scoring ${totalScored} of ${totalItems} items. Scored items are updated; remaining items keep their previous scores.` });
+    } else {
+      // Step 3: re-embed and cluster
+      send({ step: "clustering", scored: totalScored, total: totalItems, pct: 99, message: "Re-clustering items..." });
+      await runEmbedAndCluster();
+      send({ step: "done", scored: totalScored, total: totalItems, pct: 100, message: `Scored ${totalScored} items` });
+    }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    send({ step: "error", message: err.message });
+  }
+  activeRescore = null;
+  res.end();
+});
+
+app.post("/api/admin/rescore/cancel", (req, res) => {
+  if (activeRescore) {
+    activeRescore.cancel();
+    res.json({ ok: true });
+  } else {
+    res.json({ ok: false, error: "No active rescore" });
   }
 });
 
@@ -455,7 +541,7 @@ cron.schedule(`*/${refreshInterval} * * * *`, async () => {
   try {
     await fetchAllFeeds();
     // Score new items if API key is configured
-    if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
+    if (isLLMConfigured()) {
       await scoreUnscoredItems();
     }
     // Embed and cluster
@@ -568,7 +654,7 @@ app.get("/api/settings", (req, res) => {
     refreshInterval: saved.FEED_REFRESH_INTERVAL || process.env.FEED_REFRESH_INTERVAL || "30",
     retentionDays: saved.ITEM_RETENTION_DAYS || process.env.ITEM_RETENTION_DAYS || "7",
     dedupEnabled: (saved.DEDUP_ENABLED ?? process.env.DEDUP_ENABLED ?? "true") !== "false",
-    dedupThreshold: parseFloat(saved.DEDUP_THRESHOLD || process.env.DEDUP_THRESHOLD || "0.82"),
+    dedupThreshold: parseFloat(saved.DEDUP_THRESHOLD || process.env.DEDUP_THRESHOLD || "0.75"),
     dedupWindowDays: parseInt(saved.DEDUP_WINDOW_DAYS || process.env.DEDUP_WINDOW_DAYS || "7"),
     substackSession: maskKey(saved.SUBSTACK_SESSION || ""),
     twitterSession: maskKey(saved.TWITTER_SESSION || ""),
@@ -696,6 +782,42 @@ app.get("/api/embeddings/status", (req, res) => {
   res.json(getModelStatus());
 });
 
+app.get("/api/embeddings/debug", (req, res) => {
+  const allItems = getItems({ limit: 5000 });
+  const withEmbedding = allItems.filter(i => i.embedding);
+  const withCluster = allItems.filter(i => i.cluster_id);
+  const clusterGroups = {};
+  for (const item of withCluster) {
+    if (!clusterGroups[item.cluster_id]) clusterGroups[item.cluster_id] = [];
+    clusterGroups[item.cluster_id].push({ id: item.id, title: item.title?.slice(0, 80) });
+  }
+  const multiClusters = Object.entries(clusterGroups).filter(([, items]) => items.length > 1);
+  res.json({
+    totalItems: allItems.length,
+    withEmbedding: withEmbedding.length,
+    withCluster: withCluster.length,
+    uniqueClusters: new Set(withCluster.map(i => i.cluster_id)).size,
+    multiItemClusters: multiClusters.length,
+    clusters: multiClusters.slice(0, 20).map(([id, items]) => ({ clusterId: id, items })),
+    modelReady: embeddingsReady(),
+    settings: {
+      enabled: (loadSettingsFile().DEDUP_ENABLED ?? "true") !== "false",
+      threshold: parseFloat(loadSettingsFile().DEDUP_THRESHOLD || "0.75"),
+      windowDays: parseInt(loadSettingsFile().DEDUP_WINDOW_DAYS || "7"),
+    },
+  });
+});
+
+app.post("/api/embeddings/run", async (req, res) => {
+  if (!embeddingsReady()) return res.json({ ok: false, error: "Embedding model not ready" });
+  try {
+    await runEmbedAndCluster();
+    res.json({ ok: true });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
+});
+
 // ── Serve frontend in production / Electron mode ─────────────────────────────
 // MUST be registered after ALL API routes — the catch-all shadows everything below it
 if (process.env.NODE_ENV === "production" || process.env.ELECTRON_MODE) {
@@ -707,25 +829,35 @@ if (process.env.NODE_ENV === "production" || process.env.ELECTRON_MODE) {
 }
 
 async function runEmbedAndCluster() {
-  if (!embeddingsReady()) return;
+  if (!embeddingsReady()) {
+    console.log("[Embeddings] Skipping — model not ready");
+    return;
+  }
   // Read dedup settings
   const saved = loadSettingsFile();
   const enabled = (saved.DEDUP_ENABLED ?? "true") !== "false";
-  if (!enabled) return;
-  const threshold = parseFloat(saved.DEDUP_THRESHOLD || "0.82");
+  if (!enabled) {
+    console.log("[Embeddings] Skipping — dedup disabled");
+    return;
+  }
+  const threshold = parseFloat(saved.DEDUP_THRESHOLD || "0.75");
   const windowDays = parseInt(saved.DEDUP_WINDOW_DAYS || "7");
 
   try {
-    // Embed items that don't have embeddings yet
-    const unembedded = getItemsWithoutEmbedding(200);
-    if (unembedded.length > 0) {
-      console.log(`[Embeddings] Embedding ${unembedded.length} items...`);
+    // Embed ALL items that don't have embeddings yet (in batches of 200)
+    let totalEmbedded = 0;
+    while (true) {
+      const unembedded = getItemsWithoutEmbedding(200);
+      if (unembedded.length === 0) break;
+      console.log(`[Embeddings] Embedding batch of ${unembedded.length} items...`);
       const results = await embedItems(unembedded);
       for (const { id, embedding } of results) {
         updateItemEmbedding(id, embedding);
       }
-      console.log(`[Embeddings] Embedded ${results.length} items`);
+      totalEmbedded += results.length;
+      if (results.length < unembedded.length) break; // some failed, don't loop forever
     }
+    if (totalEmbedded > 0) console.log(`[Embeddings] Embedded ${totalEmbedded} items total`);
 
     // Cluster recent items
     const recent = getRecentItemsWithEmbeddings(windowDays);
@@ -736,9 +868,9 @@ async function runEmbedAndCluster() {
       }
       const uniqueClusters = new Set(Object.values(clusters)).size;
       const clusteredCount = Object.keys(clusters).length;
-      if (clusteredCount > uniqueClusters) {
-        console.log(`[Embeddings] Clustered ${clusteredCount} items into ${uniqueClusters} groups (threshold: ${threshold}, window: ${windowDays}d)`);
-      }
+      console.log(`[Embeddings] Clustered ${clusteredCount} items into ${uniqueClusters} groups (${clusteredCount - uniqueClusters} duplicates, threshold: ${threshold}, window: ${windowDays}d)`);
+    } else {
+      console.log("[Embeddings] No recent items with embeddings to cluster");
     }
     saveDb();
   } catch (err) {
@@ -767,22 +899,28 @@ export function createServer(port) {
 ║  API:       http://localhost:${actualPort}/api         ║
 ║  Feeds:     ${getAllFeeds().length} configured                  ║
 ║  Refresh:   every ${refreshInterval} minutes                  ║
-║  LLM:       ${process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here" ? "configured ✓" : "not configured ✗"}              ║
+║  LLM:       ${isLLMConfigured() ? "configured ✓" : "not configured ✗"}              ║
 ╚══════════════════════════════════════════════╝
       `);
 
       // Start embedding model download in background (non-blocking)
       initEmbeddings().catch(e => console.error("[Startup] Embedding init failed:", e.message));
 
+      // When embedding model is ready, run embed+cluster on existing items
+      onEmbeddingsReady(() => {
+        console.log("[Startup] Embedding model ready — running initial embed & cluster...");
+        runEmbedAndCluster();
+      });
+
       // Initial fetch on startup
       console.log("[Startup] Running initial feed fetch...");
       fetchAllFeeds().then(async (result) => {
         console.log(`[Startup] Fetched ${result.totalNew} new items from ${result.feeds.length} feeds`);
-        if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== "sk-ant-your-key-here") {
+        if (isLLMConfigured()) {
           console.log("[Startup] Scoring items...");
           await scoreUnscoredItems().then((r) => console.log(`[Startup] Scored ${r.scored} items`));
         }
-        // Embed and cluster after scoring
+        // Embed and cluster after scoring (if model is ready by now)
         runEmbedAndCluster();
       });
 

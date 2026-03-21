@@ -344,7 +344,9 @@ export async function generateAnalysis(mode, category = null, { force = false } 
     )
     .join("\n\n");
 
-  const citationRule = `\nIMPORTANT: For each key insight or claim, cite the source item(s) using this exact link format: [short title](#item-ITEM_ID) where ITEM_ID is the ID shown next to each item above. Every bullet point or paragraph that draws on a specific item must include at least one such source link. Do NOT use the external URL in links — always use the #item-ID format.`;
+  const citationRule = `\nCITATION FORMAT (mandatory): Cite sources using EXACTLY this markdown link syntax: [short title](#item-ITEM_ID)
+Example: [OpenAI announces GPT-5](#item-a1b2c3d4e5f67890)
+The ITEM_ID is the hex ID shown after "ID:" for each item above. Do NOT use external URLs in citation links. Every claim must have at least one citation.`;
 
   const prompts = {
     briefing: {
@@ -426,7 +428,23 @@ Items:\n${itemSummaries}`,
   if (!prompt) throw new Error(`Unknown analysis mode: ${mode}`);
 
   try {
-    const result = await callAnalysisLLM(prompt.system, prompt.user, 2000);
+    const rawResult = await callAnalysisLLM(prompt.system, prompt.user, 2000);
+    // Normalize malformed citations into proper markdown links.
+    // LLMs may produce: "title (#ID)", "[title] (#item-ID)", "(#item-ID)" etc.
+    const validIds = new Set(sourceItems.map(i => i.id));
+    const result = rawResult
+      // Fix "[title] (URL)" — space between ] and ( → proper markdown link
+      .replace(/\[([^\]]+)\]\s+\(((?:https?:\/\/|#)[^)]+)\)/g, "[$1]($2)")
+      // Fix "[title](#ID)" missing item- prefix → add it
+      .replace(/\[([^\]]+)\]\(#([a-f0-9]{8,})\)/g, (_, text, id) =>
+        validIds.has(id) ? `[${text}](#item-${id})` : `[${text}]`)
+      // Fix bare "text (#ID)" or "text (#item-ID)" without [] → wrap as link
+      .replace(/(?<!\])(?<!\))\s*\(#(?:item-)?([a-f0-9]{8,})\)/g, (match, id) => {
+        if (!validIds.has(id)) return match;
+        return ` [↗](#item-${id})`;
+      })
+      // Fix bare "text (#feed-URL)" without [] → wrap as link
+      .replace(/(?<!\])(?<!\))\s*\(#feed-(https?:\/\/[^)]+)\)/g, " [↗](#feed-$1)");
     const itemIds = sourceItems.map((i) => i.id);
     cacheAnalysis(mode, category, result, itemIds);
     // Include source items so the frontend can render item popovers

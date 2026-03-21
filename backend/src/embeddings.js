@@ -14,6 +14,7 @@ let modelReady = false;
 let modelLoading = false;
 let modelError = null;
 let loadProgress = null; // { status, file, progress }
+let onReadyCallbacks = [];
 
 const MODEL_NAME = "Xenova/all-MiniLM-L6-v2";
 
@@ -52,6 +53,9 @@ export async function initEmbeddings() {
     modelLoading = false;
     loadProgress = { status: "ready", progress: 100 };
     console.log("[Embeddings] Model ready");
+    // Fire any registered onReady callbacks
+    for (const cb of onReadyCallbacks) { try { cb(); } catch {} }
+    onReadyCallbacks = [];
   } catch (err) {
     modelError = err.message;
     modelLoading = false;
@@ -71,6 +75,11 @@ export function getModelStatus() {
 
 export function isReady() {
   return modelReady;
+}
+
+export function onReady(cb) {
+  if (modelReady) { cb(); return; }
+  onReadyCallbacks.push(cb);
 }
 
 // ── Generate embedding for text ─────────────────────────────────────────────
@@ -112,7 +121,7 @@ export function cosineSimilarity(a, b) {
 // ── Cluster items by semantic similarity ────────────────────────────────────
 // Uses single-linkage clustering: items above threshold join the same cluster.
 // Returns a map of itemId → clusterId.
-const SIMILARITY_THRESHOLD = 0.82;
+const SIMILARITY_THRESHOLD = 0.75;
 
 export function clusterByEmbedding(items, threshold = SIMILARITY_THRESHOLD) {
   // items: [{ id, embedding }]
