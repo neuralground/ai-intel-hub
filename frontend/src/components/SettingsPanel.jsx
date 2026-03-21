@@ -3,6 +3,7 @@ import { api } from "../api.js";
 import { mono, sans } from "../constants.js";
 import { SERVICES, ServiceCard } from "./services.jsx";
 import OrgBadge from "./OrgBadge.jsx";
+import ThemeToggle from "./ThemeToggle.jsx";
 
 // ── LLM Provider Definitions ────────────────────────────────────────────────
 const LLM_PROVIDERS = [
@@ -435,7 +436,7 @@ function AdvancedSection() {
 }
 
 // ── Settings Panel ──────────────────────────────────────────────────────────
-function SettingsPanel({ onClose }) {
+function SettingsPanel({ onClose, themeMode, setThemeMode }) {
   const [settings, setSettings] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({});
@@ -653,6 +654,12 @@ function SettingsPanel({ onClose }) {
         <div>
           <label style={label}>SOURCE REFRESH INTERVAL (MINUTES)</label>
           <input type="number" min="5" max="1440" value={form.refreshInterval} onChange={e => setForm(f => ({ ...f, refreshInterval: e.target.value }))} style={{ ...inp, width: 120 }} />
+        </div>
+
+        {/* Theme */}
+        <div>
+          <label style={label}>THEME</label>
+          <ThemeToggle mode={themeMode} setMode={setThemeMode} />
         </div>
 
         {/* Organizations */}

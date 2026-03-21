@@ -3,7 +3,6 @@ import { api } from "./api.js";
 import { useTheme } from "./useTheme.js";
 import { CATEGORIES, mono, sans, timeAgo, relColor } from "./constants.js";
 import OrgBadge from "./components/OrgBadge.jsx";
-import ThemeToggle from "./components/ThemeToggle.jsx";
 import AnalysisPanel from "./components/AnalysisPanel.jsx";
 import SourcesPanel from "./components/SourcesPanel.jsx";
 import SettingsPanel from "./components/SettingsPanel.jsx";
@@ -395,8 +394,6 @@ export default function App() {
             </>);
           })()}
 
-          <div style={{ marginTop: 20, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, letterSpacing: "0.1em", marginBottom: 8, fontWeight: 600 }}>THEME</div>
-          <ThemeToggle mode={themeMode} setMode={setThemeMode} />
         </aside>
 
         {/* Main content */}
@@ -538,7 +535,7 @@ export default function App() {
       {/* Panels */}
       {showAnalysis && <AnalysisPanel category={category} onClose={() => setShowAnalysis(false)} />}
       {showSources && <SourcesPanel feeds={feeds} onClose={() => setShowSources(false)} onRefresh={loadData} />}
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} themeMode={themeMode} setThemeMode={setThemeMode} />}
       {showSaved && <SavedItemsPanel onClose={() => setShowSaved(false)} />}
     </div>
   );
