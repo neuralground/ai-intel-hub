@@ -390,171 +390,141 @@ Organized by priority and effort. Items marked `[MVP]` are the most impactful ne
 
 ## P0: Core Functionality Gaps
 
-### `[MVP]` T1: X/Twitter ingestion via RSS bridge
+### ~~T1: X/Twitter ingestion via RSS bridge~~ — OPEN
+**Status:** Still needed. X accounts are listed as sources but ingestion depends on RSS bridges.
 **What:** Add support for fetching tweets from X accounts using third-party RSS bridges (e.g., rss.app, Nitter instances, or similar services) as a lightweight alternative to the X API.
 **Where:** `backend/src/fetcher.js` — add a new fetcher path for `type: "x-account"` feeds that rewrites the X profile URL to an RSS bridge URL before parsing.
-**Why:** X accounts are currently display-only bookmarks. This is the single biggest coverage gap since X is a primary signal source.
-**Complexity:** Low-medium. The RSS parsing infrastructure already exists; this is primarily URL rewriting and testing.
+**Complexity:** Low-medium.
 
-### `[MVP]` T2: Pagination and infinite scroll
-**What:** The frontend currently loads up to 100 items. Implement cursor-based pagination in the API and infinite scroll or "Load More" in the frontend.
-**Where:** `backend/src/server.js` (GET /api/items already supports limit/offset), `frontend/src/App.jsx`.
-**Complexity:** Low.
+### ~~T2: Pagination~~ — DONE
+Implemented: 25 items per page with client-side pagination. Server supports limit/offset.
 
-### `[MVP]` T3: Error handling and loading states in frontend
-**What:** The frontend has minimal error handling. Add toast notifications for failed API calls, loading skeletons for initial data fetch, and retry logic for transient failures.
-**Where:** `frontend/src/App.jsx` — create a shared notification/toast component.
-**Complexity:** Low.
+### ~~T3: Error handling and loading states~~ — PARTIALLY DONE
+**Done:** Loading states, progress bars (refresh + analysis), error display in panels.
+**Remaining:** Toast notifications for failed API calls, retry logic for transient failures.
 
-### T4: Feed OPML import/export
-**What:** Allow importing feeds from OPML files (standard RSS reader export format) and exporting the current feed list as OPML.
+### T4: Source OPML import/export — OPEN
+**What:** Allow importing sources from OPML files (standard RSS reader export format) and exporting the current source list as OPML.
 **Where:** New endpoint `POST /api/feeds/import` and `GET /api/feeds/export` in `server.js`.
-**Why:** Makes it easy to migrate from existing RSS readers and share feed configurations.
 **Complexity:** Low.
 
 ---
 
 ## P1: LLM Pipeline Improvements
 
-### `[MVP]` T5: Incremental scoring with deduplication
-**What:** Currently, scoring processes all items with `relevance === 0.5`. After a re-fetch, previously scored items can get their relevance reset. Improve the upsert logic to preserve existing scores when re-fetching, and only score genuinely new items.
-**Where:** `backend/src/db.js` (upsertItem logic), `backend/src/scorer.js` (scoreUnscoredItems).
-**Complexity:** Low. The logic partially exists but the 0.5 sentinel value is fragile.
+### ~~T5: Incremental scoring~~ — DONE
+Implemented: `scored_at` tracking prevents re-scoring. Upsert preserves existing scores on re-fetch.
 
-### T6: Batch analysis with streaming
-**What:** The analysis panel blocks until Claude returns the full response. Implement streaming (Anthropic streaming API) so the briefing appears progressively.
-**Where:** `backend/src/scorer.js` (callClaude function), new SSE endpoint in `server.js`, frontend streaming reader.
+### T6: Streaming analysis — OPEN
+**What:** The analysis panel blocks until the LLM returns the full response. Implement streaming so the briefing appears progressively.
+**Where:** `backend/src/scorer.js` (callLLM function), new SSE endpoint in `server.js`, frontend streaming reader.
 **Complexity:** Medium.
 
-### T7: User feedback loop for relevance calibration
-**What:** When a user saves, dismisses, or spends time on an item, use that signal to refine the relevance scoring prompt. Maintain a small set of "example items" (highly relevant saves + low-relevance dismissals) and include them as few-shot examples in the scoring prompt.
+### T7: User feedback loop for relevance calibration — OPEN
+**What:** Use save/dismiss/thumbs-up/thumbs-down signals as few-shot examples in the scoring prompt to sharpen relevance over time.
 **Where:** `backend/src/scorer.js` (add feedback examples to scoring prompt), `backend/src/db.js` (track interaction signals).
-**Why:** The static RELEVANCE_CONTEXT is good but coarse. Behavioral signals would make scoring significantly sharper over time.
-**Complexity:** Medium.
+**Complexity:** Medium. High impact.
 
-### T8: Multi-model support
-**What:** Allow configuring different models for scoring vs. analysis (e.g., Haiku for high-volume scoring, Opus for daily summaries). Add model selection to `.env` or make it per-task configurable.
-**Where:** `backend/src/scorer.js` — parameterize the MODEL constant.
-**Complexity:** Low.
+### ~~T8: Multi-model support~~ — DONE
+Implemented: Multi-provider LLM (Anthropic, OpenAI, Gemini, Ollama) with per-provider model selection.
 
-### T9: Deduplication and clustering
-**What:** Multiple feeds often cover the same news (e.g., a model release appears on the lab blog, in arXiv, and across several substacks). Detect near-duplicate items and cluster them, showing the best/most relevant source and noting how many sources covered it.
-**Where:** New module `backend/src/dedup.js`. Use embedding similarity (via Claude or a lightweight embedding model) or title/URL fuzzy matching.
-**Why:** Reduces noise significantly. A development that appears across 5 feeds is both important (signal) and redundant (noise). Clustering solves both.
-**Complexity:** Medium-high.
+### T9: Deduplication and clustering — OPEN
+**What:** Detect near-duplicate items across sources and cluster them, showing the best source and noting cross-source coverage. A development that appears across 5 sources is both important (signal) and redundant (noise).
+**Where:** New module `backend/src/dedup.js`. Use embedding similarity or title/URL fuzzy matching.
+**Complexity:** Medium-high. High impact.
 
 ---
 
 ## P2: New Source Types
 
-### T10: Web scraping for non-RSS sources
-**What:** Some important sources (regulatory body websites, vendor changelog pages, specific government publications) don't offer RSS. Add a web scraper that monitors specific URLs for changes and generates synthetic feed items from detected changes.
-**Where:** New module `backend/src/scraper.js`, invoked alongside RSS fetcher in the cron job. Use `cheerio` for HTML parsing and a content hash to detect changes.
-**Complexity:** Medium. Each target page may need custom selectors.
-
-### T11: LinkedIn post monitoring
-**What:** Several important AI voices (Sarah Guo, many policy people) have moved primarily to LinkedIn. Explore LinkedIn RSS feeds (some exist via unofficial routes) or periodic scraping of public profiles.
-**Where:** New feed type handler in `fetcher.js`.
-**Complexity:** Medium-high. LinkedIn actively blocks scraping; may require a third-party service.
-
-### T12: YouTube transcript ingestion
-**What:** For tracked YouTube channels (conference talks, technical deep-dives), auto-detect new videos, extract transcripts via YouTube's auto-generated captions, and generate summaries via Claude.
-**Where:** New module `backend/src/youtube.js`. Use YouTube Data API v3 for channel monitoring, `youtube-transcript` package or yt-dlp for transcript extraction.
-**Why:** This was identified in the original design conversation as high-leverage — YouTube has unique long-form content not available elsewhere, but the time cost of watching is prohibitive. Transcript + summary collapses a 60-minute video into a 2-minute scan.
+### T10: Web scraping for non-RSS sources — OPEN
+**What:** Monitor specific URLs for changes and generate synthetic items from detected changes. Useful for regulatory sites, vendor changelogs, government publications.
+**Where:** New module `backend/src/scraper.js`, use `cheerio` for HTML parsing and content hashing.
 **Complexity:** Medium.
 
-### T13: arXiv enhanced processing
-**What:** arXiv RSS feeds only provide titles and short abstracts. For papers that score above a relevance threshold (e.g., 0.8+), automatically fetch the full abstract from the arXiv API and optionally download the PDF for deeper LLM analysis.
-**Where:** Enhancement to `fetcher.js` for arXiv feeds, plus a post-processing step in the scoring pipeline.
+### T11: LinkedIn post monitoring — OPEN
+**What:** LinkedIn is a primary channel for many voices. Explore RSS bridges or periodic scraping of public profiles.
+**Complexity:** Medium-high. LinkedIn actively blocks scraping.
+
+### T12: YouTube transcript ingestion — OPEN
+**What:** For tracked YouTube channels, extract transcripts via auto-generated captions and generate LLM summaries. Collapses a 60-minute video into a 2-minute scan.
+**Where:** New module `backend/src/youtube.js`. Use YouTube Data API v3 + `youtube-transcript` package.
+**Complexity:** Medium. High value.
+
+### T13: arXiv enhanced processing — OPEN
+**What:** For high-relevance papers (>0.8), fetch full abstracts from arXiv API and optionally process PDFs for deeper analysis.
+**Where:** Enhancement to `fetcher.js` + post-processing in scoring pipeline.
 **Complexity:** Medium.
 
 ---
 
 ## P3: Frontend Enhancements
 
-### T14: Component decomposition
-**What:** `App.jsx` is currently a 400-line monolith. Split into proper components: `Header`, `Sidebar`, `ItemCard`, `ItemList`, `AnalysisPanel`, `SettingsPanel`, `FeedHealthPanel`.
-**Where:** `frontend/src/components/` directory.
-**Why:** Necessary for maintainability as the UI grows.
-**Complexity:** Low-medium. Mechanical refactor.
+### ~~T14: Component decomposition~~ — DONE
+Decomposed `App.jsx` from 2427 lines to 545 lines (78% reduction). Extracted 8 modules into `frontend/src/components/`: SourcesPanel (530), SettingsPanel (683), AnalysisPanel (196), services (155), SavedItemsPanel (94), ItemHoverPopover (46), ThemeToggle (23), OrgBadge (15). Shared constants extracted to `constants.js` (50).
 
-### T15: Dark/light theme and responsive layout
-**What:** The UI is currently dark-only and assumes desktop width. Add a theme toggle (respecting system preference) and responsive breakpoints for tablet/mobile use.
-**Where:** CSS variables are partially in place. Extend with media queries and theme switching.
-**Complexity:** Medium.
+### ~~T15: Dark/light theme~~ — DONE
+Implemented: System/light/dark theme toggle with CSS variables.
 
-### T16: Keyboard navigation
-**What:** Add keyboard shortcuts: `j/k` for next/previous item, `o` to open source, `s` to save, `d` to dismiss, `/` to focus search, `a` to toggle analysis panel.
-**Where:** `frontend/src/App.jsx` — add a `useEffect` with `keydown` listener.
-**Why:** Power users (the target audience) expect keyboard-driven workflows.
+### T16: Keyboard navigation — OPEN
+**What:** Add keyboard shortcuts: `j/k` for next/previous item, `o` to open source, `s` to save, `d` to dismiss, `/` to focus search.
 **Complexity:** Low.
 
-### T17: Saved items view and weekly digest export
-**What:** Add a dedicated "Saved" view that shows all saved items. Add an export function that generates a markdown digest of saved items from the past week, suitable for pasting into an email or document.
-**Where:** Frontend: new view/filter. Backend: new endpoint `GET /api/items/digest?period=7d` that returns formatted markdown.
-**Complexity:** Low-medium.
+### ~~T17: Saved items view~~ — PARTIALLY DONE
+**Done:** Saved items panel with category filter.
+**Remaining:** Weekly digest export as markdown.
 
-### T18: Feed health dashboard
-**What:** The current feed health is only available via the LLM analysis. Build a dedicated visual dashboard showing each feed's update frequency, relevance trend, error rate, and staleness score as a grid of cards with sparkline charts.
-**Where:** New component `frontend/src/components/FeedHealthDashboard.jsx`.
+### T18: Source health dashboard with sparklines — OPEN
+**What:** Visual dashboard with per-source update frequency, relevance trend, error rate as a grid of cards with sparkline charts.
+**Done so far:** Health indicators and status in Sources panel. Missing: visual trends/sparklines.
 **Complexity:** Medium.
 
 ---
 
 ## P4: Infrastructure and Deployment
 
-### T19: Switch persistence to SQLite
-**What:** Replace `db.js` JSON-file store with `better-sqlite3` for better performance at scale, proper indexing, and atomic writes. The current API surface in `db.js` was designed to make this a drop-in replacement.
-**Where:** Rewrite `backend/src/db.js`. The function signatures and return shapes should remain identical.
-**Complexity:** Medium. The interface is stable; the implementation is mechanical.
+### T19: Switch persistence to SQLite — OPEN
+**What:** Replace JSON-file store with `better-sqlite3` for better performance, indexing, and atomic writes. The `db.js` API surface was designed for drop-in replacement.
+**Complexity:** Medium.
 
-### T20: Add authentication
-**What:** For any non-localhost deployment, add authentication. Options: simple API key header check (minimal), or JWT-based auth with a login page.
-**Where:** Express middleware in `server.js`, frontend auth wrapper.
+### T20: Add authentication — OPEN
+**What:** For non-localhost deployments. Options: API key header (minimal) or JWT-based auth.
 **Complexity:** Low (API key) to Medium (JWT/OAuth).
 
-### T21: Health check endpoint for monitoring
-**What:** Enhance `GET /api/health` to include: last successful fetch time, number of feed errors, LLM API status (can reach Anthropic), disk usage of data directory.
-**Where:** `backend/src/server.js`.
+### T21: Enhanced health check endpoint — OPEN
+**What:** Include last fetch time, feed error count, LLM API status, disk usage in `GET /api/health`.
 **Complexity:** Low.
 
-### T22: Logging and observability
-**What:** Replace `console.log` with a structured logger (e.g., `pino`). Add request logging middleware. Emit metrics for: feed fetch duration, scoring latency, API error rates.
-**Where:** New module `backend/src/logger.js`, integrate across all modules.
+### T22: Structured logging — OPEN
+**What:** Replace `console.log` with structured logger (e.g., `pino`). Add request logging and metrics.
 **Complexity:** Low-medium.
 
-### T23: PostgreSQL option for multi-user / cloud
-**What:** For deployment on platforms with ephemeral filesystems (Railway, Fly.io), provide a PostgreSQL implementation of `db.js`. Use the same function signatures. Add a `DB_TYPE=postgres` env var to switch between JSON/SQLite/PG.
-**Where:** New file `backend/src/db-postgres.js`, factory pattern in a `backend/src/db-factory.js`.
+### T23: PostgreSQL option — OPEN
+**What:** For cloud platforms with ephemeral filesystems. Same `db.js` function signatures, `DB_TYPE=postgres` env var.
 **Complexity:** Medium.
 
 ---
 
 ## P5: Advanced / Long-term
 
-### T24: Embedding-based semantic search
-**What:** Generate embeddings for all items (via Claude or a local model) and store them. Enable semantic search ("show me everything related to agent memory architecture") instead of just keyword matching.
-**Where:** New module `backend/src/embeddings.js`, vector similarity search in `db.js`, new API endpoint.
+### T24: Embedding-based semantic search — OPEN
+**What:** Generate embeddings for all items. Enable semantic search instead of keyword matching.
 **Complexity:** High.
 
-### T25: Trend detection
-**What:** Analyze tag frequency and relevance scores over time windows (7d, 30d) to detect emerging topics, rising/falling themes, and anomalous spikes. Surface as a "Trends" section in the dashboard.
-**Where:** New module `backend/src/trends.js`, frontend component.
+### T25: Trend detection — OPEN
+**What:** Detect emerging topics, rising/falling themes from tag frequency and relevance over time. Surface as a "Trends" section.
 **Complexity:** Medium-high.
 
-### T26: Personal knowledge graph
-**What:** Build a graph of connections between items, feeds, tags, and user interactions. Use it to surface related items, identify coverage clusters, and visualize the user's AI knowledge landscape.
-**Where:** Major new feature. Consider a lightweight graph DB or in-memory graph structure.
+### T26: Personal knowledge graph — OPEN
+**What:** Graph of connections between items, sources, tags, and interactions. Surface related items, coverage clusters.
 **Complexity:** High.
 
-### T27: Email/Slack digest delivery
-**What:** Generate and send a periodic digest (daily or weekly) via email or Slack webhook. Include top items by relevance, new critical developments, and feed health alerts.
-**Where:** New module `backend/src/digest.js`, new cron job, SMTP or webhook configuration.
+### T27: Email/Slack digest delivery — OPEN
+**What:** Periodic digest (daily/weekly) via email or Slack webhook with top items, critical developments, health alerts.
 **Complexity:** Medium.
 
-### T28: Multi-user support
-**What:** Support multiple users, each with their own feed configuration, relevance context, and interaction history. Requires authentication (T20), per-user data isolation, and likely PostgreSQL (T23).
-**Where:** Architectural change across all layers.
+### T28: Multi-user support — OPEN
+**What:** Per-user feed configuration, relevance context, and interaction history. Requires T20 + T23.
 **Complexity:** High.
 
 ---
