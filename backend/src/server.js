@@ -73,9 +73,9 @@ app.get("/api/orgs/affiliations", (req, res) => {
 });
 
 app.post("/api/orgs", (req, res) => {
-  const { id, label, type, aliases } = req.body;
+  const { id, label, type, url, aliases } = req.body;
   if (!id || !label) return res.status(400).json({ error: "id and label are required" });
-  const result = addOrg({ id, label, type: type || "other", aliases: aliases || [] });
+  const result = addOrg({ id, label, type: type || "other", url: url || undefined, aliases: aliases || [] });
   res.json(result);
 });
 
@@ -601,6 +601,75 @@ app.post("/api/settings", (req, res) => {
   }
 });
 
+// ── LLM test endpoint ───────────────────────────────────────────────────────
+app.post("/api/llm/test", async (req, res) => {
+  const { provider, model } = req.body;
+  if (!provider || !model) return res.status(400).json({ ok: false, error: "provider and model required" });
+
+  const prompt = "Reply with exactly: OK";
+  const start = Date.now();
+
+  try {
+    let text;
+    if (provider === "anthropic") {
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey || apiKey === "sk-ant-your-key-here") throw new Error("API key not configured");
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model, max_tokens: 16, messages: [{ role: "user", content: prompt }] }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!r.ok) { const e = await r.text(); throw new Error(`${r.status}: ${e}`); }
+      const d = await r.json();
+      text = d.content?.[0]?.text || "";
+    } else if (provider === "openai") {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("API key not configured");
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, max_tokens: 16, messages: [{ role: "user", content: prompt }] }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!r.ok) { const e = await r.text(); throw new Error(`${r.status}: ${e}`); }
+      const d = await r.json();
+      text = d.choices?.[0]?.message?.content || "";
+    } else if (provider === "gemini") {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API key not configured");
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 16 } }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!r.ok) { const e = await r.text(); throw new Error(`${r.status}: ${e}`); }
+      const d = await r.json();
+      text = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    } else if (provider === "ollama") {
+      const base = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+      const r = await fetch(`${base}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, stream: false, options: { num_predict: 16 }, messages: [{ role: "user", content: prompt }] }),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!r.ok) { const e = await r.text(); throw new Error(`${r.status}: ${e}`); }
+      const d = await r.json();
+      text = d.message?.content || "";
+    } else {
+      return res.status(400).json({ ok: false, error: `Unknown provider: ${provider}` });
+    }
+
+    const ms = Date.now() - start;
+    res.json({ ok: true, ms, response: text.trim().substring(0, 100) });
+  } catch (err) {
+    const ms = Date.now() - start;
+    res.json({ ok: false, ms, error: err.message });
+  }
+});
+
 // ── Ollama models endpoint ──────────────────────────────────────────────────
 app.get("/api/ollama/models", async (req, res) => {
   const base = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
@@ -622,8 +691,13 @@ app.post("/api/electron/settings", (req, res) => {
   app.handle(req, res);
 });
 
+// ── Embeddings & Clustering ─────────────────────────────────────────────────
+app.get("/api/embeddings/status", (req, res) => {
+  res.json(getModelStatus());
+});
+
 // ── Serve frontend in production / Electron mode ─────────────────────────────
-// Registered after all API routes to avoid catch-all shadowing /api/* endpoints
+// MUST be registered after ALL API routes — the catch-all shadows everything below it
 if (process.env.NODE_ENV === "production" || process.env.ELECTRON_MODE) {
   const frontendPath = path.join(__dirname, "..", "..", "frontend", "dist");
   app.use(express.static(frontendPath));
@@ -631,11 +705,6 @@ if (process.env.NODE_ENV === "production" || process.env.ELECTRON_MODE) {
     res.sendFile(path.join(frontendPath, "index.html"));
   });
 }
-
-// ── Embeddings & Clustering ─────────────────────────────────────────────────
-app.get("/api/embeddings/status", (req, res) => {
-  res.json(getModelStatus());
-});
 
 async function runEmbedAndCluster() {
   if (!embeddingsReady()) return;

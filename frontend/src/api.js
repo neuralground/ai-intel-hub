@@ -76,5 +76,6 @@ export const api = {
   saveSettings: (settings) => request("/settings", { method: "POST", body: JSON.stringify(settings) }),
 
   // LLM
+  testLLM: (provider, model) => request("/llm/test", { method: "POST", body: JSON.stringify({ provider, model }) }),
   getOllamaModels: () => request("/ollama/models"),
 };

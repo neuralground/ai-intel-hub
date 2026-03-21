@@ -374,16 +374,32 @@ function EmbeddingStatus() {
   const [settings, setSettings] = useState(null);
 
   useEffect(() => {
-    api.getEmbeddingStatus().then(setStatus).catch(() => {});
+    let stopped = false;
+    let failures = 0;
+    const fetchStatus = () => {
+      api.getEmbeddingStatus().then(s => {
+        if (stopped) return;
+        failures = 0;
+        setStatus(s);
+        if (s.ready || (s.error && !s.loading)) clearInterval(interval);
+      }).catch(() => {
+        if (stopped) return;
+        failures++;
+        // Only show error after several consecutive failures (server may still be starting)
+        if (failures >= 4) {
+          setStatus({ error: "Could not reach embedding service" });
+          clearInterval(interval);
+        }
+      });
+    };
+    fetchStatus();
     api.getSettings().then(s => setSettings({
       enabled: s.dedupEnabled !== false,
       threshold: s.dedupThreshold || 0.82,
       windowDays: s.dedupWindowDays || 7,
     })).catch(() => {});
-    const interval = setInterval(() => {
-      api.getEmbeddingStatus().then(setStatus).catch(() => {});
-    }, 5000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchStatus, 5000);
+    return () => { stopped = true; clearInterval(interval); };
   }, []);
 
   const saveSetting = (key, value) => {
@@ -415,21 +431,24 @@ function EmbeddingStatus() {
       <div style={hintStyle}>Items covering the same story across multiple sources are grouped together, showing the most relevant version with links to the others.</div>
 
       {/* Model status */}
-      <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--bg-elevated)", borderRadius: 5, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{
-          width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-          background: !status ? "var(--text-faint)" : status.ready ? "#10B981" : status.loading ? "var(--accent)" : status.error ? "#EF4444" : "var(--text-faint)",
-          animation: (!status || status.loading) ? "pulse 1.5s infinite" : "none",
-        }} />
-        <span style={{ color: "var(--text-secondary)", fontSize: 10, fontFamily: mono }}>
-          {!status ? "Checking embedding model..."
-            : status.ready ? "Embedding model ready"
-            : status.loading ? `Downloading embedding model${status.progress?.progress ? ` (${status.progress.progress}%)` : "..."}`
-            : status.error ? "Embedding model failed to load"
-            : "Initializing embedding model..."}
-        </span>
-        {status?.error && <span style={{ color: "#EF4444", fontSize: 9, fontFamily: mono, marginLeft: 4 }}>{status.error}</span>}
-      </div>
+      {(() => {
+        const notInstalled = status?.error?.includes("Cannot find package");
+        const dotColor = !status ? "var(--text-faint)" : status.ready ? "#10B981" : status.loading ? "var(--accent)" : notInstalled ? "var(--text-faint)" : status.error ? "#EF4444" : "var(--text-faint)";
+        return (
+          <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--bg-elevated)", borderRadius: 5, border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: dotColor, animation: (!status || status.loading) ? "pulse 1.5s infinite" : "none" }} />
+            <span style={{ color: "var(--text-secondary)", fontSize: 10, fontFamily: mono }}>
+              {!status ? "Checking embedding model..."
+                : status.ready ? "Embedding model ready"
+                : status.loading ? `Downloading embedding model${status.progress?.progress ? ` (${status.progress.progress}%)` : "..."}`
+                : notInstalled ? "Embedding model not available in this environment"
+                : status.error ? "Embedding model unavailable"
+                : "Waiting for embedding model..."}
+            </span>
+            {status?.error && !notInstalled && <span style={{ color: "#EF4444", fontSize: 9, fontFamily: mono, marginLeft: 4 }}>— {status.error}</span>}
+          </div>
+        );
+      })()}
 
       {/* Controls — only show when enabled */}
       {s.enabled && (
@@ -597,11 +616,16 @@ function AdvancedSection() {
 }
 
 // ── Collapsible Section Wrapper ──────────────────────────────────────────────
-function SettingsSection({ title, subtitle, defaultOpen = true, children }) {
-  const [open, setOpen] = useState(defaultOpen);
+function SettingsSection({ id, title, subtitle, defaultOpen = true, children }) {
+  const storageKey = `settings-section-${id}`;
+  const [open, setOpen] = useState(() => {
+    const saved = localStorage.getItem(storageKey);
+    return saved !== null ? saved === "1" : defaultOpen;
+  });
+  const toggle = () => setOpen(prev => { const next = !prev; localStorage.setItem(storageKey, next ? "1" : "0"); return next; });
   return (
     <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-      <button onClick={() => setOpen(!open)} style={{
+      <button onClick={toggle} style={{
         display: "flex", alignItems: "center", gap: 8, width: "100%",
         background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left",
       }}>
@@ -621,6 +645,7 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({});
   const [ollamaModels, setOllamaModels] = useState([]);
+  const [testResult, setTestResult] = useState({}); // { scoring: { ok, ms, error }, analysis: { ... } }
   const [ollamaError, setOllamaError] = useState(null);
   const [orgs, setOrgs] = useState([]);
 
@@ -651,29 +676,59 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
   const fetchOllamaModels = () => {
     setOllamaError(null);
     api.getOllamaModels().then(r => {
-      if (r.error) setOllamaError(r.error);
-      else setOllamaModels(r.models || []);
+      if (r.error) { setOllamaError(r.error); return; }
+      const models = r.models || [];
+      setOllamaModels(models);
+      // Sync form if an Ollama model field is empty but models are now available
+      if (models.length > 0) {
+        setForm(f => {
+          const updates = {};
+          if (f.llmProvider === "ollama" && !f.llmModel) updates.llmModel = models[0];
+          if (f.analysisProvider === "ollama" && !f.analysisModel) updates.analysisModel = models[0];
+          return Object.keys(updates).length > 0 ? { ...f, ...updates } : f;
+        });
+      }
     }).catch(e => setOllamaError(e.message));
   };
 
+  // Remember last-selected model per provider so switching back restores it
+  const [lastModel, setLastModel] = useState({});
+  const [lastAnalysisModel, setLastAnalysisModel] = useState({});
+
   const handleProviderChange = (providerId) => {
     const provider = LLM_PROVIDERS.find(p => p.id === providerId);
-    setForm(f => ({
-      ...f,
-      llmProvider: providerId,
-      llmModel: provider?.models?.[0] || "",
-    }));
+    const models = providerId === "ollama" ? ollamaModels : (provider?.models || []);
+    setForm(f => {
+      // Stash current selection before switching
+      setLastModel(prev => ({ ...prev, [f.llmProvider]: f.llmModel }));
+      const restored = lastModel[providerId];
+      return { ...f, llmProvider: providerId, llmModel: restored || models[0] || "" };
+    });
     if (providerId === "ollama") fetchOllamaModels();
   };
 
   const handleAnalysisProviderChange = (providerId) => {
     const provider = LLM_PROVIDERS.find(p => p.id === providerId);
-    setForm(f => ({
-      ...f,
-      analysisProvider: providerId,
-      analysisModel: provider?.models?.[0] || "",
-    }));
+    const models = providerId === "ollama" ? ollamaModels : (provider?.models || []);
+    setForm(f => {
+      setLastAnalysisModel(prev => ({ ...prev, [f.analysisProvider]: f.analysisModel }));
+      const restored = lastAnalysisModel[providerId];
+      return { ...f, analysisProvider: providerId, analysisModel: restored || models[0] || "" };
+    });
     if (providerId === "ollama") fetchOllamaModels();
+  };
+
+  const handleTestModel = async (role) => {
+    const provider = role === "analysis" ? (form.analysisProvider || form.llmProvider) : form.llmProvider;
+    const model = role === "analysis" ? (form.analysisModel || form.llmModel) : form.llmModel;
+    if (!provider || !model) return;
+    setTestResult(prev => ({ ...prev, [role]: { testing: true } }));
+    try {
+      const r = await api.testLLM(provider, model);
+      setTestResult(prev => ({ ...prev, [role]: r }));
+    } catch (e) {
+      setTestResult(prev => ({ ...prev, [role]: { ok: false, error: e.message } }));
+    }
   };
 
   const handleSave = async () => {
@@ -752,7 +807,7 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
         </div>
 
         {/* ── Section 2: AI Engine (collapsible) ── */}
-        <SettingsSection title="AI Engine" subtitle="LLM, deduplication, refresh">
+        <SettingsSection id="ai-engine" title="AI Engine" subtitle="LLM, deduplication, refresh">
 
           {/* ── Scoring Model ── */}
           <div>
@@ -781,23 +836,38 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
               })}
             </div>
 
-            {/* Model selector */}
+            {/* Model selector + test */}
             {(() => {
               const provider = LLM_PROVIDERS.find(p => p.id === form.llmProvider);
               if (!provider) return null;
               const models = form.llmProvider === "ollama" ? ollamaModels : provider.models;
+              const t = testResult.scoring;
               return (
                 <div style={{ marginBottom: 12 }}>
                   <label style={label}>MODEL</label>
-                  {models.length > 0 ? (
-                    <select value={form.llmModel} onChange={e => setForm(f => ({ ...f, llmModel: e.target.value }))}
-                      style={{ ...inp, cursor: "pointer", appearance: "auto" }}>
-                      {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  ) : (
-                    <input value={form.llmModel} onChange={e => setForm(f => ({ ...f, llmModel: e.target.value }))}
-                      placeholder={form.llmProvider === "ollama" ? "e.g. llama3.2, mistral, gemma2" : "model name"}
-                      style={inp} />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {models.length > 0 ? (
+                      <select value={form.llmModel} onChange={e => { setForm(f => ({ ...f, llmModel: e.target.value })); setTestResult(r => ({ ...r, scoring: undefined })); }}
+                        style={{ ...inp, cursor: "pointer", appearance: "auto", flex: 1 }}>
+                        {models.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    ) : (
+                      <input value={form.llmModel} onChange={e => { setForm(f => ({ ...f, llmModel: e.target.value })); setTestResult(r => ({ ...r, scoring: undefined })); }}
+                        placeholder={form.llmProvider === "ollama" ? "e.g. llama3.2, mistral, gemma2" : "model name"}
+                        style={{ ...inp, flex: 1 }} />
+                    )}
+                    <button onClick={() => handleTestModel("scoring")} disabled={!form.llmModel}
+                      style={{ padding: "8px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontFamily: mono, cursor: "pointer", whiteSpace: "nowrap", opacity: !form.llmModel ? 0.5 : 1 }}>
+                      {t?.testing ? "Testing..." : "Test"}
+                    </button>
+                  </div>
+                  {t && !t.testing && (
+                    <div style={{ marginTop: 6, padding: "5px 10px", borderRadius: 5, fontSize: 10, fontFamily: mono, display: "flex", alignItems: "center", gap: 6, background: t.ok ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: t.ok ? "#10B981" : "#EF4444", flexShrink: 0 }} />
+                      <span style={{ color: t.ok ? "#10B981" : "#EF4444" }}>
+                        {t.ok ? `OK — ${t.ms}ms` : t.error}
+                      </span>
+                    </div>
                   )}
                   {form.llmProvider === "ollama" && ollamaError && (
                     <div style={{ ...hint, color: "#EF4444" }}>Could not reach Ollama: {ollamaError}</div>
@@ -811,48 +881,42 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
 
             {/* Provider-specific auth — shown for whichever providers are in use */}
             {(() => {
-              // Collect unique providers that need auth shown
+              // Collect unique providers that need API key inputs
               const activeProviderIds = new Set([form.llmProvider]);
               if (form.analysisProvider && form.analysisProvider !== form.llmProvider) activeProviderIds.add(form.analysisProvider);
               const authSections = [];
 
               for (const pid of activeProviderIds) {
                 const provider = LLM_PROVIDERS.find(p => p.id === pid);
-                if (!provider) continue;
+                if (!provider || provider.authType !== "apiKey") continue;
 
-                if (provider.authType === "apiKey") {
-                  const formKey = pid === "anthropic" ? "anthropicKey" : pid === "openai" ? "openaiKey" : "geminiKey";
-                  const hasKey = pid === "anthropic" ? settings.hasApiKey : pid === "openai" ? settings.hasOpenaiKey : settings.hasGeminiKey;
-                  const maskedKey = pid === "anthropic" ? settings.anthropicApiKey : pid === "openai" ? settings.openaiApiKey : settings.geminiApiKey;
-                  authSections.push(
-                    <div key={pid}>
-                      <label style={label}>{provider.name.toUpperCase()} API KEY {hasKey && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
-                      <input type="password" value={form[formKey]}
-                        onChange={e => setForm(f => ({ ...f, [formKey]: e.target.value }))}
-                        placeholder={hasKey ? maskedKey : provider.keyPlaceholder} style={inp} />
-                      <div style={hint}>Leave blank to keep current key.</div>
-                    </div>
-                  );
-                }
-
-                if (provider.authType === "local") {
-                  authSections.push(
-                    <div key={pid}>
-                      <label style={label}>OLLAMA SERVER URL</label>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <input value={form.ollamaUrl}
-                          onChange={e => setForm(f => ({ ...f, ollamaUrl: e.target.value }))}
-                          placeholder="http://localhost:11434" style={{ ...inp, flex: 1 }} />
-                        <button onClick={fetchOllamaModels} style={{
-                          padding: "8px 14px", background: "var(--bg-input)", border: "1px solid var(--border)",
-                          borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontFamily: mono, cursor: "pointer",
-                        }}>Test</button>
-                      </div>
-                      <div style={hint}>Ollama runs locally — no API key needed. Install from ollama.com.</div>
-                    </div>
-                  );
-                }
+                const formKey = pid === "anthropic" ? "anthropicKey" : pid === "openai" ? "openaiKey" : "geminiKey";
+                const hasKey = pid === "anthropic" ? settings.hasApiKey : pid === "openai" ? settings.hasOpenaiKey : settings.hasGeminiKey;
+                const maskedKey = pid === "anthropic" ? settings.anthropicApiKey : pid === "openai" ? settings.openaiApiKey : settings.geminiApiKey;
+                authSections.push(
+                  <div key={pid}>
+                    <label style={label}>{provider.name.toUpperCase()} API KEY {hasKey && <span style={{ color: "#10B981" }}>(configured)</span>}</label>
+                    <input type="password" value={form[formKey]}
+                      onChange={e => setForm(f => ({ ...f, [formKey]: e.target.value }))}
+                      placeholder={hasKey ? maskedKey : provider.keyPlaceholder} style={inp} />
+                    <div style={hint}>Leave blank to keep current key.</div>
+                  </div>
+                );
               }
+
+              // Ollama URL — only when Ollama is selected as either provider
+              if (activeProviderIds.has("ollama")) {
+                authSections.push(
+                  <div key="ollama">
+                    <label style={label}>OLLAMA SERVER URL</label>
+                    <input value={form.ollamaUrl}
+                      onChange={e => setForm(f => ({ ...f, ollamaUrl: e.target.value }))}
+                      placeholder="http://localhost:11434" style={inp} />
+                    <div style={hint}>Ollama runs locally — no API key needed. Install from ollama.com.</div>
+                  </div>
+                );
+              }
+
               return authSections.length > 0 ? <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{authSections}</div> : null;
             })()}
           </div>
@@ -890,23 +954,62 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
               })}
             </div>
 
-            {/* Analysis model selector — only when a separate provider is chosen */}
-            {form.analysisProvider && (() => {
-              const provider = LLM_PROVIDERS.find(p => p.id === form.analysisProvider);
+            {/* Analysis model selector + test */}
+            {(() => {
+              // When "Same" is selected, show the effective model with a test button
+              const effectiveProvider = form.analysisProvider || form.llmProvider;
+              const effectiveModel = form.analysisProvider ? form.analysisModel : form.llmModel;
+              const provider = LLM_PROVIDERS.find(p => p.id === effectiveProvider);
               if (!provider) return null;
-              const models = form.analysisProvider === "ollama" ? ollamaModels : provider.models;
+              const models = effectiveProvider === "ollama" ? ollamaModels : provider.models;
+              const t = testResult.analysis;
+
+              if (!form.analysisProvider) {
+                // "Same" mode — just show test button with effective model label
+                return (
+                  <div>
+                    <label style={label}>MODEL</label>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ color: "var(--text-muted)", fontSize: 12, fontFamily: mono, flex: 1 }}>{effectiveModel || "—"}</span>
+                      <button onClick={() => handleTestModel("analysis")} disabled={!effectiveModel}
+                        style={{ padding: "8px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontFamily: mono, cursor: "pointer", whiteSpace: "nowrap", opacity: !effectiveModel ? 0.5 : 1 }}>
+                        {t?.testing ? "Testing..." : "Test"}
+                      </button>
+                    </div>
+                    {t && !t.testing && (
+                      <div style={{ marginTop: 6, padding: "5px 10px", borderRadius: 5, fontSize: 10, fontFamily: mono, display: "flex", alignItems: "center", gap: 6, background: t.ok ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)" }}>
+                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: t.ok ? "#10B981" : "#EF4444", flexShrink: 0 }} />
+                        <span style={{ color: t.ok ? "#10B981" : "#EF4444" }}>{t.ok ? `OK — ${t.ms}ms` : t.error}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <div>
                   <label style={label}>MODEL</label>
-                  {models.length > 0 ? (
-                    <select value={form.analysisModel} onChange={e => setForm(f => ({ ...f, analysisModel: e.target.value }))}
-                      style={{ ...inp, cursor: "pointer", appearance: "auto" }}>
-                      {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                  ) : (
-                    <input value={form.analysisModel} onChange={e => setForm(f => ({ ...f, analysisModel: e.target.value }))}
-                      placeholder={form.analysisProvider === "ollama" ? "e.g. llama3.2, mistral, gemma2" : "model name"}
-                      style={inp} />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {models.length > 0 ? (
+                      <select value={form.analysisModel} onChange={e => { setForm(f => ({ ...f, analysisModel: e.target.value })); setTestResult(r => ({ ...r, analysis: undefined })); }}
+                        style={{ ...inp, cursor: "pointer", appearance: "auto", flex: 1 }}>
+                        {models.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    ) : (
+                      <input value={form.analysisModel} onChange={e => { setForm(f => ({ ...f, analysisModel: e.target.value })); setTestResult(r => ({ ...r, analysis: undefined })); }}
+                        placeholder={form.analysisProvider === "ollama" ? "e.g. llama3.2, mistral, gemma2" : "model name"}
+                        style={{ ...inp, flex: 1 }} />
+                    )}
+                    <button onClick={() => handleTestModel("analysis")} disabled={!form.analysisModel}
+                      style={{ padding: "8px 14px", background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", fontSize: 11, fontFamily: mono, cursor: "pointer", whiteSpace: "nowrap", opacity: !form.analysisModel ? 0.5 : 1 }}>
+                      {t?.testing ? "Testing..." : "Test"}
+                    </button>
+                  </div>
+                  {t && !t.testing && (
+                    <div style={{ marginTop: 6, padding: "5px 10px", borderRadius: 5, fontSize: 10, fontFamily: mono, display: "flex", alignItems: "center", gap: 6, background: t.ok ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.1)" }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: t.ok ? "#10B981" : "#EF4444", flexShrink: 0 }} />
+                      <span style={{ color: t.ok ? "#10B981" : "#EF4444" }}>{t.ok ? `OK — ${t.ms}ms` : t.error}</span>
+                    </div>
                   )}
                 </div>
               );
@@ -922,12 +1025,12 @@ function SettingsPanel({ onClose, themeMode, setThemeMode }) {
         </SettingsSection>
 
         {/* ── Section 3: Organizations (collapsible) ── */}
-        <SettingsSection title="Organizations" subtitle="tracked entities">
+        <SettingsSection id="organizations" title="Organizations" subtitle="tracked entities">
           <OrgManager orgs={orgs} onUpdate={() => api.getOrgs().then(setOrgs).catch(console.error)} />
         </SettingsSection>
 
         {/* ── Section 4: Connections (collapsible) ── */}
-        <SettingsSection title="Connections" subtitle="services and tools">
+        <SettingsSection id="connections" title="Connections" subtitle="services and tools">
           <ConnectedServicesSection settings={settings} onConnect={handleServiceConnect} onDisconnect={handleServiceDisconnect} />
           <AdvancedSection />
         </SettingsSection>

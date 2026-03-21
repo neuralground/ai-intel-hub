@@ -14,6 +14,7 @@ export default function AnalysisPanel({ category, onClose }) {
   const [error, setError] = useState(null);
   const [generatedAt, setGeneratedAt] = useState(null);
   const [cached, setCached] = useState(false);
+  const [llmLabel, setLlmLabel] = useState("");
 
   const run = useCallback(async (force = false) => {
     setLoading(true);
@@ -36,6 +37,14 @@ export default function AnalysisPanel({ category, onClose }) {
   }, [mode, category]);
 
   useEffect(() => { run(); }, [run]);
+
+  useEffect(() => {
+    api.getSettings().then(s => {
+      const provider = s.analysisProvider || s.llmProvider || "anthropic";
+      const model = s.analysisModel || s.llmModel || "";
+      setLlmLabel(`${provider}${model ? ` / ${model}` : ""}`);
+    }).catch(() => {});
+  }, []);
 
   const showItemHover = (itemId, anchorEl) => {
     const item = sourceItems[itemId];
@@ -162,7 +171,9 @@ export default function AnalysisPanel({ category, onClose }) {
         )}
         {error && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 13 }}>⚠ {error}</div>}
         {!loading && result && (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+          <div style={{ marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+            {llmLabel && <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic", marginBottom: 4 }}>Powered by {llmLabel}</div>}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>
               {generatedAt ? `Generated ${timeAgo(generatedAt)}` : ""}
               {cached && " (cached)"}
@@ -171,6 +182,7 @@ export default function AnalysisPanel({ category, onClose }) {
               padding: "3px 10px", background: "none", border: "1px solid var(--border)",
               borderRadius: 4, color: "var(--text-muted)", fontSize: 9, fontFamily: mono, cursor: "pointer",
             }}>Regenerate</button>
+          </div>
           </div>
         )}
         {result && <div className="analysis-markdown" style={{ color: "var(--text-secondary)", fontSize: 13.5, lineHeight: 1.75, fontFamily: sans }}><Markdown components={{

@@ -24,7 +24,11 @@ function getAnalysisProvider() {
 }
 
 function getAnalysisModel() {
-  return process.env.LLM_ANALYSIS_MODEL || DEFAULT_MODELS[getAnalysisProvider()] || getModel();
+  if (process.env.LLM_ANALYSIS_MODEL) return process.env.LLM_ANALYSIS_MODEL;
+  // No explicit analysis model — if same provider as scoring, use the scoring model;
+  // otherwise fall back to the analysis provider's default
+  if (getAnalysisProvider() === getProvider()) return getModel();
+  return DEFAULT_MODELS[getAnalysisProvider()] || getModel();
 }
 
 function getRelevanceContext() {
@@ -184,10 +188,10 @@ The reader is: ${context}
 ${instructions ? `\nAdditional scoring instructions: ${instructions}\n` : ""}
 Score each item from 0.0 to 1.0 for relevance to this reader. Also provide a brief reason (one sentence) explaining why it matters to them specifically.
 
-For each item, also identify any notable affiliations of the authors. If the authors field lists people from major AI labs, tech companies, or top research universities, return the organization names in an "affiliations" array. Use ONLY these recognized org names:
+For each item, identify organizational affiliations. Consider both the authors (if they are from known organizations) and the source (if it is an organization's official blog or publication). Return matching organization names in an "affiliations" array. Use ONLY these recognized org names:
 ${getOrgNamesForPrompt()}
 
-Only include affiliations you are confident about based on the authors listed. If no notable affiliations are identifiable, return an empty array. Do NOT guess.
+Only include affiliations you are confident about. If no notable affiliations are identifiable, return an empty array.
 
 Respond ONLY with a JSON array of objects: [{"id": "...", "relevance": 0.85, "reason": "...", "tags": ["tag1", "tag2"], "affiliations": ["OrgName"]}]
 No other text. Valid JSON only.`;
@@ -198,6 +202,7 @@ No other text. Valid JSON only.`;
     summary: (i.summary || "").slice(0, 200),
     authors: i.author || "",
     source: i.feedId || i.feed_id,
+    url: i.url || "",
     category: i.category,
   }));
 
@@ -220,7 +225,7 @@ No other text. Valid JSON only.`;
       const score = scoreMap.get(item.id);
       if (score) {
         // Merge LLM-detected affiliations with feed-level org affiliation
-        const feedOrg = getFeedOrg(item.feedId || item.feed_id);
+        const feedOrg = getFeedOrg(item.feedId || item.feed_id, item.url);
         const llmAffs = (score.affiliations || []).filter(a => validOrgLabels.has(a));
         const allAffs = feedOrg
           ? [feedOrg.label, ...llmAffs.filter(a => a !== feedOrg.label)]

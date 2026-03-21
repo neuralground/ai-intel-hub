@@ -121,7 +121,7 @@ export function ServiceCard({ service, connected, maskedToken, onConnect, onDisc
         {connected ? (
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {health === undefined ? <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>Checking...</span>
-              : stale ? (<><span style={{ color: "#EF4444", fontSize: 10, fontFamily: mono }}>Session expired</span><button onClick={() => { setShowManual(true); }} style={{ padding: "4px 10px", background: "var(--accent)", border: "none", borderRadius: 5, color: "white", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600 }}>Reconnect</button></>)
+              : stale ? (<><span style={{ color: "#EF4444", fontSize: 10, fontFamily: mono }}>Session expired</span><button onClick={() => { useNativeAuth ? handleNativeConnect() : setShowManual(true); }} disabled={connecting} style={{ padding: "4px 10px", background: "var(--accent)", border: "none", borderRadius: 5, color: "white", fontSize: 10, fontFamily: mono, cursor: "pointer", fontWeight: 600, opacity: connecting ? 0.6 : 1 }}>{connecting ? "Signing in..." : "Reconnect"}</button></>)
               : <span style={{ color: "#10B981", fontSize: 10, fontFamily: mono }}>Connected</span>}
             <button onClick={() => onDisconnect(service)} style={{ padding: "4px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 5, color: "var(--text-muted)", fontSize: 10, fontFamily: mono, cursor: "pointer" }}>Disconnect</button>
           </div>
@@ -136,7 +136,7 @@ export function ServiceCard({ service, connected, maskedToken, onConnect, onDisc
         )}
       </div>
       {error && <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--error-bg)", borderRadius: 5, color: "#EF4444", fontSize: 11, fontFamily: mono }}>{error}</div>}
-      {((!connected && (showManual || (useNativeAuth && error))) || (stale && showManual)) && (
+      {((!connected && (showManual || (useNativeAuth && error))) || (stale && (showManual || (useNativeAuth && error)))) && (
         <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
           <div style={{ color: "var(--text-muted)", fontSize: 11, lineHeight: 1.5, marginBottom: 8 }}>
             {useNativeAuth && error ? "Sign-in didn't work? You can paste the token manually:" : service.manualHelpText}

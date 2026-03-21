@@ -152,10 +152,25 @@ export function removeOrg(id) {
 }
 
 // Get the org label for a feed (if it's a direct-source feed)
-export function getFeedOrg(feedId) {
+export function getFeedOrg(feedId, feedUrl) {
+  // Check hardcoded map first
   const orgId = FEED_ORG_MAP[feedId];
-  if (!orgId) return null;
-  return getOrgs().find(o => o.id === orgId) || null;
+  if (orgId) return getOrgs().find(o => o.id === orgId) || null;
+
+  // Dynamic match: check if feed URL domain matches any org's URL domain
+  if (feedUrl) {
+    try {
+      const feedDomain = new URL(feedUrl).hostname.replace(/^www\./, "");
+      for (const org of getOrgs()) {
+        if (!org.active || !org.url) continue;
+        try {
+          const orgDomain = new URL(org.url).hostname.replace(/^www\./, "");
+          if (feedDomain === orgDomain || feedDomain.endsWith("." + orgDomain)) return org;
+        } catch { /* skip invalid org URLs */ }
+      }
+    } catch { /* skip invalid feed URL */ }
+  }
+  return null;
 }
 
 // Build the list of all org names/aliases for LLM prompt

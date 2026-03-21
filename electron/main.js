@@ -413,8 +413,8 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  if (mainWindow === null) {
-    const port = serverInstance?.address?.()?.port || 3001;
+  if (mainWindow === null && app.isReady() && serverInstance) {
+    const port = serverInstance.address()?.port || 3001;
     createWindow(port);
   }
 });

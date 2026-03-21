@@ -28,11 +28,17 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
   const [gapsAddingFeed, setGapsAddingFeed] = useState(null);
   const [gapsHoverItem, setGapsHoverItem] = useState(null);
   const gapsHoverTimerRef = useRef(null);
+  const [llmLabel, setLlmLabel] = useState("");
 
   // Load feed health and any cached suggestions on mount (no expensive analysis)
   useEffect(() => {
     api.getFeedHealth().then(setHealthData).catch(() => {});
     api.getSuggestions().then(setSuggestions).catch(() => {});
+    api.getSettings().then(s => {
+      const provider = s.llmProvider || "anthropic";
+      const model = s.llmModel || "";
+      setLlmLabel(`${provider}${model ? ` / ${model}` : ""}`);
+    }).catch(() => {});
   }, []);
 
   // Full health analysis via SSE with progress updates
@@ -335,6 +341,7 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
             {gapsError && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 11, padding: "8px 10px", background: "var(--error-bg)", borderRadius: 5 }}>⚠ {gapsError}</div>}
             {gapsResult && (
               <div style={{ color: "var(--text-secondary)", fontSize: 12.5, lineHeight: 1.7, fontFamily: sans }}>
+                {llmLabel && <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic", marginBottom: 8 }}>Powered by {llmLabel}</div>}
                 <Markdown components={{
                   h3: ({ children }) => <h3 style={{ color: "var(--text-primary)", fontSize: 13, fontWeight: 600, fontFamily: mono, marginTop: 16, marginBottom: 6 }}>{children}</h3>,
                   p: ({ children }) => <p style={{ marginTop: 0, marginBottom: 8 }}>{children}</p>,
