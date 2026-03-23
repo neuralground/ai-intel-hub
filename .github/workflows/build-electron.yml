@@ -19,7 +19,7 @@ permissions:
   contents: write  # Required for creating releases
 
 jobs:
-  build-mac:
+  build-mac-arm64:
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'mac' }}
     runs-on: macos-latest
     steps:
@@ -38,8 +38,8 @@ jobs:
           npm install
           npm run install:all
 
-      - name: Build macOS app
-        run: npm run electron:build:mac
+      - name: Build macOS app (arm64)
+        run: npm run build && npx electron-builder --mac --arm64
         env:
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
@@ -48,10 +48,48 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE != '' }}
 
-      - name: Upload macOS artifacts
+      - name: Upload macOS arm64 artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: mac-build
+          name: mac-arm64-build
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+          retention-days: 30
+
+  build-mac-x64:
+    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'mac' }}
+    runs-on: macos-latest
+    steps:
+      - name: Force Node.js 24 for actions
+        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run install:all
+
+      - name: Build macOS app (x64)
+        run: npm run build && npx electron-builder --mac --x64
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE != '' }}
+
+      - name: Upload macOS x64 artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: mac-x64-build
           path: |
             dist-electron/*.dmg
             dist-electron/*.zip
@@ -91,7 +129,7 @@ jobs:
           retention-days: 30
 
   release:
-    needs: [build-mac, build-windows]
+    needs: [build-mac-arm64, build-mac-x64, build-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
@@ -109,5 +147,6 @@ jobs:
           draft: true
           generate_release_notes: true
           files: |
-            artifacts/mac-build/*
+            artifacts/mac-arm64-build/*
+            artifacts/mac-x64-build/*
             artifacts/windows-build/*
