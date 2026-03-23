@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run install:all
+
+      - name: Run backend tests
+        run: npm run test:backend
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Run frontend tests
+        run: npm run test:frontend
+
+  build-mac:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run install:all
+
+      - name: Install librsvg for icon generation
+        run: brew install librsvg
+
+      - name: Generate app icons
+        run: npm run electron:icons
+
+      - name: Build macOS app
+        run: npm run electron:build:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-build-${{ github.sha }}
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+          retention-days: 14
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run install:all
+
+      - name: Build Windows app
+        run: npm run electron:build:win
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-${{ github.sha }}
+          path: |
+            dist-electron/*.exe
+          retention-days: 14

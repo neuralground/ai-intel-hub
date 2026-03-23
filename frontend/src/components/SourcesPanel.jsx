@@ -82,7 +82,15 @@ function SourcesPanel({ feeds, onClose, onRefresh }) {
     setGapsError(null);
     try {
       const data = await api.analyze("gaps", null, { force });
-      setGapsResult(data.result);
+      // Normalize feed suggestion links in LLM output
+      const normalized = (data.result || "")
+        // Fix "[Name] (URL)" → "[Name](URL)" (space between ] and ()
+        .replace(/\[([^\]]+)\]\s+\((https?:\/\/[^)]+)\)/g, "[$1]($2)")
+        // Convert bare "- Name: URL" into markdown links
+        .replace(/^([-•]\s*)(?:\*\*)?([^:\n[]+?)(?:\*\*)?:\s*(https?:\/\/[^\s]+)/gm, "$1[$2]($3)")
+        // Convert "- Name (URL)" into markdown links
+        .replace(/^([-•]\s*)([^(\n[]+?)\s*\((https?:\/\/[^\s)]+)\)/gm, "$1[$2]($3)");
+      setGapsResult(normalized);
       if (data.sourceItems) setGapsSourceItems(data.sourceItems);
       if (data.generatedAt) setGapsGeneratedAt(data.generatedAt);
       setGapsCached(!!data.cached);
