@@ -1,6 +1,23 @@
 # AI Intelligence Hub -- User Guide
 
-This guide walks through every feature of the AI Intelligence Hub desktop application. It assumes you have already installed the app from a pre-built package (DMG on macOS or installer on Windows). For installation instructions and alternative deployment modes, see the [README](README.md).
+This guide walks through every feature of the AI Intelligence Hub desktop application.
+
+---
+
+## Installation
+
+### macOS
+
+1. Download the `.dmg` file for your architecture (arm64 for Apple Silicon, x64 for Intel Macs).
+2. Open the DMG and drag **AI Intelligence Hub** into your Applications folder.
+3. On first launch, macOS may warn that the app is from an unidentified developer. Right-click the app icon, choose **Open**, then click **Open** in the dialog to bypass Gatekeeper.
+4. The app opens and begins loading sources immediately.
+
+### Windows
+
+1. Download the `.exe` installer.
+2. Run the installer and follow the prompts. Choose a per-user or system-wide installation.
+3. Launch **AI Intelligence Hub** from the Start Menu or Desktop shortcut.
 
 ---
 
@@ -10,9 +27,19 @@ When you first open AI Intelligence Hub, the app begins working immediately:
 
 1. Approximately 50 pre-configured sources start loading across six categories: AI Research, Engineering and Practice, Industry and Capital, Policy and Governance, AI Labs, and AI News and Announcements.
 2. Items appear in the main list within 10-30 seconds as each source is fetched.
-3. If no LLM API key is configured, items display with a default relevance of 50%. Scoring, briefings, and source health analysis require an LLM provider to be set up.
+3. If no LLM provider is configured, items display with a default relevance of 50%. Scoring, briefings, and source health analysis require an LLM provider to be set up.
 
-To configure your LLM provider and personalize scoring, open **Settings** by clicking the gear icon in the header bar (or pressing Cmd+, on macOS). See the [Settings](#settings) section for full details.
+### Quick Setup (5 minutes)
+
+1. **Open Settings** -- click the gear icon in the header bar (or press Cmd+, on macOS / Ctrl+, on Windows).
+2. **Describe your role** -- in the "Your Role" text area, write a specific description of who you are and what you care about. This is the single most impactful setting. Example: *"Senior technology executive at a major bank focused on agentic AI architecture, EU AI Act compliance, and sovereign AI risk."*
+3. **Choose an LLM provider** -- in the AI Engine section, select a provider:
+   - **Ollama** (recommended for getting started) -- free, runs locally. Install from [ollama.com](https://ollama.com), pull a model (`ollama pull gemma2`), and select it in settings. No API key needed.
+   - **Anthropic**, **OpenAI**, or **Google Gemini** -- paste your API key. These provide higher-quality scoring but incur per-use costs.
+4. **Test the model** -- click the **Test** button next to the model selector to verify connectivity.
+5. **Save** -- click Save at the bottom. The app immediately begins scoring items with your configured model.
+
+You can optionally set a separate, more capable model for analysis (Intel Brief, Coverage Gaps) under "Analysis Model" while keeping a fast model for scoring. See [Settings](#settings) for full details.
 
 ---
 
@@ -26,7 +53,7 @@ The header bar runs across the top of the window and contains:
 
 - **App name** on the left.
 - **Stats counters** showing the total number of sources, unread items, and critical items. The critical count is clickable (see [Critical Items](#critical-items)).
-- **Search field** for filtering items by keyword. Searches match against titles, summaries, authors, and tags.
+- **Search field** for filtering items by keyword. Searches match against titles, summaries, authors, and tags. A clear button (✕) appears when text is entered.
 - **Toolbar buttons** on the right: Refresh, Analysis (briefing panel), Sources (source management), Saved items, and Settings (gear icon).
 
 ### Sidebar
@@ -55,6 +82,10 @@ The main area of the dashboard displays items as a vertical list of cards. Each 
 - **Summary snippet** -- a brief preview of the item content.
 
 Unread items appear with slightly bolder styling. Read items are visually dimmed.
+
+### Deduplicated Items
+
+When multiple sources cover the same story, the app groups them using semantic similarity. The highest-relevance version is displayed with a **"N sources"** badge. Click to expand and see the "ALSO COVERED BY" section listing the other sources with links. This reduces clutter while preserving access to all perspectives. Deduplication sensitivity can be adjusted in Settings under the AI Engine section.
 
 ### Pagination
 
@@ -176,11 +207,11 @@ Each mode can be run for all categories or filtered to a specific category.
 
 ### Generation Progress and Timestamps
 
-While an analysis is being generated, an indeterminate animated progress bar is displayed. Once complete, the analysis shows a timestamp indicating when it was generated (e.g., "Generated 5m ago (cached)"). A **Regenerate** button next to the timestamp lets you force a fresh analysis even if a cached version exists.
+While an analysis is being generated, an animated progress bar is displayed. Once complete, the analysis shows which model generated it ("Powered by ...") and a timestamp (e.g., "Generated 5m ago (cached)"). A **Regenerate** button next to the timestamp lets you force a fresh analysis even if a cached version exists.
 
 ### Source References
 
-Analysis text includes numbered references to the source items it drew from. Hovering over a reference number displays a popover showing the source item's title, category, relevance score, feed name, and summary. This lets you quickly verify claims and drill into the underlying content.
+Analysis text includes inline references to the source items it drew from. Hovering over a reference displays a popover showing the source item's title, category, relevance score, feed name, and summary. Clicking a reference opens the original article. This lets you quickly verify claims and drill into the underlying content.
 
 ### Caching
 
@@ -241,82 +272,66 @@ Suggestions can be accepted (which adds the source automatically) or dismissed.
 
 ### Coverage Gap Detection
 
-The coverage gap analysis (available both in the Sources panel and in the Analysis panel under "Coverage Gaps") examines your current source set and identifies topic areas, geographies, or perspectives that are underrepresented. Suggested sources to fill those gaps appear inline within each identified gap.
+The coverage gap analysis is available in the Sources panel via the **Coverage Gaps** button. It examines your current source set and identifies topic areas, geographies, or perspectives that are underrepresented.
+
+For each gap, the analysis suggests specific sources to fill it. Each suggestion includes an **Add** button to subscribe to that source directly from the report. Added sources begin fetching immediately. A **Regenerate** button lets you refresh the analysis after adding sources or changing your configuration.
 
 ---
 
 ## Settings
 
-Open Settings by clicking the gear icon in the header bar or pressing Cmd+, (macOS) / Ctrl+, (Windows).
+Open Settings by clicking the gear icon in the header bar or pressing Cmd+, (macOS) / Ctrl+, (Windows). Settings are organized into four collapsible sections. Each section remembers whether you left it expanded or collapsed.
 
-### Your Role (Relevance Context)
+### Section 1: Profile (always visible)
 
-The most impactful setting. Describe who you are, what you do, and what topics matter to you. This context is injected into every LLM prompt -- for relevance scoring, briefings, risk analysis, and source suggestions.
+**Your Role (Relevance Context)** -- the most impactful setting. Describe who you are, what you do, and what topics matter to you. This context is injected into every LLM prompt -- for relevance scoring, briefings, risk analysis, and source suggestions. Be specific: "Senior technology executive at a major bank focused on agentic AI, EU AI Act compliance, and sovereign AI risk" produces much better results than "I work in tech."
 
-Be specific. A vague description like "I work in tech" produces generic scoring. A detailed description like "Senior technology executive at a Global Systemically Important Bank, focused on agentic AI architecture, EU AI Act compliance, and sovereign AI risk" produces highly targeted results.
+**Scoring Instructions** -- additional guidance for the LLM when scoring items. Use this for temporary priorities, topics to boost or suppress, or specific angles. Example: "Prioritize anything related to the EU AI Act August 2026 deadline. Deprioritize cryptocurrency unless directly related to AI."
 
-### Scoring Instructions
+**Theme** -- choose between System (follows OS preference), Light, and Dark appearance modes.
 
-Additional guidance for the LLM when scoring items. Use this to tell the scorer about temporary priorities, topics to boost or suppress, or specific angles you care about. For example: "Prioritize anything related to the EU AI Act August 2026 deadline. Deprioritize cryptocurrency and blockchain unless directly related to AI."
+### Section 2: AI Engine
 
-### LLM Provider Selection
+**Scoring Model** -- the LLM used for item scoring, affiliation detection, and feed health analysis. Four providers are supported:
 
-The app supports four LLM providers:
+- **Anthropic** -- Claude Sonnet, Haiku, Opus. Requires API key (`sk-ant-...`).
+- **OpenAI** -- GPT-4o, GPT-4o Mini, GPT-4 Turbo, o3-mini. Requires API key (`sk-...`).
+- **Google Gemini** -- Gemini 2.0 Flash, 2.5 Pro/Flash. Requires API key (`AIza...`).
+- **Ollama** -- runs models locally, no API key needed. Install from [ollama.com](https://ollama.com). Available models are detected automatically.
 
-**Anthropic** -- the default provider. Models available: Claude Sonnet, Claude Haiku, Claude Opus. Requires an Anthropic API key (starts with `sk-ant-`).
+Click a provider, select a model, and use the **Test** button to verify connectivity. The test runs a quick inference and shows response time.
 
-**OpenAI** -- models available: GPT-4o, GPT-4o Mini, GPT-4 Turbo, o3-mini. Requires an OpenAI API key (starts with `sk-`).
+**Analysis Model** -- optionally use a different (typically more capable) model for Intel Brief and Coverage Gap analysis. Select "Same" to use the scoring model, or pick a separate provider and model. This lets you use a fast/cheap model for high-volume scoring and a more capable model for analysis.
 
-**Google Gemini** -- models available: Gemini 2.0 Flash, Gemini 2.5 Pro Preview, Gemini 2.5 Flash Preview. Requires a Google Gemini API key (starts with `AIza`).
+**Deduplication** -- controls semantic clustering of duplicate items. When enabled, items covering the same story from different sources are grouped together, showing the best version with links to others. Settings:
+- **On/Off toggle** -- enable or disable deduplication.
+- **Sensitivity slider** -- controls how similar items must be to cluster together. "Broad" groups loosely related items; "Strict" only groups near-identical coverage. Default is in the middle.
+- **Time window** -- how far back to look for duplicates (3, 7, 14, or 30 days).
+- **Model status** -- shows whether the local embedding model is loaded and ready.
 
-**Ollama** -- run models locally with no API key required. Requires Ollama to be installed and running on your machine. The app connects to Ollama's local server (default: `http://localhost:11434`). Available models are detected automatically from your Ollama installation.
+**Source Refresh Interval** -- how often sources are automatically refreshed, in minutes. Default is 30. Lower values mean fresher content but more LLM calls for scoring.
 
-To switch providers:
+### Section 3: Organizations
 
-1. Open Settings.
-2. Click the provider you want to use in the LLM Provider section.
-3. Enter the API key (or for Ollama, confirm the server URL).
-4. Select a model from the dropdown.
-5. The change takes effect immediately for all subsequent scoring and analysis.
+View and manage recognized organizations for affiliation tagging. Organizations are grouped by type (Companies, AI Labs, Universities, Other) with collapsible sub-groups.
 
-### Recognized Organizations
+Each organization card shows its favicon (pulled from its website URL), name, aliases, and On/Off toggle. Deactivating an organization hides it from the sidebar filter and item badges without deleting it. Reactivating restores it immediately.
 
-View and manage the list of organizations the system recognizes for affiliation tagging. The panel displays a scrollable one-per-row list of all recognized organizations. This list is shared between the scorer, fetcher, and database modules.
+**Adding organizations:** Click "+ Add" and provide a name, type, website URL (for the favicon), and optional aliases (comma-separated alternative names the LLM should recognize). After adding, the app offers to rescan existing items.
 
-To add a custom organization, click "Add Organization" and provide an ID, label, type, and optional aliases. After adding an org, the app prompts you to rescan existing items so that previously ingested content is re-evaluated for affiliations with the new org. User-added organizations are persisted in `settings.json` under the `USER_ORGS` key.
+**Domain matching:** When an item's URL matches an organization's website domain, the organization is automatically affiliated -- no hardcoded mapping needed.
 
-To remove a user-added organization, click the delete button next to it. A confirmation dialog appears before the deletion proceeds. Built-in organizations cannot be removed.
+### Section 4: Connections
 
-### Source Refresh Interval
+**Connected Services** -- connect third-party platforms for authenticated content access:
+- X/Twitter, Substack, LinkedIn, Threads, YouTube.
+- In the desktop app, clicking "Sign in" opens a browser login window. No API keys needed.
+- Health checks run automatically when Settings opens. Expired sessions show a **Reconnect** button that opens a fresh login window.
+- Custom services can be added for platforms not in the default list.
 
-Set how often sources are automatically refreshed, in minutes. The default is 30 minutes. Lower values mean fresher content but more API calls for scoring.
-
-### Connected Services
-
-Connect third-party platforms to pull in additional content. The Connected Services section is a scrollable list showing all configured services.
-
-- **X/Twitter** -- tracks posts from specified accounts.
-- **Substack** -- access subscriber-only content from connected Substacks.
-- **LinkedIn** -- monitor posts from your LinkedIn feed.
-- **Threads** -- track Threads posts.
-- **YouTube** -- monitor specific channels.
-
-In the desktop app, clicking "Sign in" opens a browser login window for each service. No API keys or developer accounts are needed -- the app uses browser-based authentication.
-
-**Health checks:** When you open the Settings panel, each connected service automatically runs a health check. Services display one of three states: "Checking..." while the probe is in progress, "Connected" (green) when the session is active, or "Session expired" (red) when the session is no longer valid. Expired sessions show a **Reconnect** button to re-authenticate.
-
-**Custom services:** You can add services not in the default list by clicking "Add Service" and providing a name, cookie name, and description. This is useful for niche platforms or internal tools that use cookie-based authentication.
-
-### Advanced
-
-The Advanced section at the bottom of Settings provides maintenance operations:
-
-- **Clear old items** -- remove items older than a specified number of days. Set to 0 to clear all non-saved items. A confirmation dialog appears before the operation proceeds.
-- **Re-score all items** -- reset all relevance scores and re-run LLM scoring from scratch. This is useful after changing your relevance context or scoring instructions. A confirmation dialog warns that this operation may take several minutes and consume API credits.
-
-### Theme
-
-Choose between System (follows your OS preference), Light, and Dark appearance modes. The toggle is also available in the sidebar for quick access.
+**Advanced** -- maintenance operations (collapsed by default):
+- **Clear old items** -- remove items older than a specified number of days. Saved items are preserved.
+- **Re-score all items** -- resets all scores and re-runs LLM scoring. Shows a progress bar with batch count, estimated time remaining, and a **Cancel** button to stop safely (already-scored items keep their new scores). For local models (Ollama), the warning notes CPU usage instead of API costs.
 
 ---
 
