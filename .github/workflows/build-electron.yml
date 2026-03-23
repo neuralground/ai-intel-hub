@@ -23,9 +23,9 @@ jobs:
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'mac' }}
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -55,7 +55,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE != '' }}
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: mac-build
           path: |
@@ -67,9 +67,9 @@ jobs:
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows' }}
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -87,7 +87,7 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: windows-build
           path: |
@@ -100,7 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts
 
