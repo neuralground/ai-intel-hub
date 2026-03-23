@@ -18,14 +18,14 @@ on:
 permissions:
   contents: write  # Required for creating releases
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   build-mac:
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'mac' }}
     runs-on: macos-latest
     steps:
+      - name: Force Node.js 24 for actions
+        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
@@ -41,14 +41,11 @@ jobs:
       - name: Build macOS app
         run: npm run electron:build:mac
         env:
-          # Code signing — set these secrets for signed builds
           CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          # Notarization — set these secrets for notarized builds
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Skip signing if no certificate is configured
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE != '' }}
 
       - name: Upload macOS artifacts
@@ -64,6 +61,9 @@ jobs:
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows' }}
     runs-on: windows-latest
     steps:
+      - name: Force Node.js 24 for actions
+        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
@@ -79,7 +79,6 @@ jobs:
       - name: Build Windows app
         run: npm run electron:build:win
         env:
-          # Code signing — set these secrets for signed builds
           CSC_LINK: ${{ secrets.WIN_CERTIFICATE }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
 
@@ -96,6 +95,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      - name: Force Node.js 24 for actions
+        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
+
       - name: Download all artifacts
         uses: actions/download-artifact@v5
         with:

@@ -6,13 +6,13 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Force Node.js 24 for actions
+        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
@@ -38,6 +38,9 @@ jobs:
     needs: test
     runs-on: macos-latest
     steps:
+      - name: Force Node.js 24 for actions
+        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $GITHUB_ENV
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
@@ -51,7 +54,7 @@ jobs:
           npm run install:all
 
       - name: Build macOS app (native arch only)
-        run: npx electron-builder --mac --arm64
+        run: npm run build && npx electron-builder --mac --arm64
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
@@ -68,6 +71,9 @@ jobs:
     needs: test
     runs-on: windows-latest
     steps:
+      - name: Force Node.js 24 for actions
+        run: echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> $env:GITHUB_ENV
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
