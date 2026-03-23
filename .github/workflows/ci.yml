@@ -47,8 +47,8 @@ jobs:
           npm install
           npm run install:all
 
-      - name: Build macOS app
-        run: npm run electron:build:mac
+      - name: Build macOS app (native arch only)
+        run: npx electron-builder --mac --arm64
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
