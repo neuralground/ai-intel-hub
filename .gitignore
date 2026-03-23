@@ -7,7 +7,4 @@ backend/.env
 
 # Electron build output
 dist-electron/
-build/icon.png
-build/icon.icns
-build/icon.ico
 build/icon.iconset/
