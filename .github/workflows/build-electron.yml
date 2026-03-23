@@ -18,6 +18,9 @@ on:
 permissions:
   contents: write  # Required for creating releases
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-mac:
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'mac' }}
