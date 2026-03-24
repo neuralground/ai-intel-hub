@@ -859,10 +859,10 @@ export async function fetchArticleContent(url, maxChars = 12000, onProgress = ()
     // Strategy 1: Auto-generated captions
     onProgress("Fetching video captions...");
     try {
-      const transcript = await fetchTranscript(videoId);
+      const transcript = await fetchTranscript(videoId, maxChars);
       if (transcript && transcript.length > 200) {
         console.log(`[Summarize] Got YouTube captions: ${transcript.length} chars`);
-        return transcript.slice(0, maxChars);
+        return transcript;
       }
     } catch (err) {
       console.log(`[Summarize] YouTube captions failed: ${err.message}`);
@@ -1010,7 +1010,7 @@ export async function generateItemSummaryStream(itemId, onChunk, signal, onFetch
     const ytMatch = (item.url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     if (ytMatch) {
       onProgress("Fetching video transcript...");
-      try { transcript = await fetchTranscript(ytMatch[1]); } catch { /* ok */ }
+      try { transcript = await fetchTranscript(ytMatch[1], 12000); } catch { /* ok */ }
     }
   }
   const content = fetchedContent || transcript || item.summary || "";

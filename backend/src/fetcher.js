@@ -287,17 +287,32 @@ async function scrapeVideoMetadata(videoUrl) {
 }
 
 // Extract auto-generated captions from a YouTube video. No API key needed.
-export async function fetchTranscript(videoId) {
+export async function fetchTranscript(videoId, maxChars = 5000) {
   try {
-    const { YoutubeTranscript } = await import("youtube-transcript");
+    // The youtube-transcript package has a broken ESM/CJS setup.
+    // Import the ESM dist file directly to get proper exports.
+    let YoutubeTranscript;
+    try {
+      const mod = await import("youtube-transcript/dist/youtube-transcript.esm.js");
+      YoutubeTranscript = mod.YoutubeTranscript;
+    } catch {
+      // Fallback: try the default import
+      const mod = await import("youtube-transcript");
+      YoutubeTranscript = mod.YoutubeTranscript || mod.default?.YoutubeTranscript;
+    }
+    if (!YoutubeTranscript) {
+      console.log("[Fetcher] youtube-transcript: YoutubeTranscript class not found");
+      return null;
+    }
     const segments = await YoutubeTranscript.fetchTranscript(videoId);
     const text = segments.map(s => s.text).join(" ")
       .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
       .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
       .replace(/\[.*?\]/g, "") // remove [Music], [Applause] etc.
       .replace(/\s+/g, " ").trim();
-    return text.slice(0, 5000) || null;
-  } catch {
+    return text.slice(0, maxChars) || null;
+  } catch (err) {
+    console.log(`[Fetcher] Transcript fetch failed for ${videoId}: ${err.message}`);
     return null;
   }
 }
