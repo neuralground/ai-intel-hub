@@ -81,6 +81,8 @@ export default function App() {
   const totalItems = filteredItems.length;
   const items = filteredItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const [expandedItem, setExpandedItem] = useState(null);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const searchRef = useRef(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -122,8 +124,8 @@ export default function App() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Reset to page 0 when any filter changes
-  useEffect(() => { setPage(0); }, [category, minRelevance, maxAgeDays, search, criticalOnly, selectedOrgs, selectedFeedIds]);
+  // Reset to page 0 and clear focus when any filter changes
+  useEffect(() => { setPage(0); setFocusedIndex(-1); }, [category, minRelevance, maxAgeDays, search, criticalOnly, selectedOrgs, selectedFeedIds]);
 
   useEffect(() => {
     const interval = setInterval(loadData, 5 * 60 * 1000);
@@ -136,6 +138,71 @@ export default function App() {
     window.addEventListener("open-settings", handler);
     return () => window.removeEventListener("open-settings", handler);
   }, []);
+
+  // Keyboard navigation: j/k navigate, o opens source, Enter expands, s saves, d dismisses, / focuses search, ? shows help
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  useEffect(() => {
+    const handler = (e) => {
+      const tag = document.activeElement?.tagName;
+      const isInput = tag === "INPUT" || tag === "TEXTAREA" || document.activeElement?.isContentEditable;
+
+      if (e.key === "Escape") {
+        if (showKeyboardHelp) { setShowKeyboardHelp(false); return; }
+        document.activeElement?.blur();
+        setFocusedIndex(-1);
+        return;
+      }
+
+      if (e.key === "/" && !isInput) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+
+      if (isInput) return;
+      if (showAnalysis || showSources || showSettings || showSaved) return;
+
+      if (e.key === "?") {
+        setShowKeyboardHelp(v => !v);
+        return;
+      }
+
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIndex(prev => prev < items.length - 1 ? prev + 1 : prev);
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIndex(prev => prev > 0 ? prev - 1 : 0);
+      } else if (e.key === "o" && focusedIndex >= 0 && focusedIndex < items.length) {
+        const item = items[focusedIndex];
+        if (item.url) window.open(item.url, "_blank");
+      } else if (e.key === "Enter" && focusedIndex >= 0 && focusedIndex < items.length) {
+        handleItemClick(items[focusedIndex]);
+      } else if (e.key === "s" && focusedIndex >= 0 && focusedIndex < items.length) {
+        handleSave({ stopPropagation() {} }, items[focusedIndex]);
+      } else if (e.key === "d" && focusedIndex >= 0 && focusedIndex < items.length) {
+        handleDismiss({ stopPropagation() {} }, items[focusedIndex]);
+      }
+    };
+
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [items, focusedIndex, showAnalysis, showSources, showSettings, showSaved, showKeyboardHelp]);
+
+  // Scroll focused item into view
+  useEffect(() => {
+    if (focusedIndex >= 0) {
+      const el = document.querySelector(`[data-item-index="${focusedIndex}"]`);
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [focusedIndex]);
+
+  // Clamp focusedIndex when items shrink (e.g. after dismiss)
+  useEffect(() => {
+    if (focusedIndex >= items.length) {
+      setFocusedIndex(items.length > 0 ? items.length - 1 : -1);
+    }
+  }, [items.length, focusedIndex]);
 
   const handleRefresh = async () => {
     const abort = new AbortController();
@@ -253,7 +320,7 @@ export default function App() {
           </div>
         </div>
         <div style={{ position: "relative", flex: 1, minWidth: 120 }}>
-          <input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
+          <input ref={searchRef} placeholder="Search (/)..." value={search} onChange={e => setSearch(e.target.value)}
             style={{ padding: "7px 14px", paddingRight: search ? 30 : 14, background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text-primary)", fontSize: 13, width: "100%", fontFamily: sans, outline: "none", boxSizing: "border-box" }} />
           {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}>✕</button>}
         </div>
@@ -476,10 +543,11 @@ export default function App() {
 
           {items.map((item, idx) => {
             const isExpanded = expandedItem === item.id;
+            const isFocused = idx === focusedIndex;
             const cat = CATEGORIES[item.category] || { color: "#6B7280", label: item.category, icon: "📄" };
 
             return (
-              <div key={item.id} onClick={() => handleItemClick(item)} style={{
+              <div key={item.id} data-item-index={idx} onClick={() => { setFocusedIndex(idx); handleItemClick(item); }} style={{
                 padding: "14px 18px", marginBottom: 6,
                 background: isExpanded ? "var(--bg-elevated)" : item.read ? "var(--item-read)" : "var(--item-unread)",
                 border: `1px solid ${item.relevance >= 0.85 ? relColor(item.relevance) + "40" : "var(--border)"}`,
@@ -488,6 +556,8 @@ export default function App() {
                 opacity: item.read && !isExpanded ? 0.65 : 1,
                 transition: "all 0.15s",
                 animation: `slideIn 0.25s ease ${idx * 0.02}s both`,
+                outline: isFocused ? "2px solid var(--accent)" : "none",
+                outlineOffset: -2,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, flexWrap: "wrap" }}>
                   <span style={{ padding: "1px 7px", borderRadius: 3, fontSize: 10, background: cat.color + "15", color: cat.color, fontFamily: mono, fontWeight: 600 }}>{cat.label}</span>
@@ -596,6 +666,43 @@ export default function App() {
       {showSources && <SourcesPanel feeds={feeds} onClose={() => setShowSources(false)} onRefresh={loadData} />}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} themeMode={themeMode} setThemeMode={setThemeMode} />}
       {showSaved && <SavedItemsPanel onClose={() => setShowSaved(false)} />}
+
+      {/* Keyboard shortcut help modal */}
+      {showKeyboardHelp && (
+        <div onClick={() => setShowKeyboardHelp(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 12, padding: "24px 32px", maxWidth: 340, fontFamily: mono }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>Keyboard Shortcuts</div>
+            {[
+              ["j / ↓", "Next item"],
+              ["k / ↑", "Previous item"],
+              ["Enter", "Expand / collapse"],
+              ["o", "Open in new tab"],
+              ["s", "Save / unsave"],
+              ["d", "Dismiss"],
+              ["/", "Focus search"],
+              ["Esc", "Clear focus / blur"],
+              ["?", "Toggle this help"],
+            ].map(([key, desc]) => (
+              <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0" }}>
+                <kbd style={{ padding: "2px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 4, fontSize: 11, color: "var(--text-primary)", minWidth: 40, textAlign: "center" }}>{key}</kbd>
+                <span style={{ color: "var(--text-muted)", fontSize: 12, marginLeft: 16 }}>{desc}</span>
+              </div>
+            ))}
+            <div style={{ marginTop: 16, textAlign: "center" }}>
+              <button onClick={() => setShowKeyboardHelp(false)} style={{ padding: "5px 16px", background: "var(--accent-bg)", border: "1px solid var(--accent)", borderRadius: 6, color: "var(--accent)", fontSize: 11, fontFamily: mono, cursor: "pointer" }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Keyboard hint */}
+      {!showAnalysis && !showSources && !showSettings && !showSaved && focusedIndex === -1 && (
+        <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 40 }}>
+          <button onClick={() => setShowKeyboardHelp(true)} style={{ padding: "4px 10px", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-faint)", fontSize: 10, fontFamily: mono, cursor: "pointer", opacity: 0.6 }} title="Keyboard shortcuts">
+            ? shortcuts
+          </button>
+        </div>
+      )}
     </div>
   );
 }
