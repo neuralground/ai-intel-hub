@@ -1060,6 +1060,7 @@ Include a link to the original: [View source](${item.url || "#"})`;
     generatedAt: new Date().toISOString(),
     provider,
     model,
+    itemUrl: item.url,
   };
 }
 

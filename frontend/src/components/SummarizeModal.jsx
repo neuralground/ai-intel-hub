@@ -36,7 +36,7 @@ export default function SummarizeModal({ item, onClose }) {
         if (flushTimerRef.current) { clearTimeout(flushTimerRef.current); flushTimerRef.current = null; }
         if (bufferRef.current) { setResult(prev => prev + bufferRef.current); bufferRef.current = ""; }
         if (data.result) setResult(data.result);
-        setMeta({ generatedAt: data.generatedAt, provider: data.provider, model: data.model, contentSource: data.contentSource });
+        setMeta({ generatedAt: data.generatedAt, provider: data.provider, model: data.model, contentSource: data.contentSource, itemUrl: data.itemUrl });
         setLoading(false);
         setStreaming(false);
         evtSourceRef.current = null;
@@ -111,7 +111,7 @@ export default function SummarizeModal({ item, onClose }) {
           {/* Content source warning */}
           {meta && meta.contentSource && !meta.contentSource.startsWith("full") && (
             <div style={{ padding: "8px 12px", background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", borderRadius: 6, marginBottom: 12, fontSize: 11, fontFamily: sans, color: "var(--text-secondary)" }}>
-              <strong style={{ color: "#D97706" }}>Limited content:</strong> The full document could not be retrieved. This summary is based on the item's feed summary only and may not capture the complete scope of the work.
+              <strong style={{ color: "#D97706" }}>Limited content:</strong> The full document could not be retrieved from <a href={meta.itemUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#D97706", wordBreak: "break-all" }}>{meta.itemUrl}</a>. This summary is based on the item's feed summary only.
             </div>
           )}
           {streaming && (

@@ -278,7 +278,7 @@ app.get("/api/items/:id/summarize/stream", async (req, res) => {
       abort.signal,
       (msg) => send({ type: "progress", message: msg }),
     );
-    send({ type: "done", result: result.result, generatedAt: result.generatedAt, provider: result.provider, model: result.model, contentSource: result.contentSource });
+    send({ type: "done", result: result.result, generatedAt: result.generatedAt, provider: result.provider, model: result.model, contentSource: result.contentSource, itemUrl: result.itemUrl });
   } catch (err) {
     if (err.name !== "AbortError") {
       send({ type: "error", message: err.message });
