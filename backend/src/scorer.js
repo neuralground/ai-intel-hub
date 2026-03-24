@@ -1049,7 +1049,28 @@ ${relatedSection}`;
   const knownAffiliations = (item.affiliations && item.affiliations.length > 0)
     ? item.affiliations.join(", ") : null;
   const pubDate = item.published ? new Date(item.published).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "Unknown";
-  const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header. Use a blank line between each field so they render on separate lines in markdown:
+
+  let headerInstruction;
+  if (itemType === "video") {
+    // For videos: use channel/presenter, link to transcript if available, extract participants
+    const sourceUrl = item.url || "#";
+    const sourceLabel = contentSource === "transcript" || contentSource === "full document"
+      ? `[Transcript](${sourceUrl})` : `[Video](${sourceUrl})`;
+    headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header. Use a blank line between each field so they render on separate lines in markdown:
+
+# ${item.title}
+
+**Channel:** ${item.author || "Unknown"}
+
+**Participants:** [extract from the video description or transcript — list the host and any guests/interviewees by name. If only one speaker, just list them.]
+
+**Published:** ${pubDate}
+
+**Source:** ${sourceLabel}
+
+Do NOT restate the date, channel, or participants in the Summary section — they are already in the header above. Proceed directly with the analysis sections.`;
+  } else {
+    headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header. Use a blank line between each field so they render on separate lines in markdown:
 
 # ${item.title}
 
@@ -1062,6 +1083,7 @@ ${relatedSection}`;
 **Affiliations:** ${knownAffiliations || "[list ONLY the top-level organization names — no departments, cities, states, or countries. For example: 'National Taiwan University, Academia Sinica, University of Washington' NOT 'Graduate Institute of Electrical Engineering, National Taiwan University, Taipei, Taiwan'.]"}
 
 Do NOT restate the publication date, authors, or source in the Summary section — they are already in the header above. Proceed directly with the analysis sections.`;
+  }
 
   const contentNotice = contentSource === "full document"
     ? "You have the full text of this document. Analyze it thoroughly. Do NOT say you lack access, that content is limited, or that you are working from an abstract."
