@@ -947,14 +947,15 @@ FULL TEXT (${content.length} characters retrieved from source):
 ${content.slice(0, 10000)}
 ${relatedSection}`;
 
-  const affiliationLine = (item.affiliations && item.affiliations.length > 0)
-    ? `\n**Affiliations:** ${item.affiliations.join(", ")}` : "";
-  const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header (do not alter the format — each field on its own line):
+  const knownAffiliations = (item.affiliations && item.affiliations.length > 0)
+    ? item.affiliations.join(", ") : null;
+  const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header (each field on its own line):
 
 # ${item.title}
 
 **Authors:** ${item.author || "Unknown"}
-**Source:** [${item.url || "N/A"}](${item.url || "#"})${affiliationLine}
+**Source:** [${item.url || "N/A"}](${item.url || "#"})
+**Affiliations:** ${knownAffiliations || "[extract from the paper — list the institutional affiliations of the authors as stated in the document, e.g. universities, companies, research labs]"}
 
 Then proceed with the analysis sections below.`;
 
