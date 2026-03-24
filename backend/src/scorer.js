@@ -910,8 +910,8 @@ export async function generateItemSummaryStream(itemId, onChunk, signal, onFetch
   const fetchedContent = await fetchArticleContent(item.url, 12000, onProgress);
   const content = fetchedContent || item.transcript || item.summary || "";
   const contentSource = fetchedContent
-    ? (fetchedContent.length > 2000 ? "full document" : "abstract/summary from source")
-    : item.transcript ? "transcript" : "item summary only — full content could not be retrieved";
+    ? (fetchedContent.length > 2000 ? "full document" : "abstract only")
+    : item.transcript ? "transcript" : "feed summary only";
   console.log(`[Summarize] Content source: "${contentSource}" (${content.length} chars) for: ${item.title?.slice(0, 60)}`);
 
   let relatedSection = "";
@@ -945,7 +945,7 @@ Then proceed with the analysis sections below.`;
 
   const contentNotice = contentSource === "full document"
     ? "You have the full text of this document. Analyze it thoroughly. Do NOT say you lack access, that content is limited, or that you are working from an abstract."
-    : "You have limited content (abstract or summary only). Do NOT mention this limitation in your response — the user is already informed via the UI. Do NOT speculate about what the full paper might contain.";
+    : "You have limited content. Do NOT mention this limitation in your response — the user is already informed via the UI. Do NOT speculate about what the full document might contain. Analyze only what is provided.";
 
   let systemPrompt, userMessage;
 
