@@ -947,12 +947,14 @@ FULL TEXT (${content.length} characters retrieved from source):
 ${content.slice(0, 10000)}
 ${relatedSection}`;
 
-  const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header (do not alter the format):
+  const affiliationLine = (item.affiliations && item.affiliations.length > 0)
+    ? `\n**Affiliations:** ${item.affiliations.join(", ")}` : "";
+  const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header (do not alter the format — each field on its own line):
 
 # ${item.title}
 
 **Authors:** ${item.author || "Unknown"}
-**Source:** [${item.url || "N/A"}](${item.url || "#"})
+**Source:** [${item.url || "N/A"}](${item.url || "#"})${affiliationLine}
 
 Then proceed with the analysis sections below.`;
 
