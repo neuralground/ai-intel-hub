@@ -691,6 +691,23 @@ async function parseDocument(buffer) {
   return result.toText();
 }
 
+// Fetch with retry (up to 2 attempts)
+async function fetchWithRetry(url, options = {}, retries = 1) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, options);
+      return res;
+    } catch (err) {
+      if (attempt < retries) {
+        console.log(`[Summarize] Fetch attempt ${attempt + 1} failed for ${url}: ${err.message}, retrying...`);
+        await new Promise(r => setTimeout(r, 1000));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
 async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {}) {
   if (!url) { console.log("[Summarize] No URL provided"); return null; }
   console.log(`[Summarize] Fetching content from: ${url}`);
@@ -716,7 +733,7 @@ async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {})
     // Strategy 1: HTML version (full paper, best quality)
     onProgress("Fetching full paper (HTML)...");
     try {
-      const res = await fetch(`https://arxiv.org/html/${paperId}`, {
+      const res = await fetchWithRetry(`https://arxiv.org/html/${paperId}`, {
         headers: { "User-Agent": UA },
         signal: AbortSignal.timeout(15000),
       });
@@ -739,7 +756,7 @@ async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {})
     // Strategy 2: PDF version
     onProgress("Fetching full paper (PDF)...");
     try {
-      const pdfRes = await fetch(`https://arxiv.org/pdf/${paperId}`, {
+      const pdfRes = await fetchWithRetry(`https://arxiv.org/pdf/${paperId}`, {
         headers: { "User-Agent": UA },
         signal: AbortSignal.timeout(25000),
       });
@@ -761,7 +778,7 @@ async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {})
     // Strategy 3: arXiv API (returns structured abstract + metadata in XML)
     onProgress("Fetching paper metadata (arXiv API)...");
     try {
-      const apiRes = await fetch(`https://export.arxiv.org/api/query?id_list=${paperId}`, {
+      const apiRes = await fetchWithRetry(`https://export.arxiv.org/api/query?id_list=${paperId}`, {
         signal: AbortSignal.timeout(10000),
       });
       if (apiRes.ok) {
@@ -783,7 +800,7 @@ async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {})
     // Strategy 4: Scrape abstract page
     onProgress("Fetching abstract page...");
     try {
-      const absRes = await fetch(`https://arxiv.org/abs/${paperId}`, {
+      const absRes = await fetchWithRetry(`https://arxiv.org/abs/${paperId}`, {
         headers: { "User-Agent": UA },
         signal: AbortSignal.timeout(10000),
       });
@@ -801,14 +818,14 @@ async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {})
       console.log(`[Summarize] arXiv abstract page failed: ${err.message}`);
     }
 
-    console.log(`[Summarize] All arXiv strategies exhausted for ${paperId}`);
-    return null;
+    console.log(`[Summarize] All arXiv-specific strategies exhausted for ${paperId}, falling through to generic fetch`);
+    // Fall through to generic URL fetch below — the abs page itself is HTML
   }
 
   // ── Generic URL fetch ───────────────────────────────────────────────────
   onProgress("Fetching source content...");
   try {
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       headers: { "User-Agent": UA },
       signal: AbortSignal.timeout(15000),
       redirect: "follow",

@@ -938,6 +938,17 @@ async function runEmbedAndCluster() {
  * @returns {Promise<import("http").Server>} The HTTP server instance
  */
 export function createServer(port) {
+  // Load saved settings into process.env so scorer.js picks them up
+  const savedSettings = loadSettingsFile();
+  for (const key of SETTINGS_KEYS) {
+    if (savedSettings[key] && !process.env[key]) {
+      process.env[key] = savedSettings[key];
+    }
+  }
+  if (Object.keys(savedSettings).length > 0) {
+    console.log(`[Server] Loaded ${Object.keys(savedSettings).filter(k => SETTINGS_KEYS.includes(k)).length} settings from settings.json`);
+  }
+
   initializeFeeds();
 
   return new Promise((resolve, reject) => {
