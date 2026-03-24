@@ -1102,39 +1102,18 @@ ${relatedSection}`;
     ? item.affiliations.join(", ") : null;
   const pubDate = item.published ? new Date(item.published).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "Unknown";
 
+  // Build the header server-side so it's always present regardless of LLM behavior
+  let serverHeader;
   let headerInstruction;
   if (itemType === "video") {
-    // For videos: use channel/presenter, link to transcript if available, extract participants
     const sourceUrl = item.url || "#";
     const sourceLabel = contentSource === "transcript" || contentSource === "full document"
       ? `[Transcript](${sourceUrl})` : `[Video](${sourceUrl})`;
-    headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header. Use a blank line between each field so they render on separate lines in markdown:
-
-# ${item.title}
-
-**Channel:** ${item.author || "Unknown"}
-
-**Participants:** [extract from the video description or transcript — list the host and any guests/interviewees by name. If only one speaker, just list them.]
-
-**Published:** ${pubDate}
-
-**Source:** ${sourceLabel}
-
-Do NOT restate the date, channel, or participants in the Summary section — they are already in the header above. Proceed directly with the analysis sections.`;
+    serverHeader = `# ${item.title}\n\n**Channel:** ${item.author || "Unknown"}\n\n**Published:** ${pubDate}\n\n**Source:** ${sourceLabel}\n\n`;
+    headerInstruction = `Do NOT output a title or header — it has already been provided. Start your response directly with ## Summary. Also extract the participants (host and guests) from the content and include a **Participants:** line before ## Summary.`;
   } else {
-    headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header. Use a blank line between each field so they render on separate lines in markdown:
-
-# ${item.title}
-
-**Authors:** ${item.author || "Unknown"}
-
-**Published:** ${pubDate}
-
-**Source:** [${item.url || "N/A"}](${item.url || "#"})
-
-**Affiliations:** ${knownAffiliations || "[list ONLY the top-level organization names — no departments, cities, states, or countries. For example: 'National Taiwan University, Academia Sinica, University of Washington' NOT 'Graduate Institute of Electrical Engineering, National Taiwan University, Taipei, Taiwan'.]"}
-
-Do NOT restate the publication date, authors, or source in the Summary section — they are already in the header above. Proceed directly with the analysis sections.`;
+    serverHeader = `# ${item.title}\n\n**Authors:** ${item.author || "Unknown"}\n\n**Published:** ${pubDate}\n\n**Source:** [${item.url || "N/A"}](${item.url || "#"})\n\n`;
+    headerInstruction = `Do NOT output a title or header — it has already been provided. Start your response with an **Affiliations:** line listing ${knownAffiliations ? `these organizations: ${knownAffiliations}` : "all distinct top-level organization names from the author block (no departments, cities, or countries)"}, then proceed to ## Summary.`;
   }
 
   const contentNotice = contentSource === "full document"
@@ -1280,7 +1259,9 @@ Include a link to the original: [View source](${item.url || "#"})`;
   const provider = getAnalysisProvider();
   const model = getAnalysisModel();
 
-  let accumulated = "";
+  // Send the server-generated header as the first chunk
+  onChunk(serverHeader);
+  let accumulated = serverHeader;
   for await (const chunk of streamAnalysisLLM(systemPrompt, userMessage, 4000, signal)) {
     accumulated += chunk;
     onChunk(chunk);
