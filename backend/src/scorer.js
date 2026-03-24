@@ -960,7 +960,7 @@ ${relatedSection}`;
 
 **Source:** [${item.url || "N/A"}](${item.url || "#"})
 
-**Affiliations:** ${knownAffiliations || "[extract ALL institutional affiliations from the paper — list EVERY university, company, and research lab mentioned in the author block. Do not omit any. For example, if authors are from MIT, Technion, Northeastern, and Harvard, list all four.]"}
+**Affiliations:** ${knownAffiliations || "[extract ALL distinct organizations from the author block. List each organization ONCE — deduplicate by name, ignoring different locations or departments within the same organization. For example: 'Dell Technologies, MIT, Stanford' not 'Dell Technologies Hopkinton, Dell Technologies Santa Clara'.]"}
 
 Do NOT restate the publication date, authors, or source in the Summary section — they are already in the header above. Proceed directly with the analysis sections.`;
 
