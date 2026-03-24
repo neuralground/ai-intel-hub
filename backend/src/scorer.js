@@ -977,25 +977,23 @@ ${itemMeta}
 ${headerInstruction}
 
 ## Summary
-A strictly factual summary based ONLY on what is stated in the provided text. Capture the key contributions, proposed methods, experimental setup, and principal findings. State only what the authors explicitly describe. Do not infer or speculate about content not present.
+This is the most important section — provide a comprehensive, multi-paragraph summary (at least 3-5 paragraphs for a typical paper). Cover:
+- The problem being addressed and why it matters
+- The proposed approach or methodology in detail
+- Key experimental setup, datasets, and baselines
+- Principal results and findings with specific numbers where available
+- The authors' conclusions
+
+Be strictly factual — state only what the paper explicitly describes. Do not infer or speculate.
 
 ## Relevance & Strategic Implications
 Why this paper matters to the reader specifically, given their role and focus areas. Identify concrete implications for their strategy, architecture decisions, or roadmap. What opportunities or risks does this research create?
 
 ## Related Work & Context
-Position this paper within the broader research landscape. Reference the related items listed above (if any). Discuss how this work relates to, extends, or contradicts prior work mentioned in the paper. Note key citations and competing approaches.
+Position this paper within the broader research landscape. Reference the related items listed above (if any). Discuss how this work relates to, extends, or contradicts prior work mentioned in the paper. Include hyperlinks to referenced papers where possible (e.g. [Paper Title](https://arxiv.org/abs/XXXX.XXXXX) for arXiv papers, or [Paper Title](URL) for others).
 
 ## Critical Analysis
-Provide a rigorous scholarly critique:
-- **Novelty**: How original is the contribution? Is this incremental or a genuine advance?
-- **Methodology**: Evaluate experimental design, baselines, datasets, and evaluation metrics. Are they appropriate and sufficient?
-- **Reproducibility**: Is there enough detail to reproduce the results? Is code or data available?
-- **Statistical rigor**: Are claims supported by the evidence? Look for cherry-picked results, missing error bars, unfair comparisons, or overgeneralized conclusions.
-- **Limitations**: What do the authors acknowledge? What do they miss? Under what conditions might these results not hold?
-- **Author credibility**: Consider affiliations, track record, and potential conflicts of interest. Is this peer-reviewed or a preprint?
-
-## Open Questions
-What are the most important unanswered questions or promising follow-up directions?
+Write a single concise paragraph noting any material concerns — methodology issues, missing evidence, potential biases, or important limitations the reader should be aware of. If the paper is methodologically sound and well-supported, omit this section entirely. Do not pad with generic caveats.
 
 Include a link to the original paper: [View paper](${item.url || "#"})`;
 
@@ -1062,7 +1060,7 @@ Include a link to the original: [View source](${item.url || "#"})`;
   const model = getAnalysisModel();
 
   let accumulated = "";
-  for await (const chunk of streamAnalysisLLM(systemPrompt, userMessage, 3000, signal)) {
+  for await (const chunk of streamAnalysisLLM(systemPrompt, userMessage, 4000, signal)) {
     accumulated += chunk;
     onChunk(chunk);
   }
