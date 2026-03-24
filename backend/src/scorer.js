@@ -1,4 +1,4 @@
-import { getItems, getUnscoredItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds } from "./db.js";
+import { getItems, getUnscoredItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds, getRecentFeedbackExamples } from "./db.js";
 import { discoverFeedsFromContent, discoverFeedsFromSearch } from "./fetcher.js";
 import { getFeedOrg, getOrgNamesForPrompt, getOrgLabels } from "./orgs.js";
 
@@ -183,9 +183,20 @@ export async function scoreItems(items) {
   const context = getRelevanceContext();
   const instructions = getScoringInstructions();
   const validOrgLabels = new Set(getOrgLabels());
+
+  // Build feedback calibration section from user signals
+  const feedbackExamples = getRecentFeedbackExamples(5);
+  const feedbackSection = feedbackExamples.length >= 2
+    ? `\nThe reader has provided feedback on past items. Use these as calibration examples to understand what they actually find valuable:
+${feedbackExamples.map(ex =>
+  `- "${ex.title}" [${ex.category}] — scored ${ex.relevance.toFixed(2)}${ex.reason ? `: "${ex.reason}"` : ""} → Reader ${ex.signal} this`
+).join("\n")}
+Adjust your scoring to better match these preferences.\n`
+    : "";
+
   const systemPrompt = `You are a relevance scoring engine for an AI intelligence feed.
 The reader is: ${context}
-${instructions ? `\nAdditional scoring instructions: ${instructions}\n` : ""}
+${instructions ? `\nAdditional scoring instructions: ${instructions}\n` : ""}${feedbackSection}
 Score each item from 0.0 to 1.0 for relevance to this reader. Also provide a brief reason (one sentence) explaining why it matters to them specifically.
 
 For each item, identify organizational affiliations. Consider both the authors (if they are from known organizations) and the source (if it is an organization's official blog or publication). Return matching organization names in an "affiliations" array. Use ONLY these recognized org names:

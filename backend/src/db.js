@@ -253,6 +253,39 @@ export function setItemFeedback(itemId, feedback) {
   save();
 }
 
+export function getRecentFeedbackExamples(maxPerSignal = 5) {
+  const liked = [];
+  const disliked = [];
+
+  const scored = store.items
+    .filter(i => i.scored_at && (i.feedback || i.saved || i.dismissed))
+    .sort((a, b) => new Date(b.scored_at) - new Date(a.scored_at));
+
+  for (const item of scored) {
+    const signal = item.feedback === 1 ? "liked"
+      : item.feedback === -1 ? "disliked"
+      : item.saved ? "liked"
+      : item.dismissed ? "disliked"
+      : null;
+    if (!signal) continue;
+
+    const bucket = signal === "liked" ? liked : disliked;
+    if (bucket.length >= maxPerSignal) continue;
+
+    bucket.push({
+      title: item.title,
+      category: item.category,
+      relevance: item.relevance,
+      reason: item.relevance_reason,
+      signal,
+    });
+
+    if (liked.length >= maxPerSignal && disliked.length >= maxPerSignal) break;
+  }
+
+  return [...liked, ...disliked];
+}
+
 export function deleteItem(itemId) {
   const before = store.items.length;
   store.items = store.items.filter(i => i.id !== itemId);

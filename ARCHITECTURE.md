@@ -440,10 +440,8 @@ Implemented: `scored_at` tracking prevents re-scoring. Upsert preserves existing
 **Where:** `backend/src/scorer.js` (callLLM function), new SSE endpoint in `server.js`, frontend streaming reader.
 **Complexity:** Medium.
 
-### T7: User feedback loop for relevance calibration — OPEN
-**What:** Use save/dismiss/thumbs-up/thumbs-down signals as few-shot examples in the scoring prompt to sharpen relevance over time.
-**Where:** `backend/src/scorer.js` (add feedback examples to scoring prompt), `backend/src/db.js` (track interaction signals).
-**Complexity:** Medium. High impact.
+### ~~T7: User feedback loop for relevance calibration~~ — DONE
+Implemented: `getRecentFeedbackExamples()` in `db.js` queries recent items with user signals (thumbs up/down, save, dismiss). Up to 10 examples (5 liked, 5 disliked) are injected as calibration examples into the scoring system prompt in `scorer.js`. Explicit feedback (thumbs up/down) overrides implicit signals (save/dismiss). The feature activates automatically once the user has provided at least 2 feedback signals. Cold start (no feedback) leaves the prompt unchanged.
 
 ### ~~T8: Multi-model support~~ — DONE
 Implemented: Multi-provider LLM (Anthropic, OpenAI, Gemini, Ollama) with per-provider model selection.
