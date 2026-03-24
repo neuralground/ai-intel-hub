@@ -38,15 +38,19 @@ jobs:
           npm install
           npm run install:all
 
+      - name: Configure signing
+        if: ${{ secrets.MAC_CERTIFICATE != '' }}
+        run: |
+          echo "CSC_LINK=${{ secrets.MAC_CERTIFICATE }}" >> $GITHUB_ENV
+          echo "CSC_KEY_PASSWORD=${{ secrets.MAC_CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
+          echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
+          echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_PASSWORD }}" >> $GITHUB_ENV
+          echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+
       - name: Build macOS app (arm64)
         run: npm run build && npx electron-builder --mac --arm64
         env:
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE != '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload macOS arm64 artifacts
         uses: actions/upload-artifact@v5
@@ -76,15 +80,19 @@ jobs:
           npm install
           npm run install:all
 
+      - name: Configure signing
+        if: ${{ secrets.MAC_CERTIFICATE != '' }}
+        run: |
+          echo "CSC_LINK=${{ secrets.MAC_CERTIFICATE }}" >> $GITHUB_ENV
+          echo "CSC_KEY_PASSWORD=${{ secrets.MAC_CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
+          echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
+          echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_PASSWORD }}" >> $GITHUB_ENV
+          echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+
       - name: Build macOS app (x64)
         run: npm run build && npx electron-builder --mac --x64
         env:
-          CSC_LINK: ${{ secrets.MAC_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CERTIFICATE != '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload macOS x64 artifacts
         uses: actions/upload-artifact@v5
@@ -114,11 +122,15 @@ jobs:
           npm install
           npm run install:all
 
+      - name: Configure signing
+        if: ${{ secrets.WIN_CERTIFICATE != '' }}
+        shell: bash
+        run: |
+          echo "CSC_LINK=${{ secrets.WIN_CERTIFICATE }}" >> $GITHUB_ENV
+          echo "CSC_KEY_PASSWORD=${{ secrets.WIN_CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
+
       - name: Build Windows app
         run: npm run electron:build:win
-        env:
-          CSC_LINK: ${{ secrets.WIN_CERTIFICATE }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v5
