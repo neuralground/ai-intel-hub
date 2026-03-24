@@ -7,4 +7,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Returns a promise that resolves with { ok, token?, error? }.
   connectService: (serviceId) => ipcRenderer.invoke("connect-service", serviceId),
   connectFeed: (opts) => ipcRenderer.invoke("connect-feed", opts),
+  // Generate a PDF and save to a user-selected location.
+  savePDF: (opts) => ipcRenderer.invoke("save-pdf", opts),
 });

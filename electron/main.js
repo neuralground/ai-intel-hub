@@ -314,6 +314,29 @@ function captureCookie(config) {
   });
 }
 
+// ── IPC handler for PDF export ───────────────────────────────────────────────
+ipcMain.handle("save-pdf", async (event, { html, defaultFilename }) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultFilename || "summary.pdf",
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (canceled || !filePath) return { ok: false };
+
+  // Render HTML in a hidden window and print to PDF
+  const pdfWindow = new BrowserWindow({ show: false, width: 800, height: 600 });
+  pdfWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
+  await new Promise(r => pdfWindow.webContents.on("did-finish-load", r));
+  const pdfBuffer = await pdfWindow.webContents.printToPDF({
+    printBackground: true,
+    margins: { top: 0.6, bottom: 0.6, left: 0.6, right: 0.6 },
+  });
+  pdfWindow.close();
+
+  fs.writeFileSync(filePath, pdfBuffer);
+  console.log(`[Electron] PDF saved: ${filePath}`);
+  return { ok: true, filePath };
+});
+
 // ── IPC handler for service connections ──────────────────────────────────────
 ipcMain.handle("connect-service", async (event, serviceId) => {
   const config = SERVICE_AUTH[serviceId];
