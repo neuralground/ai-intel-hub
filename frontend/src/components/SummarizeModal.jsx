@@ -83,10 +83,7 @@ export default function SummarizeModal({ item, onClose }) {
               {item.author || ""} {item.author ? "·" : ""} {item.feed_id} · {(item.relevance * 100).toFixed(0)}% relevance
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            {done && <ExportButtons title={item.title} markdown={markdownForExport} contentRef={contentRef} metaHtml={metaHtml} />}
-            <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18, padding: 0, lineHeight: 1 }}>✕</button>
-          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 18, flexShrink: 0, padding: 0, lineHeight: 1 }}>✕</button>
         </div>
 
         {/* Content */}

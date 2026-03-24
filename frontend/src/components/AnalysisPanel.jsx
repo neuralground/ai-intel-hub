@@ -246,10 +246,7 @@ export default function AnalysisPanel({ category, onClose }) {
           const markdownForExport = `# ${modeLabel}\n\n${result}\n\n---\n*${metaLine}*\n`;
           return (
           <div style={{ marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              {llmLabel && <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic" }}>Powered by {llmLabel}</span>}
-              <ExportButtons title={modeLabel} markdown={markdownForExport} contentRef={contentRef} metaHtml={metaHtml} />
-            </div>
+            {llmLabel && <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic", marginBottom: 4 }}>Powered by {llmLabel}</div>}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>
                 {generatedAt ? `Generated ${timeAgo(generatedAt)}` : ""}
@@ -285,18 +282,18 @@ export default function AnalysisPanel({ category, onClose }) {
           blockquote: ({ children }) => <blockquote style={{ borderLeft: "3px solid var(--accent)", paddingLeft: 14, margin: "10px 0", color: "var(--text-muted)" }}>{children}</blockquote>,
           a: renderLink,
         }}>{result}</Markdown></div>}
-        {!loading && !streaming && result && (() => {
-          const modeLabel = modes.find(m => m.key === mode)?.label || "Analysis";
-          const metaLine = `Generated ${generatedAt ? timeAgo(generatedAt) : ""}${cached ? " (cached)" : ""} · Powered by ${llmLabel}`;
-          const metaHtml = `<p style="color:#888;font-size:11px;font-style:italic">${metaLine.replace(/·/g, "&middot;")}</p>`;
-          const markdownForExport = `# ${modeLabel}\n\n${result}\n\n---\n*${metaLine}*\n`;
-          return (
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
-              <ExportButtons title={modeLabel} markdown={markdownForExport} contentRef={contentRef} metaHtml={metaHtml} />
-            </div>
-          );
-        })()}
       </div>
+      {!loading && !streaming && result && (() => {
+        const modeLabel = modes.find(m => m.key === mode)?.label || "Analysis";
+        const metaLine = `Generated ${generatedAt ? timeAgo(generatedAt) : ""}${cached ? " (cached)" : ""} · Powered by ${llmLabel}`;
+        const metaHtml = `<p style="color:#888;font-size:11px;font-style:italic">${metaLine.replace(/·/g, "&middot;")}</p>`;
+        const markdownForExport = `# ${modeLabel}\n\n${result}\n\n---\n*${metaLine}*\n`;
+        return (
+          <div style={{ padding: "10px 20px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+            <ExportButtons title={modeLabel} markdown={markdownForExport} contentRef={contentRef} metaHtml={metaHtml} />
+          </div>
+        );
+      })()}
       {hoverItem && <ItemHoverPopover item={hoverItem.item} anchor={hoverItem.anchor} onClose={dismissHover} onSave={handleSaveItem} onMarkRead={handleMarkReadFromHover} onMouseEnter={clearHoverTimer} />}
     </div>
   );
