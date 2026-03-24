@@ -40,7 +40,8 @@ mac:
   notarize: false  # Set to true and configure credentials for distribution
 
 dmg:
-  title: "${productName}"
+  title: "${productName} ${arch}"
+  artifactName: "${productName}-${version}-${arch}.${ext}"
   contents:
     - x: 130
       y: 220
