@@ -685,81 +685,105 @@ export async function generateAnalysisStream(mode, category = null, { force = fa
 // ── Content fetching for deep summarization ─────────────────────────────────
 
 async function fetchArticleContent(url, maxChars = 12000) {
-  if (!url) return null;
+  if (!url) { console.log("[Summarize] No URL provided"); return null; }
+  console.log(`[Summarize] Fetching content from: ${url}`);
+
+  let cheerioLoad;
   try {
-    const { load } = await import("cheerio");
+    const cheerio = await import("cheerio");
+    cheerioLoad = cheerio.load;
+  } catch (err) {
+    console.error(`[Summarize] Failed to import cheerio: ${err.message}`);
+    return null;
+  }
 
-    // For arXiv, try the HTML version (full paper text)
-    // Match arXiv URLs in various formats: abs, pdf, html, DOI
-    const arxivMatch = url.match(/arxiv\.org\/(?:abs|pdf|html)\/(\d+\.\d+)/)
-      || url.match(/arXiv\.(\d+\.\d+)/);
-    if (arxivMatch) {
-      const paperId = arxivMatch[1];
+  // For arXiv, try the HTML version (full paper text)
+  // Match arXiv URLs in various formats: abs, pdf, html, DOI
+  const arxivMatch = url.match(/arxiv\.org\/(?:abs|pdf|html)\/(\d+\.\d+)/)
+    || url.match(/arXiv\.(\d+\.\d+)/);
+  if (arxivMatch) {
+    const paperId = arxivMatch[1];
+    console.log(`[Summarize] Detected arXiv paper: ${paperId}`);
+
+    // Try 1: HTML version (full paper)
+    try {
       const htmlUrl = `https://arxiv.org/html/${paperId}`;
-      try {
-        const res = await fetch(htmlUrl, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
-          signal: AbortSignal.timeout(15000),
-        });
-        if (res.ok) {
-          const html = await res.text();
-          const $ = load(html);
-          // Remove scripts, styles, nav, references section
-          $("script, style, nav, header, footer, .ltx_bibliography, .ltx_appendix").remove();
-          const text = $(".ltx_page_content").text() || $("article").text() || $("main").text() || $("body").text();
-          const cleaned = text.replace(/\s+/g, " ").trim();
-          if (cleaned.length > 500) {
-            console.log(`[Summarize] Fetched arXiv HTML for ${paperId}: ${cleaned.length} chars`);
-            return cleaned.slice(0, maxChars);
-          }
+      console.log(`[Summarize] Trying arXiv HTML: ${htmlUrl}`);
+      const res = await fetch(htmlUrl, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+        signal: AbortSignal.timeout(15000),
+      });
+      console.log(`[Summarize] arXiv HTML response: ${res.status}`);
+      if (res.ok) {
+        const html = await res.text();
+        const $ = cheerioLoad(html);
+        $("script, style, nav, header, footer, .ltx_bibliography, .ltx_appendix").remove();
+        const text = $(".ltx_page_content").text() || $("article").text() || $("main").text() || $("body").text();
+        const cleaned = text.replace(/\s+/g, " ").trim();
+        if (cleaned.length > 500) {
+          console.log(`[Summarize] Fetched arXiv HTML for ${paperId}: ${cleaned.length} chars`);
+          return cleaned.slice(0, maxChars);
         }
-      } catch { /* fall through to abstract page */ }
-
-      // Fallback: try arXiv PDF
-      try {
-        const { parseOfficeAsync } = await import("officeparser");
-        const pdfRes = await fetch(`https://arxiv.org/pdf/${paperId}`, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
-          signal: AbortSignal.timeout(20000),
-        });
-        if (pdfRes.ok) {
-          const buffer = Buffer.from(await pdfRes.arrayBuffer());
-          const text = await parseOfficeAsync(buffer);
-          const cleaned = text.replace(/\s+/g, " ").trim();
-          if (cleaned.length > 500) {
-            console.log(`[Summarize] Parsed arXiv PDF for ${paperId}: ${cleaned.length} chars`);
-            return cleaned.slice(0, maxChars);
-          }
-        }
-      } catch (err) {
-        console.log(`[Summarize] arXiv PDF parse failed for ${paperId}: ${err.message}`);
+        console.log(`[Summarize] arXiv HTML too short: ${cleaned.length} chars`);
       }
-
-      // Last resort: fetch arXiv abstract page
-      try {
-        const absRes = await fetch(`https://arxiv.org/abs/${paperId}`, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
-          signal: AbortSignal.timeout(10000),
-        });
-        if (absRes.ok) {
-          const html = await absRes.text();
-          const $ = load(html);
-          const abstract = $(".abstract").text().replace(/^Abstract:\s*/i, "").trim();
-          const title = $(".title").text().replace(/^Title:\s*/i, "").trim();
-          const authors = $(".authors").text().replace(/^Authors:\s*/i, "").trim();
-          const content = `${title}\n\nAuthors: ${authors}\n\nAbstract: ${abstract}`;
-          console.log(`[Summarize] Fetched arXiv abstract for ${paperId}: ${content.length} chars`);
-          return content.slice(0, maxChars);
-        }
-      } catch { /* fall through to generic fetch */ }
+    } catch (err) {
+      console.log(`[Summarize] arXiv HTML failed for ${paperId}: ${err.message}`);
     }
 
-    // Generic web page fetch
+    // Try 2: PDF version
+    try {
+      console.log(`[Summarize] Trying arXiv PDF for ${paperId}`);
+      const { parseOfficeAsync } = await import("officeparser");
+      const pdfRes = await fetch(`https://arxiv.org/pdf/${paperId}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+        signal: AbortSignal.timeout(20000),
+      });
+      console.log(`[Summarize] arXiv PDF response: ${pdfRes.status}`);
+      if (pdfRes.ok) {
+        const buffer = Buffer.from(await pdfRes.arrayBuffer());
+        const text = await parseOfficeAsync(buffer);
+        const cleaned = text.replace(/\s+/g, " ").trim();
+        if (cleaned.length > 500) {
+          console.log(`[Summarize] Parsed arXiv PDF for ${paperId}: ${cleaned.length} chars`);
+          return cleaned.slice(0, maxChars);
+        }
+        console.log(`[Summarize] arXiv PDF too short: ${cleaned.length} chars`);
+      }
+    } catch (err) {
+      console.log(`[Summarize] arXiv PDF parse failed for ${paperId}: ${err.message}`);
+    }
+
+    // Try 3: Abstract page
+    try {
+      console.log(`[Summarize] Trying arXiv abstract for ${paperId}`);
+      const absRes = await fetch(`https://arxiv.org/abs/${paperId}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (absRes.ok) {
+        const html = await absRes.text();
+        const $ = cheerioLoad(html);
+        const abstract = $(".abstract").text().replace(/^Abstract:\s*/i, "").trim();
+        const title = $(".title").text().replace(/^Title:\s*/i, "").trim();
+        const authors = $(".authors").text().replace(/^Authors:\s*/i, "").trim();
+        const content = `${title}\n\nAuthors: ${authors}\n\nAbstract: ${abstract}`;
+        console.log(`[Summarize] Fetched arXiv abstract for ${paperId}: ${content.length} chars`);
+        return content.slice(0, maxChars);
+      }
+    } catch (err) {
+      console.log(`[Summarize] arXiv abstract failed for ${paperId}: ${err.message}`);
+    }
+  }
+
+  // Generic web page / document fetch
+  try {
+    console.log(`[Summarize] Generic fetch: ${url}`);
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
       signal: AbortSignal.timeout(12000),
       redirect: "follow",
     });
+    console.log(`[Summarize] Response: ${res.status} ${res.headers.get("content-type") || "unknown"}`);
     if (!res.ok) return null;
 
     const contentType = res.headers.get("content-type") || "";
@@ -783,7 +807,7 @@ async function fetchArticleContent(url, maxChars = 12000) {
     }
 
     const html = await res.text();
-    const $ = load(html);
+    const $ = cheerioLoad(html);
     $("script, style, nav, header, footer, aside, form, iframe, .sidebar, .comments, .advertisement").remove();
     const text = $("article").text() || $("main").text() || $(".post-content").text() || $(".entry-content").text() || $("body").text();
     const cleaned = text.replace(/\s+/g, " ").trim();
@@ -791,9 +815,10 @@ async function fetchArticleContent(url, maxChars = 12000) {
       console.log(`[Summarize] Fetched article content from ${new URL(url).hostname}: ${cleaned.length} chars`);
       return cleaned.slice(0, maxChars);
     }
+    console.log(`[Summarize] Extracted content too short: ${cleaned.length} chars`);
     return null;
   } catch (err) {
-    console.log(`[Summarize] Failed to fetch content from ${url}: ${err.message}`);
+    console.log(`[Summarize] Generic fetch failed for ${url}: ${err.message}`);
     return null;
   }
 }
@@ -852,7 +877,7 @@ ${item.relevance_reason ? `Relevance reason: ${item.relevance_reason}` : ""}
 Tags: ${(item.tags || []).join(", ") || "none"}
 Affiliations: ${(item.affiliations || []).join(", ") || "none"}
 
-Content (source: ${contentSource}):
+Content (${contentSource === "full document" ? "THE FULL DOCUMENT HAS BEEN RETRIEVED AND IS PROVIDED BELOW — base your analysis on the complete text, do not say you lack access to the full paper" : contentSource === "transcript" ? "video transcript provided" : "only the abstract/summary is available"}):
 ${content.slice(0, 10000)}
 ${relatedSection}`;
 
