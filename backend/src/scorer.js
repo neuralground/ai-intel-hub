@@ -684,7 +684,14 @@ export async function generateAnalysisStream(mode, category = null, { force = fa
 
 // ── Content fetching for deep summarization ─────────────────────────────────
 
-async function fetchArticleContent(url, maxChars = 12000) {
+// Parse a document buffer (PDF, DOCX, PPTX, etc.) using officeparser v6 API
+async function parseDocument(buffer) {
+  const { parseOffice } = await import("officeparser");
+  const result = await parseOffice(buffer);
+  return result.toText();
+}
+
+async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {}) {
   if (!url) { console.log("[Summarize] No URL provided"); return null; }
   console.log(`[Summarize] Fetching content from: ${url}`);
 
@@ -697,67 +704,87 @@ async function fetchArticleContent(url, maxChars = 12000) {
     return null;
   }
 
-  // For arXiv, try the HTML version (full paper text)
-  // Match arXiv URLs in various formats: abs, pdf, html, DOI
+  const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+  // ── arXiv papers ────────────────────────────────────────────────────────
   const arxivMatch = url.match(/arxiv\.org\/(?:abs|pdf|html)\/(\d+\.\d+)/)
     || url.match(/arXiv\.(\d+\.\d+)/);
   if (arxivMatch) {
     const paperId = arxivMatch[1];
     console.log(`[Summarize] Detected arXiv paper: ${paperId}`);
 
-    // Try 1: HTML version (full paper)
+    // Strategy 1: HTML version (full paper, best quality)
+    onProgress("Fetching full paper (HTML)...");
     try {
-      const htmlUrl = `https://arxiv.org/html/${paperId}`;
-      console.log(`[Summarize] Trying arXiv HTML: ${htmlUrl}`);
-      const res = await fetch(htmlUrl, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+      const res = await fetch(`https://arxiv.org/html/${paperId}`, {
+        headers: { "User-Agent": UA },
         signal: AbortSignal.timeout(15000),
       });
-      console.log(`[Summarize] arXiv HTML response: ${res.status}`);
+      console.log(`[Summarize] arXiv HTML: ${res.status}`);
       if (res.ok) {
         const html = await res.text();
         const $ = cheerioLoad(html);
-        $("script, style, nav, header, footer, .ltx_bibliography, .ltx_appendix").remove();
-        const text = $(".ltx_page_content").text() || $("article").text() || $("main").text() || $("body").text();
-        const cleaned = text.replace(/\s+/g, " ").trim();
-        if (cleaned.length > 500) {
-          console.log(`[Summarize] Fetched arXiv HTML for ${paperId}: ${cleaned.length} chars`);
+        $("script, style, nav, header, footer, .ltx_bibliography, .ltx_appendix, .ltx_role_affiliationtext").remove();
+        const text = $(".ltx_page_content").text() || $("article").text() || $("main").text();
+        const cleaned = text?.replace(/\s+/g, " ").trim();
+        if (cleaned && cleaned.length > 500) {
+          console.log(`[Summarize] Got arXiv HTML: ${cleaned.length} chars`);
           return cleaned.slice(0, maxChars);
         }
-        console.log(`[Summarize] arXiv HTML too short: ${cleaned.length} chars`);
       }
     } catch (err) {
-      console.log(`[Summarize] arXiv HTML failed for ${paperId}: ${err.message}`);
+      console.log(`[Summarize] arXiv HTML failed: ${err.message}`);
     }
 
-    // Try 2: PDF version
+    // Strategy 2: PDF version
+    onProgress("Fetching full paper (PDF)...");
     try {
-      console.log(`[Summarize] Trying arXiv PDF for ${paperId}`);
-      const { parseOfficeAsync } = await import("officeparser");
       const pdfRes = await fetch(`https://arxiv.org/pdf/${paperId}`, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
-        signal: AbortSignal.timeout(20000),
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(25000),
       });
-      console.log(`[Summarize] arXiv PDF response: ${pdfRes.status}`);
+      console.log(`[Summarize] arXiv PDF: ${pdfRes.status}`);
       if (pdfRes.ok) {
         const buffer = Buffer.from(await pdfRes.arrayBuffer());
-        const text = await parseOfficeAsync(buffer);
-        const cleaned = text.replace(/\s+/g, " ").trim();
-        if (cleaned.length > 500) {
-          console.log(`[Summarize] Parsed arXiv PDF for ${paperId}: ${cleaned.length} chars`);
+        console.log(`[Summarize] PDF buffer: ${buffer.length} bytes`);
+        const text = await parseDocument(buffer);
+        const cleaned = text?.replace(/\s+/g, " ").trim();
+        if (cleaned && cleaned.length > 500) {
+          console.log(`[Summarize] Parsed arXiv PDF: ${cleaned.length} chars`);
           return cleaned.slice(0, maxChars);
         }
-        console.log(`[Summarize] arXiv PDF too short: ${cleaned.length} chars`);
       }
     } catch (err) {
-      console.log(`[Summarize] arXiv PDF parse failed for ${paperId}: ${err.message}`);
+      console.log(`[Summarize] arXiv PDF failed: ${err.message}`);
     }
 
-    // Try 3: Abstract page
+    // Strategy 3: arXiv API (returns structured abstract + metadata in XML)
+    onProgress("Fetching paper metadata (arXiv API)...");
     try {
-      console.log(`[Summarize] Trying arXiv abstract for ${paperId}`);
+      const apiRes = await fetch(`https://export.arxiv.org/api/query?id_list=${paperId}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (apiRes.ok) {
+        const xml = await apiRes.text();
+        const $ = cheerioLoad(xml, { xmlMode: true });
+        const title = $("entry > title").text().replace(/\s+/g, " ").trim();
+        const abstract = $("entry > summary").text().replace(/\s+/g, " ").trim();
+        const authors = $("entry > author > name").map((_, el) => $(el).text()).get().join(", ");
+        if (abstract && abstract.length > 50) {
+          const content = `${title}\n\nAuthors: ${authors}\n\nAbstract: ${abstract}`;
+          console.log(`[Summarize] Got arXiv API abstract: ${content.length} chars`);
+          return content.slice(0, maxChars);
+        }
+      }
+    } catch (err) {
+      console.log(`[Summarize] arXiv API failed: ${err.message}`);
+    }
+
+    // Strategy 4: Scrape abstract page
+    onProgress("Fetching abstract page...");
+    try {
       const absRes = await fetch(`https://arxiv.org/abs/${paperId}`, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+        headers: { "User-Agent": UA },
         signal: AbortSignal.timeout(10000),
       });
       if (absRes.ok) {
@@ -767,58 +794,80 @@ async function fetchArticleContent(url, maxChars = 12000) {
         const title = $(".title").text().replace(/^Title:\s*/i, "").trim();
         const authors = $(".authors").text().replace(/^Authors:\s*/i, "").trim();
         const content = `${title}\n\nAuthors: ${authors}\n\nAbstract: ${abstract}`;
-        console.log(`[Summarize] Fetched arXiv abstract for ${paperId}: ${content.length} chars`);
+        console.log(`[Summarize] Got arXiv abstract page: ${content.length} chars`);
         return content.slice(0, maxChars);
       }
     } catch (err) {
-      console.log(`[Summarize] arXiv abstract failed for ${paperId}: ${err.message}`);
+      console.log(`[Summarize] arXiv abstract page failed: ${err.message}`);
     }
+
+    console.log(`[Summarize] All arXiv strategies exhausted for ${paperId}`);
+    return null;
   }
 
-  // Generic web page / document fetch
+  // ── Generic URL fetch ───────────────────────────────────────────────────
+  onProgress("Fetching source content...");
   try {
-    console.log(`[Summarize] Generic fetch: ${url}`);
     const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
-      signal: AbortSignal.timeout(12000),
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(15000),
       redirect: "follow",
     });
     console.log(`[Summarize] Response: ${res.status} ${res.headers.get("content-type") || "unknown"}`);
-    if (!res.ok) return null;
+    if (!res.ok) { console.log(`[Summarize] HTTP ${res.status}`); return null; }
 
     const contentType = res.headers.get("content-type") || "";
 
-    // Handle binary document formats: PDF, DOCX, PPTX, XLSX, ODT
+    // Binary document formats
     const docTypes = ["pdf", "msword", "officedocument", "opendocument", "presentation", "spreadsheet"];
     if (docTypes.some(t => contentType.includes(t)) || url.match(/\.(pdf|docx?|pptx?|xlsx?|odt)(\?|$)/i)) {
+      onProgress("Parsing document...");
       try {
-        const { parseOfficeAsync } = await import("officeparser");
         const buffer = Buffer.from(await res.arrayBuffer());
-        const text = await parseOfficeAsync(buffer);
-        const cleaned = text.replace(/\s+/g, " ").trim();
-        if (cleaned.length > 100) {
-          console.log(`[Summarize] Parsed document from ${new URL(url).hostname}: ${cleaned.length} chars`);
+        const text = await parseDocument(buffer);
+        const cleaned = text?.replace(/\s+/g, " ").trim();
+        if (cleaned && cleaned.length > 100) {
+          console.log(`[Summarize] Parsed document: ${cleaned.length} chars`);
           return cleaned.slice(0, maxChars);
         }
       } catch (err) {
-        console.log(`[Summarize] Document parse failed for ${url}: ${err.message}`);
+        console.log(`[Summarize] Document parse failed: ${err.message}`);
       }
       return null;
     }
 
+    // HTML page
+    onProgress("Extracting article text...");
     const html = await res.text();
     const $ = cheerioLoad(html);
-    $("script, style, nav, header, footer, aside, form, iframe, .sidebar, .comments, .advertisement").remove();
-    const text = $("article").text() || $("main").text() || $(".post-content").text() || $(".entry-content").text() || $("body").text();
-    const cleaned = text.replace(/\s+/g, " ").trim();
-    if (cleaned.length > 100) {
-      console.log(`[Summarize] Fetched article content from ${new URL(url).hostname}: ${cleaned.length} chars`);
-      return cleaned.slice(0, maxChars);
+    $("script, style, nav, header, footer, aside, form, iframe, .sidebar, .comments, .advertisement, .cookie-banner, .social-share").remove();
+
+    // Try multiple content selectors in priority order
+    const selectors = ["article", "[role=main]", "main", ".post-content", ".entry-content", ".article-body", ".story-body", "#content", ".content", "body"];
+    let text = "";
+    for (const sel of selectors) {
+      const candidate = $(sel).text()?.replace(/\s+/g, " ").trim();
+      if (candidate && candidate.length > text.length) {
+        text = candidate;
+      }
     }
-    console.log(`[Summarize] Extracted content too short: ${cleaned.length} chars`);
+
+    if (text.length > 200) {
+      console.log(`[Summarize] Extracted HTML content: ${text.length} chars`);
+      return text.slice(0, maxChars);
+    }
+
+    // Last resort: try the full body text
+    const bodyText = $("body").text()?.replace(/\s+/g, " ").trim();
+    if (bodyText && bodyText.length > 200) {
+      console.log(`[Summarize] Extracted body text: ${bodyText.length} chars`);
+      return bodyText.slice(0, maxChars);
+    }
+
+    console.log(`[Summarize] Content too short: ${text.length} chars`);
     return null;
   } catch (err) {
-    console.log(`[Summarize] Generic fetch failed for ${url}: ${err.message}`);
+    console.log(`[Summarize] Fetch failed: ${err.message}`);
     return null;
   }
 }
@@ -848,7 +897,7 @@ function detectItemType(item) {
   return "general";
 }
 
-export async function generateItemSummaryStream(itemId, onChunk, signal) {
+export async function generateItemSummaryStream(itemId, onChunk, signal, onFetchProgress) {
   const item = getItemById(itemId);
   if (!item) throw new Error("Item not found");
 
@@ -856,10 +905,13 @@ export async function generateItemSummaryStream(itemId, onChunk, signal) {
   const clusterMates = getClusterMates(item.cluster_id, item.id, 5);
   const itemType = detectItemType(item);
 
-  // Fetch full article content from the source URL
-  const fetchedContent = await fetchArticleContent(item.url);
+  // Fetch full article content from the source URL, with progress events
+  const onProgress = (msg) => onFetchProgress?.(msg);
+  const fetchedContent = await fetchArticleContent(item.url, 12000, onProgress);
   const content = fetchedContent || item.transcript || item.summary || "";
-  const contentSource = fetchedContent ? "full document" : item.transcript ? "transcript" : "summary only";
+  const contentSource = fetchedContent
+    ? (fetchedContent.length > 2000 ? "full document" : "abstract/summary from source")
+    : item.transcript ? "transcript" : "item summary only — full content could not be retrieved";
 
   let relatedSection = "";
   if (clusterMates.length > 0) {

@@ -276,6 +276,7 @@ app.get("/api/items/:id/summarize/stream", async (req, res) => {
       req.params.id,
       (chunk) => send({ type: "chunk", text: chunk }),
       abort.signal,
+      (msg) => send({ type: "progress", message: msg }),
     );
     send({ type: "done", result: result.result, generatedAt: result.generatedAt, provider: result.provider, model: result.model, contentSource: result.contentSource });
   } catch (err) {

@@ -63,11 +63,12 @@ export const api = {
     return evtSource;
   },
 
-  summarizeStream: (itemId, { onChunk, onDone, onError } = {}) => {
+  summarizeStream: (itemId, { onChunk, onDone, onError, onProgress } = {}) => {
     const evtSource = new EventSource(`${BASE}/items/${encodeURIComponent(itemId)}/summarize/stream`);
     evtSource.onmessage = (e) => {
       const data = JSON.parse(e.data);
       if (data.type === "chunk") onChunk?.(data.text);
+      else if (data.type === "progress") onProgress?.(data.message);
       else if (data.type === "done") { onDone?.(data); evtSource.close(); }
       else if (data.type === "error") { onError?.(data.message); evtSource.close(); }
     };

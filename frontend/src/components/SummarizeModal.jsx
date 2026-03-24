@@ -10,6 +10,7 @@ export default function SummarizeModal({ item, onClose }) {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [meta, setMeta] = useState(null);
+  const [fetchStatus, setFetchStatus] = useState("Locating source document...");
   const evtSourceRef = useRef(null);
   const bufferRef = useRef("");
   const flushTimerRef = useRef(null);
@@ -17,6 +18,7 @@ export default function SummarizeModal({ item, onClose }) {
 
   useEffect(() => {
     const evtSource = api.summarizeStream(item.id, {
+      onProgress: (msg) => setFetchStatus(msg),
       onChunk: (text) => {
         setStreaming(true);
         setLoading(false);
@@ -101,11 +103,19 @@ export default function SummarizeModal({ item, onClose }) {
             </div>
           )}
           {loading && !streaming && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontFamily: mono, fontSize: 11 }}>
-              <div style={{ height: 2, flex: 1, background: "var(--border)", borderRadius: 1 }}>
+            <div>
+              <div style={{ height: 2, background: "var(--border)", borderRadius: 1, marginBottom: 10 }}>
                 <div style={{ height: "100%", width: "60%", background: "var(--accent)", borderRadius: 1, animation: "analyzeProgress 2s ease-in-out infinite" }} />
               </div>
-              <span style={{ color: "var(--accent)", fontWeight: 600 }}>Fetching and analyzing document...</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontFamily: mono, fontSize: 11 }}>
+                <span style={{ color: "var(--accent)", fontWeight: 600 }}>{fetchStatus}</span>
+              </div>
+            </div>
+          )}
+          {/* Content source warning */}
+          {meta && meta.contentSource && !meta.contentSource.startsWith("full") && (
+            <div style={{ padding: "8px 12px", background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", borderRadius: 6, marginBottom: 12, fontSize: 11, fontFamily: sans, color: "var(--text-secondary)" }}>
+              <strong style={{ color: "#D97706" }}>Note:</strong> The full document could not be retrieved ({meta.contentSource}). This summary is based on limited content and may not capture the complete scope of the work.
             </div>
           )}
           {streaming && (
