@@ -358,7 +358,12 @@ The reader is: ${context}
 ${instructions ? `\nAdditional scoring instructions: ${instructions}\n` : ""}${feedbackSection}
 Score each item from 0.0 to 1.0 for relevance to this reader. Also provide a brief reason (one sentence) explaining why it matters to them specifically.
 
-SOURCE AUTHORITY: Factor the credibility of the source and authors into relevance scoring. For preprint repositories (arXiv, SSRN, bioRxiv), author reputation and institutional affiliation are critical signals — papers from recognized organizations, leading researchers, or multi-institutional teams should score higher than those from unknown authors or obscure affiliations. Solo-authored preprints with no notable affiliation, vague or grandiose claims, or signs of AI-generated text should be penalized (typically 0.15-0.25 lower). Official publications from established organizations (lab blogs, peer-reviewed venues, major tech companies) carry inherent authority and should not be penalized.
+SOURCE AUTHORITY — IMPORTANT: For preprint repositories (arXiv, SSRN, bioRxiv), author credibility is a MAJOR scoring factor. Apply these rules strictly:
+- Solo author from a genuinely obscure or unrecognizable organization: HARD CAP at 0.55 regardless of topic relevance. These papers are unvetted and frequently low-quality or AI-generated.
+- Multiple authors but all from obscure/unrecognizable orgs: cap at 0.65.
+- Authors from ANY well-known institution: score normally based on topic relevance. This includes the recognized org list below, BUT ALSO any established university (e.g. McGill, ETH Zurich, University of Tokyo), major corporation (e.g. Oracle, SAP, Siemens), or government research lab you recognize — even if not in the org list. Use your world knowledge of institutional reputation.
+- Multi-institutional teams from reputable orgs: no penalty, may deserve a boost.
+The key signal is whether the authors have a credible, verifiable institutional affiliation. Treat these as obscure/unknown: "Independent researcher", one-person labs, vague names like "AI Research Lab" or "Institute of Advanced Studies", or affiliations you cannot verify as real organizations. Official publications from established organizations (lab blogs, peer-reviewed venues, major tech companies) carry inherent authority and need no penalty.
 
 For each item, identify organizational affiliations. Consider both the authors (if they are from known organizations) and the source (if it is an organization's official blog or publication). Return matching organization names in an "affiliations" array. Use ONLY these recognized org names:
 ${getOrgNamesForPrompt()}
