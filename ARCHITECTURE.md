@@ -77,6 +77,14 @@ A shared registry of recognized organizations (AI labs, big tech companies, and 
 - Is used by the scorer (affiliation detection during scoring), the fetcher (feed-level org tagging), and the db module (storing affiliations on items).
 - Is served to the frontend via `GET /api/orgs` for badge rendering.
 
+### Content Fetching and Summarization (scorer.js)
+
+`scorer.js` exports `fetchArticleContent(url, maxChars, onProgress)` for retrieving full content from source URLs. It handles HTML pages (via Cheerio), PDFs and DOCX files (via officeparser v6 `parseOffice().toText()`), and YouTube transcripts. For arXiv papers, it tries PDF download first, then HTML rendering, then the arXiv API, then abstract scraping. The summarize endpoint (`GET /api/items/:id/summarize/stream`) uses this to feed full article text to the LLM for type-aware summary generation: academic papers get rigorous multi-paragraph analysis with related work hyperlinks; product announcements and news get lighter treatment. Summary headers include title, authors, published date, source link, and affiliations.
+
+### Scoring
+
+Source authority rules include preprint detection for boosted scoring. Briefing generation uses a minimum relevance threshold of 0.4, and relevance scores are respected in briefing headline ordering.
+
 ### Multi-Provider LLM (scorer.js)
 
 The scoring and analysis engine supports four LLM providers:
@@ -124,6 +132,8 @@ The server API supports all filter params (including `minRelevance`, `maxAgeDays
 ```
 ai-intel-hub/
 ├── package.json                 # Root workspace: npm scripts for dev, build, and Electron
+│   │                            #   Must include cheerio, officeparser, youtube-transcript
+│   │                            #   as dependencies for Electron bundling
 ├── Dockerfile                   # Multi-stage: builds frontend, serves from Express
 ├── docker-compose.yml           # One-command deployment with persistent volume
 ├── electron-builder.yml         # Electron packaging config (macOS, Windows, Linux)
@@ -171,30 +181,35 @@ ai-intel-hub/
         ├── api.js               # API client (fetch wrapper, all endpoints)
         ├── App.jsx              # Full dashboard: sidebar, feed list, analysis panel, sources
         └── components/
-            ├── AnalysisPanel.jsx    # Briefing/risk/WSNW analysis with streaming and export
-            ├── ExportButtons.jsx    # Save as Markdown / Save as PDF export controls
-            ├── ItemHoverPopover.jsx  # Popover for citation references in analysis
-            ├── OrgBadge.jsx         # Organization affiliation badge
-            ├── SavedItemsPanel.jsx  # Saved items view with category filter
-            ├── SettingsPanel.jsx    # Settings: profile, AI engine, orgs, connections
-            ├── SourcesPanel.jsx     # Source management, health, suggestions
-            ├── SummarizeModal.jsx   # Streaming deep-summary modal for individual items
-            ├── ThemeToggle.jsx      # System/light/dark theme switcher
-            └── services.jsx         # Connected services management
+            ├── AnalysisPanel.jsx    # Briefing/risk/WSNW analysis with streaming and export (300)
+            ├── ExportButtons.jsx    # Save as Markdown / Save as PDF export controls (73)
+            │                        #   PDF uses Electron printToPDF via IPC (native save dialog);
+            │                        #   falls back to print dialog in web mode
+            ├── ItemHoverPopover.jsx  # Popover for citation references in analysis (46)
+            ├── OrgBadge.jsx         # Organization affiliation badge (15)
+            ├── SavedItemsPanel.jsx  # Saved items view with category filter (94)
+            ├── SettingsPanel.jsx    # Settings: profile, AI engine, orgs, connections (1101)
+            ├── SourcesPanel.jsx     # Source management, health, suggestions (571)
+            ├── SummarizeModal.jsx   # Streaming deep-summary modal with type-aware analysis (155)
+            │                        #   Fetches full content (PDF/HTML/DOCX); header shows title,
+            │                        #   authors, date, affiliations, source link
+            ├── ThemeToggle.jsx      # System/light/dark theme switcher (23)
+            └── services.jsx         # Connected services management (155)
 ```
 
 **Line counts (approximate):**
 | File | Lines | Role |
 |------|-------|------|
-| `backend/src/server.js` | 400 | API routes, scheduler, startup, Electron settings |
-| `backend/src/scorer.js` | 337 | LLM scoring and analysis |
-| `backend/src/fetcher.js` | 191 | RSS parsing and ingestion |
-| `backend/src/db.js` | 254 | Persistence layer |
-| `backend/src/default-feeds.js` | 17 | Feed configuration loader |
-| `electron/main.js` | 259 | Electron main process |
-| `frontend/src/App.jsx` | 665 | Dashboard UI |
-| `frontend/src/api.js` | 54 | API client |
-| **Total** | **~2,200** | |
+| `backend/src/server.js` | 1,000 | API routes, scheduler, startup, Electron settings, content fetch |
+| `backend/src/scorer.js` | 1,220 | LLM scoring, analysis, summarization, content fetching |
+| `backend/src/fetcher.js` | 710 | RSS parsing, YouTube transcripts, ingestion |
+| `backend/src/db.js` | 478 | Persistence layer |
+| `backend/src/default-feeds.js` | 27 | Feed configuration loader |
+| `electron/main.js` | 469 | Electron main process, IPC (PDF export, settings) |
+| `frontend/src/App.jsx` | 714 | Dashboard UI |
+| `frontend/src/api.js` | 108 | API client |
+| `frontend/src/components/*` | 2,533 | Extracted UI components (10 modules) |
+| **Total** | **~7,260** | |
 
 ---
 
@@ -485,14 +500,13 @@ Implemented: `fetchTranscript()` in `fetcher.js` uses the `youtube-transcript` p
 ## P3: Frontend Enhancements
 
 ### ~~T14: Component decomposition~~ — DONE
-Decomposed `App.jsx` from 2427 lines to 545 lines (78% reduction). Extracted 8 modules into `frontend/src/components/`: SourcesPanel (530), SettingsPanel (683), AnalysisPanel (196), services (155), SavedItemsPanel (94), ItemHoverPopover (46), ThemeToggle (23), OrgBadge (15). Shared constants extracted to `constants.js` (50).
+Decomposed `App.jsx` from 2427 lines to 714 lines. Extracted 10 modules into `frontend/src/components/` (2,533 lines total): SettingsPanel (1101), SourcesPanel (571), AnalysisPanel (300), services (155), SummarizeModal (155), SavedItemsPanel (94), ExportButtons (73), ItemHoverPopover (46), ThemeToggle (23), OrgBadge (15). Shared constants extracted to `constants.js`.
 
 ### ~~T15: Dark/light theme~~ — DONE
 Implemented: System/light/dark theme toggle with CSS variables.
 
-### T16: Keyboard navigation — OPEN
-**What:** Add keyboard shortcuts: `j/k` for next/previous item, `o` to open source, `s` to save, `d` to dismiss, `/` to focus search.
-**Complexity:** Low.
+### ~~T16: Keyboard navigation~~ — DONE
+Implemented: `j/k` (or arrow keys) for next/previous item, `Enter` to expand/collapse, `o` to open source, `s` to save, `d` to dismiss, `/` to focus search, `Escape` to clear focus, `?` for shortcuts overlay. Shortcuts are suppressed while typing in search or when a panel is open.
 
 ### ~~T17: Saved items view~~ — PARTIALLY DONE
 **Done:** Saved items panel with category filter.
@@ -577,8 +591,8 @@ npm run electron:dev   # Or run as desktop app with HMR
 - Item IDs are deterministic hashes (SHA256 of feedId + entry guid) to enable idempotent upserts
 - Relevance of exactly 0.5 with null `relevance_reason` indicates an unscored item
 - The `RELEVANCE_CONTEXT` env var is injected into all LLM prompts as system context — changing it changes scoring behavior globally
-- `server.js` exports `createServer(port)` — called by Electron or auto-invoked in standalone mode
-- `ELECTRON_MODE` env var, when set, prevents auto-start and enables static file serving from built frontend
+- `server.js` exports `createServer(port)` — called by Electron or auto-invoked in standalone mode. On startup it loads `settings.json` into `process.env` so that LLM provider/model keys and other settings persist across restarts
+- `ELECTRON_MODE` env var, when set, prevents auto-start and enables static file serving from built frontend. Electron's `ALL_SETTINGS_KEYS` includes LLM provider/model keys so they are saved to and restored from `settings.json`
 
 ### Adding a new feed source type
 1. Add a fetcher function in `fetcher.js` that returns `{items: [...], error: null}`

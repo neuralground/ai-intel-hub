@@ -116,18 +116,22 @@ Each expanded item provides these action buttons:
 
 ### Summarize
 
-Clicking the **Summarize** button on an expanded item opens a modal that generates a deep LLM-powered summary of the item's content. The backend fetches the full article content from the source URL (supporting HTML pages, PDFs, DOCX files, and other formats) and sends it to the configured LLM for analysis.
+Clicking the **Summarize** button on an expanded item opens a modal that generates a deep LLM-powered summary of the item's content. The backend fetches the full article content from the source URL -- supporting HTML pages, PDFs, DOCX files, and other formats. For arXiv papers, the fetcher tries PDF download first, then the HTML rendering, then the arXiv API, and finally falls back to abstract scraping, ensuring the fullest possible content is retrieved.
 
-The summary streams into the modal in real time, so you can begin reading before generation is complete. Once finished, the modal displays metadata about how the content was sourced and which model produced the summary.
+The summary streams into the modal in real time, so you can begin reading before generation is complete. The summary header includes the item's title, authors, publication date, source link, and author affiliations (extracted from the paper when available).
+
+**Type-aware analysis.** The depth and style of the summary adapts to the content type. Academic papers receive rigorous multi-paragraph analysis with hyperlinks to related work. Product announcements and general news receive lighter, more concise treatment. A critical analysis paragraph is included only when material concerns exist -- otherwise it is omitted to avoid filler.
+
+Once finished, the modal displays metadata about how the content was sourced and which model produced the summary.
 
 The Summarize modal includes two export options:
 
 - **Save as Markdown** -- downloads the summary as a `.md` file for archiving or sharing.
-- **Save as PDF** -- opens the system print dialog to save or print the summary as a formatted PDF.
+- **Save as PDF** -- in the desktop app, opens a native file save dialog so you can choose where to save the PDF (it does not open a print dialog). In the web/browser version, falls back to the system print dialog.
 
 ### Exporting Analysis
 
-The Analysis panel also includes **Save as Markdown** and **Save as PDF** export buttons. These work the same way as in the Summarize modal, allowing you to export briefings, risk scans, and other analysis outputs for offline use or distribution.
+The Analysis panel also includes **Save as Markdown** and **Save as PDF** export buttons. Save as PDF behaves the same as in the Summarize modal: in the desktop app it opens a native file save dialog, while in the browser it falls back to the system print dialog. These export options let you archive briefings, risk scans, and other analysis outputs for offline use or distribution.
 
 ---
 
