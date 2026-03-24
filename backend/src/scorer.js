@@ -1,5 +1,5 @@
 import { getItems, getUnscoredItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds, getRecentFeedbackExamples, getItemById, getClusterMates } from "./db.js";
-import { discoverFeedsFromContent, discoverFeedsFromSearch } from "./fetcher.js";
+import { discoverFeedsFromContent, discoverFeedsFromSearch, fetchTranscript } from "./fetcher.js";
 import { getFeedOrg, getOrgNamesForPrompt, getOrgLabels } from "./orgs.js";
 
 // ── LLM Provider Configuration ──────────────────────────────────────────────
@@ -836,6 +836,25 @@ export async function fetchArticleContent(url, maxChars = 12000, onProgress = ()
     // Fall through to generic fetch
   }
 
+  // ── YouTube videos: fetch transcript ─────────────────────────────────────
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) {
+    const videoId = ytMatch[1];
+    console.log(`[Summarize] Detected YouTube video: ${videoId}`);
+    onProgress("Fetching video transcript...");
+    try {
+      const transcript = await fetchTranscript(videoId);
+      if (transcript && transcript.length > 200) {
+        console.log(`[Summarize] Got YouTube transcript: ${transcript.length} chars`);
+        return transcript.slice(0, maxChars);
+      }
+      console.log(`[Summarize] Transcript too short or unavailable`);
+    } catch (err) {
+      console.log(`[Summarize] YouTube transcript failed: ${err.message}`);
+    }
+    // Fall through to generic fetch (won't help much for YouTube but try anyway)
+  }
+
   // ── Generic URL fetch ───────────────────────────────────────────────────
   onProgress("Fetching source content...");
   try {
@@ -921,10 +940,20 @@ export async function generateItemSummaryStream(itemId, onChunk, signal, onFetch
   // Fetch full article content from the source URL, with progress events
   const onProgress = (msg) => onFetchProgress?.(msg);
   const fetchedContent = await fetchArticleContent(item.url, 12000, onProgress);
-  const content = fetchedContent || item.transcript || item.summary || "";
+  // If fetch failed and item has a cached transcript, use that
+  // If no cached transcript but it's a YouTube URL, try fetching one on demand
+  let transcript = item.transcript;
+  if (!fetchedContent && !transcript) {
+    const ytMatch = (item.url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) {
+      onProgress("Fetching video transcript...");
+      try { transcript = await fetchTranscript(ytMatch[1]); } catch { /* ok */ }
+    }
+  }
+  const content = fetchedContent || transcript || item.summary || "";
   const contentSource = fetchedContent
     ? (fetchedContent.length > 2000 ? "full document" : "abstract only")
-    : item.transcript ? "transcript" : "feed summary only";
+    : transcript ? "transcript" : "feed summary only";
   console.log(`[Summarize] Content source: "${contentSource}" (${content.length} chars) for: ${item.title?.slice(0, 60)}`);
 
   let relatedSection = "";

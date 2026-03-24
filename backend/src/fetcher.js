@@ -287,7 +287,7 @@ async function scrapeVideoMetadata(videoUrl) {
 }
 
 // Extract auto-generated captions from a YouTube video. No API key needed.
-async function fetchTranscript(videoId) {
+export async function fetchTranscript(videoId) {
   try {
     const { YoutubeTranscript } = await import("youtube-transcript");
     const segments = await YoutubeTranscript.fetchTranscript(videoId);
