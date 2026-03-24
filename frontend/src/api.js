@@ -48,6 +48,20 @@ export const api = {
   scoreItems: (opts) => request("/score", { method: "POST", ...opts }),
   analyze: (mode, category, { force } = {}) =>
     request("/analyze", { method: "POST", body: JSON.stringify({ mode, category, force }) }),
+  analyzeStream: (mode, category, { force, onChunk, onDone, onError } = {}) => {
+    const params = new URLSearchParams({ mode });
+    if (category) params.set("category", category);
+    if (force) params.set("force", "1");
+    const evtSource = new EventSource(`${BASE}/analyze/stream?${params}`);
+    evtSource.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === "chunk") onChunk?.(data.text);
+      else if (data.type === "done") { onDone?.(data); evtSource.close(); }
+      else if (data.type === "error") { onError?.(data.message); evtSource.close(); }
+    };
+    evtSource.onerror = () => { onError?.("Connection lost"); evtSource.close(); };
+    return evtSource;
+  },
 
   // Suggestions
   getSuggestions: () => request("/suggestions"),

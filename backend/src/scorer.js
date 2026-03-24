@@ -176,6 +176,165 @@ async function callAnalysisLLM(systemPrompt, userMessage, maxTokens = 2000) {
 // Keep backward-compatible alias
 const callClaude = callLLM;
 
+// ── Streaming provider functions (for analysis) ─────────────────────────────
+
+async function* parseSSEStream(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const data = line.slice(6);
+        if (data === "[DONE]") return;
+        yield data;
+      }
+    }
+  }
+}
+
+async function* streamAnthropic(systemPrompt, userMessage, maxTokens, modelOverride, signal) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey || apiKey === "sk-ant-your-key-here") throw new Error("ANTHROPIC_API_KEY not configured");
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: modelOverride || getModel(),
+      max_tokens: maxTokens,
+      stream: true,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userMessage }],
+    }),
+    signal,
+  });
+  if (!response.ok) { const err = await response.text(); throw new Error(`Anthropic API error ${response.status}: ${err}`); }
+
+  for await (const data of parseSSEStream(response)) {
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.type === "content_block_delta" && parsed.delta?.text) {
+        yield parsed.delta.text;
+      }
+    } catch { /* skip non-JSON lines */ }
+  }
+}
+
+async function* streamOpenAI(systemPrompt, userMessage, maxTokens, modelOverride, signal) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: modelOverride || getModel(),
+      max_tokens: maxTokens,
+      stream: true,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    }),
+    signal,
+  });
+  if (!response.ok) { const err = await response.text(); throw new Error(`OpenAI API error ${response.status}: ${err}`); }
+
+  for await (const data of parseSSEStream(response)) {
+    try {
+      const parsed = JSON.parse(data);
+      const content = parsed.choices?.[0]?.delta?.content;
+      if (content) yield content;
+    } catch { /* skip */ }
+  }
+}
+
+async function* streamGemini(systemPrompt, userMessage, maxTokens, modelOverride, signal) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+
+  const model = modelOverride || getModel();
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ parts: [{ text: userMessage }] }],
+        generationConfig: { maxOutputTokens: maxTokens },
+      }),
+      signal,
+    }
+  );
+  if (!response.ok) { const err = await response.text(); throw new Error(`Gemini API error ${response.status}: ${err}`); }
+
+  for await (const data of parseSSEStream(response)) {
+    try {
+      const parsed = JSON.parse(data);
+      const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) yield text;
+    } catch { /* skip */ }
+  }
+}
+
+async function* streamOllama(systemPrompt, userMessage, maxTokens, modelOverride, signal) {
+  const base = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+
+  const response = await fetch(`${base}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: modelOverride || getModel(),
+      stream: true,
+      options: { num_predict: maxTokens },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    }),
+    signal,
+  });
+  if (!response.ok) { const err = await response.text(); throw new Error(`Ollama API error ${response.status}: ${err}`); }
+
+  // Ollama uses newline-delimited JSON (not SSE)
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line);
+        if (parsed.done) return;
+        if (parsed.message?.content) yield parsed.message.content;
+      } catch { /* skip */ }
+    }
+  }
+}
+
+const STREAM_PROVIDERS = { anthropic: streamAnthropic, openai: streamOpenAI, gemini: streamGemini, ollama: streamOllama };
+
+async function* streamAnalysisLLM(systemPrompt, userMessage, maxTokens = 2000, signal) {
+  const provider = getAnalysisProvider();
+  const model = getAnalysisModel();
+  const fn = STREAM_PROVIDERS[provider];
+  if (!fn) throw new Error(`Streaming not supported for provider: ${provider}`);
+  console.log(`[LLM:analysis:stream] Using ${provider} / ${model}`);
+  yield* fn(systemPrompt, userMessage, maxTokens, model, signal);
+}
+
 // ── Score a batch of items for relevance ─────────────────────────────────────
 export async function scoreItems(items) {
   if (items.length === 0) return [];
@@ -290,13 +449,13 @@ export async function scoreUnscoredItems(batchSize = 15) {
   return { scored: totalScored, total: unscored.length };
 }
 
-// ── Generate analysis briefing ──────────────────────────────────────────────
-export async function generateAnalysis(mode, category = null, { force = false } = {}) {
-  // Check cache first (skip if force regenerate)
+// ── Analysis prompt preparation (shared by streaming and non-streaming) ─────
+
+function prepareAnalysis(mode, category = null, { force = false } = {}) {
+  // Check cache first
   if (!force) {
     const cached = getCachedAnalysis(mode, category, 30);
     if (cached) {
-      // Rebuild sourceItems from cached item IDs
       const allItems = getItems({ limit: 500 });
       const idSet = new Set(cached.item_ids || []);
       const feedNameMap = Object.fromEntries(getAllFeeds().map(f => [f.id, f.name]));
@@ -309,50 +468,41 @@ export async function generateAnalysis(mode, category = null, { force = false } 
           published: it.published, tags: it.tags, saved: it.saved,
         }])
       );
-      return { result: cached.result, cached: true, generatedAt: cached.created_at, sourceItems: sourceItemMap };
+      return { cached: true, result: cached.result, generatedAt: cached.created_at, sourceItems: sourceItemMap };
     }
   }
 
-  // Each mode uses a different item pool to reduce redundancy
   const modeItemConfig = {
-    briefing: { minRelevance: 0.2, limit: 30, sliceCount: 20 },  // wider net, more items, longer view
-    risks:    { minRelevance: 0.3, limit: 20, sliceCount: 15 },  // focused on recent, moderate relevance
-    "what-so-what-now-what": { minRelevance: 0.5, limit: 15, sliceCount: 10 },  // only highest-signal items
+    briefing: { minRelevance: 0.2, limit: 30, sliceCount: 20 },
+    risks:    { minRelevance: 0.3, limit: 20, sliceCount: 15 },
+    "what-so-what-now-what": { minRelevance: 0.5, limit: 15, sliceCount: 10 },
   };
   const cfg = modeItemConfig[mode] || modeItemConfig.risks;
 
-  const items = getItems({
-    category: category || "all",
-    minRelevance: cfg.minRelevance,
-    limit: cfg.limit,
-  });
+  const items = getItems({ category: category || "all", minRelevance: cfg.minRelevance, limit: cfg.limit });
 
   if (items.length === 0) {
-    return { result: "No items available for analysis. Try refreshing your feeds first.", cached: false };
+    return { empty: true, result: "No items available for analysis. Try refreshing your feeds first." };
   }
 
   const context = getRelevanceContext();
 
-  // For briefing/daily summary: mix the freshest items with the most significant older ones
   let sourceItems;
   if (mode === "briefing") {
     const now = Date.now();
     const fresh = items.filter(it => (now - new Date(it.published).getTime()) < 48 * 3600000);
     const older = items.filter(it => (now - new Date(it.published).getTime()) >= 48 * 3600000 && it.relevance >= 0.6);
-    // Take up to 12 fresh + up to 8 high-relevance older items
     sourceItems = [...fresh.slice(0, 12), ...older.slice(0, 8)].slice(0, cfg.sliceCount);
   } else {
     sourceItems = items.slice(0, cfg.sliceCount);
   }
 
   const itemSummaries = sourceItems
-    .map(
-      (it, i) => {
-        const ageHours = (Date.now() - new Date(it.published).getTime()) / 3600000;
-        const ageLabel = ageHours < 24 ? `${Math.round(ageHours)}h ago` : `${Math.round(ageHours / 24)}d ago`;
-        return `${i + 1}. ID: ${it.id} | [${it.category}] ${it.title}\n   URL: ${it.url || "none"}\n   Source: ${it.feed_id} | Relevance: ${(it.relevance * 100).toFixed(0)}% | Published: ${ageLabel}\n   Affiliations: ${(it.affiliations || []).join(", ") || "none"}\n   ${(it.summary || "").slice(0, 200)}`;
-      }
-    )
+    .map((it, i) => {
+      const ageHours = (Date.now() - new Date(it.published).getTime()) / 3600000;
+      const ageLabel = ageHours < 24 ? `${Math.round(ageHours)}h ago` : `${Math.round(ageHours / 24)}d ago`;
+      return `${i + 1}. ID: ${it.id} | [${it.category}] ${it.title}\n   URL: ${it.url || "none"}\n   Source: ${it.feed_id} | Relevance: ${(it.relevance * 100).toFixed(0)}% | Published: ${ageLabel}\n   Affiliations: ${(it.affiliations || []).join(", ") || "none"}\n   ${(it.summary || "").slice(0, 200)}`;
+    })
     .join("\n\n");
 
   const citationRule = `\nCITATION FORMAT (mandatory): Cite sources using EXACTLY this markdown link syntax: [short title](#item-ITEM_ID)
@@ -438,39 +588,62 @@ Items:\n${itemSummaries}`,
   const prompt = prompts[mode];
   if (!prompt) throw new Error(`Unknown analysis mode: ${mode}`);
 
+  const feedNameMap = Object.fromEntries(getAllFeeds().map(f => [f.id, f.name]));
+  const sourceItemMap = Object.fromEntries(sourceItems.map(it => [it.id, {
+    id: it.id, title: it.title, summary: it.summary, url: it.url,
+    category: it.category, relevance: it.relevance,
+    relevance_reason: it.relevance_reason, feed_id: it.feed_id,
+    feed_name: feedNameMap[it.feed_id] || it.feed_id,
+    published: it.published, tags: it.tags, saved: it.saved,
+  }]));
+
+  return { cached: false, prompt, sourceItems: sourceItemMap, sourceItemsList: sourceItems };
+}
+
+function normalizeCitations(rawResult, sourceItems) {
+  const validIds = new Set(sourceItems.map(i => i.id));
+  return rawResult
+    .replace(/\[([^\]]+)\]\s+\(((?:https?:\/\/|#)[^)]+)\)/g, "[$1]($2)")
+    .replace(/\[([^\]]+)\]\(#([a-f0-9]{8,})\)/g, (_, text, id) =>
+      validIds.has(id) ? `[${text}](#item-${id})` : `[${text}]`)
+    .replace(/(?<!\])(?<!\))\s*\(#(?:item-)?([a-f0-9]{8,})\)/g, (match, id) => {
+      if (!validIds.has(id)) return match;
+      return ` [↗](#item-${id})`;
+    })
+    .replace(/(?<!\])(?<!\))\s*\(#feed-(https?:\/\/[^)]+)\)/g, " [↗](#feed-$1)");
+}
+
+// ── Generate analysis briefing ──────────────────────────────────────────────
+export async function generateAnalysis(mode, category = null, { force = false } = {}) {
+  const prep = prepareAnalysis(mode, category, { force });
+  if (prep.cached || prep.empty) return prep;
+
   try {
-    const rawResult = await callAnalysisLLM(prompt.system, prompt.user, 2000);
-    // Normalize malformed citations into proper markdown links.
-    // LLMs may produce: "title (#ID)", "[title] (#item-ID)", "(#item-ID)" etc.
-    const validIds = new Set(sourceItems.map(i => i.id));
-    const result = rawResult
-      // Fix "[title] (URL)" — space between ] and ( → proper markdown link
-      .replace(/\[([^\]]+)\]\s+\(((?:https?:\/\/|#)[^)]+)\)/g, "[$1]($2)")
-      // Fix "[title](#ID)" missing item- prefix → add it
-      .replace(/\[([^\]]+)\]\(#([a-f0-9]{8,})\)/g, (_, text, id) =>
-        validIds.has(id) ? `[${text}](#item-${id})` : `[${text}]`)
-      // Fix bare "text (#ID)" or "text (#item-ID)" without [] → wrap as link
-      .replace(/(?<!\])(?<!\))\s*\(#(?:item-)?([a-f0-9]{8,})\)/g, (match, id) => {
-        if (!validIds.has(id)) return match;
-        return ` [↗](#item-${id})`;
-      })
-      // Fix bare "text (#feed-URL)" without [] → wrap as link
-      .replace(/(?<!\])(?<!\))\s*\(#feed-(https?:\/\/[^)]+)\)/g, " [↗](#feed-$1)");
-    const itemIds = sourceItems.map((i) => i.id);
+    const rawResult = await callAnalysisLLM(prep.prompt.system, prep.prompt.user, 2000);
+    const result = normalizeCitations(rawResult, prep.sourceItemsList);
+    const itemIds = prep.sourceItemsList.map(i => i.id);
     cacheAnalysis(mode, category, result, itemIds);
-    // Include source items so the frontend can render item popovers
-    const feedNameMap = Object.fromEntries(getAllFeeds().map(f => [f.id, f.name]));
-    const sourceItemMap = Object.fromEntries(sourceItems.map(it => [it.id, {
-      id: it.id, title: it.title, summary: it.summary, url: it.url,
-      category: it.category, relevance: it.relevance,
-      relevance_reason: it.relevance_reason, feed_id: it.feed_id,
-      feed_name: feedNameMap[it.feed_id] || it.feed_id,
-      published: it.published, tags: it.tags, saved: it.saved,
-    }]));
-    return { result, cached: false, generatedAt: new Date().toISOString(), sourceItems: sourceItemMap };
+    return { result, cached: false, generatedAt: new Date().toISOString(), sourceItems: prep.sourceItems };
   } catch (err) {
     throw new Error(`Analysis failed: ${err.message}`);
   }
+}
+
+// ── Streaming analysis (yields chunks via onChunk callback) ─────────────────
+export async function generateAnalysisStream(mode, category = null, { force = false } = {}, onChunk, signal) {
+  const prep = prepareAnalysis(mode, category, { force });
+  if (prep.cached || prep.empty) return prep;
+
+  let accumulated = "";
+  for await (const chunk of streamAnalysisLLM(prep.prompt.system, prep.prompt.user, 2000, signal)) {
+    accumulated += chunk;
+    onChunk(chunk);
+  }
+
+  const result = normalizeCitations(accumulated, prep.sourceItemsList);
+  const itemIds = prep.sourceItemsList.map(i => i.id);
+  cacheAnalysis(mode, category, result, itemIds);
+  return { result, cached: false, generatedAt: new Date().toISOString(), sourceItems: prep.sourceItems };
 }
 
 // ── Detect stale/noisy feeds and suggest improvements ───────────────────────

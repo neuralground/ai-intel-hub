@@ -13,7 +13,7 @@ import {
   getItemsWithoutEmbedding, updateItemEmbedding, updateItemCluster, getRecentItemsWithEmbeddings, saveDb,
 } from "./db.js";
 import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
-import { scoreItems, scoreUnscoredItems, generateAnalysis, analyzeFeedHealth } from "./scorer.js";
+import { scoreItems, scoreUnscoredItems, generateAnalysis, generateAnalysisStream, analyzeFeedHealth } from "./scorer.js";
 import { getOrgs, getOrgLabels, addOrg, removeOrg, setOrgActive } from "./orgs.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 import { detectSourceType } from "./source-types.js";
@@ -479,6 +479,34 @@ app.post("/api/analyze", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// SSE streaming analysis endpoint
+app.get("/api/analyze/stream", async (req, res) => {
+  const { mode, category, force } = req.query;
+  if (!mode) { res.status(400).json({ error: "mode is required" }); return; }
+
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  const abort = new AbortController();
+  req.on("close", () => abort.abort());
+
+  try {
+    const result = await generateAnalysisStream(
+      mode,
+      category || null,
+      { force: force === "1" || force === "true" },
+      (chunk) => send({ type: "chunk", text: chunk }),
+      abort.signal,
+    );
+    send({ type: "done", result: result.result, generatedAt: result.generatedAt, cached: !!result.cached, sourceItems: result.sourceItems });
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      send({ type: "error", message: err.message });
+    }
+  }
+  res.end();
 });
 
 // ── Suggestions ─────────────────────────────────────────────────────────────

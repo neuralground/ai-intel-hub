@@ -11,32 +11,80 @@ export default function AnalysisPanel({ category, onClose }) {
   const [hoverItem, setHoverItem] = useState(null); // { item, anchor }
   const hoverTimerRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState(null);
   const [generatedAt, setGeneratedAt] = useState(null);
   const [cached, setCached] = useState(false);
   const [llmLabel, setLlmLabel] = useState("");
+  const evtSourceRef = useRef(null);
+  const bufferRef = useRef("");
+  const flushTimerRef = useRef(null);
 
-  const run = useCallback(async (force = false) => {
+  const run = useCallback((force = false) => {
+    // Close any active stream
+    if (evtSourceRef.current) { evtSourceRef.current.close(); evtSourceRef.current = null; }
+    if (flushTimerRef.current) { clearTimeout(flushTimerRef.current); flushTimerRef.current = null; }
+    bufferRef.current = "";
+
     setLoading(true);
+    setStreaming(false);
     setError(null);
     setResult("");
     setSourceItems({});
     setHoverItem(null);
     setGeneratedAt(null);
     setCached(false);
-    try {
-      const data = await api.analyze(mode, category !== "all" ? category : null, { force });
-      setResult(data.result);
-      if (data.sourceItems) setSourceItems(data.sourceItems);
-      if (data.generatedAt) setGeneratedAt(data.generatedAt);
-      setCached(!!data.cached);
-    } catch (err) {
-      setError(err.message);
-    }
-    setLoading(false);
+
+    const evtSource = api.analyzeStream(mode, category !== "all" ? category : null, {
+      force,
+      onChunk: (text) => {
+        setStreaming(true);
+        setLoading(false);
+        bufferRef.current += text;
+        if (!flushTimerRef.current) {
+          flushTimerRef.current = setTimeout(() => {
+            const flushed = bufferRef.current;
+            bufferRef.current = "";
+            flushTimerRef.current = null;
+            setResult(prev => prev + flushed);
+          }, 80);
+        }
+      },
+      onDone: (data) => {
+        // Flush any remaining buffer
+        if (flushTimerRef.current) { clearTimeout(flushTimerRef.current); flushTimerRef.current = null; }
+        if (bufferRef.current) {
+          setResult(prev => prev + bufferRef.current);
+          bufferRef.current = "";
+        }
+        // Replace with citation-corrected final text
+        if (data.result) setResult(data.result);
+        if (data.sourceItems) setSourceItems(data.sourceItems);
+        if (data.generatedAt) setGeneratedAt(data.generatedAt);
+        setCached(!!data.cached);
+        setLoading(false);
+        setStreaming(false);
+        evtSourceRef.current = null;
+      },
+      onError: (msg) => {
+        setError(msg);
+        setLoading(false);
+        setStreaming(false);
+        evtSourceRef.current = null;
+      },
+    });
+    evtSourceRef.current = evtSource;
   }, [mode, category]);
 
   useEffect(() => { run(); }, [run]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (evtSourceRef.current) evtSourceRef.current.close();
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     api.getSettings().then(s => {
@@ -166,19 +214,18 @@ export default function AnalysisPanel({ category, onClose }) {
         ))}
       </div>
       <div style={{ flex: 1, overflow: "auto", padding: 20 }}>
-        {loading && (
+        {loading && !streaming && (
           <div>
             <div style={{ height: 2, background: "var(--border)", borderRadius: 1, marginBottom: 10 }}>
               <div style={{ height: "100%", width: "60%", background: "var(--accent)", borderRadius: 1, animation: "analyzeProgress 2s ease-in-out infinite" }} />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontFamily: mono, fontSize: 11 }}>
               <span style={{ color: "var(--accent)", fontWeight: 600 }}>Generating {modes.find(m => m.key === mode)?.label || "analysis"}...</span>
-              <span>This may take 10-20 seconds</span>
             </div>
           </div>
         )}
         {error && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 13 }}>⚠ {error}</div>}
-        {!loading && result && (
+        {!loading && !streaming && result && (
           <div style={{ marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
             {llmLabel && <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic", marginBottom: 4 }}>Powered by {llmLabel}</div>}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -191,6 +238,12 @@ export default function AnalysisPanel({ category, onClose }) {
               borderRadius: 4, color: "var(--text-muted)", fontSize: 9, fontFamily: mono, cursor: "pointer",
             }}>Regenerate</button>
           </div>
+          </div>
+        )}
+        {streaming && (
+          <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 3, background: "var(--accent)", animation: "pulse 1s ease-in-out infinite" }} />
+            <span style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, fontWeight: 600 }}>Streaming...</span>
           </div>
         )}
         {result && <div className="analysis-markdown" style={{ color: "var(--text-secondary)", fontSize: 13.5, lineHeight: 1.75, fontFamily: sans }}><Markdown components={{

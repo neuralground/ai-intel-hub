@@ -435,10 +435,8 @@ Implemented: 25 items per page with client-side pagination. Server supports limi
 ### ~~T5: Incremental scoring~~ — DONE
 Implemented: `scored_at` tracking prevents re-scoring. Upsert preserves existing scores on re-fetch.
 
-### T6: Streaming analysis — OPEN
-**What:** The analysis panel blocks until the LLM returns the full response. Implement streaming so the briefing appears progressively.
-**Where:** `backend/src/scorer.js` (callLLM function), new SSE endpoint in `server.js`, frontend streaming reader.
-**Complexity:** Medium.
+### ~~T6: Streaming analysis~~ — DONE
+Implemented: All four LLM providers (Anthropic, OpenAI, Gemini, Ollama) support streaming via async generators. New SSE endpoint `GET /api/analyze/stream` sends chunks progressively. Frontend accumulates chunks with 80ms buffered flushes for smooth react-markdown rendering. Citation normalization runs on the complete text after streaming finishes. Cached results are returned immediately in a single `done` event. Client disconnect aborts the upstream LLM fetch via AbortController.
 
 ### ~~T7: User feedback loop for relevance calibration~~ — DONE
 Implemented: `getRecentFeedbackExamples()` in `db.js` queries recent items with user signals (thumbs up/down, save, dismiss). Up to 10 examples (5 liked, 5 disliked) are injected as calibration examples into the scoring system prompt in `scorer.js`. Explicit feedback (thumbs up/down) overrides implicit signals (save/dismiss). The feature activates automatically once the user has provided at least 2 feedback signals. Cold start (no feedback) leaves the prompt unchanged.
