@@ -148,10 +148,22 @@ export default function AnalysisPanel({ category, onClose }) {
     // Match #item-ID or item:ID formats
     const itemMatch = href?.match(/^(?:#item-|item:)(.+)$/);
     if (!itemMatch) {
-      // Also check if href is an actual URL that matches a source item
+      // Check if href is an actual URL that matches a source item
       const matchedItem = Object.values(sourceItems).find(it => it.url && href === it.url);
       if (matchedItem) {
         return renderLink({ href: `#item-${matchedItem.id}`, children });
+      }
+      // Check if href is a bare item ID or feed ID (LLM sometimes omits #item- prefix)
+      if (href && !href.startsWith("http") && !href.startsWith("#")) {
+        // Try as item ID
+        if (sourceItems[href]) {
+          return renderLink({ href: `#item-${href}`, children });
+        }
+        // Try as feed ID
+        const byFeed = Object.values(sourceItems).find(it => it.feed_id === href);
+        if (byFeed) {
+          return renderLink({ href: `#item-${byFeed.id}`, children });
+        }
       }
     }
     if (itemMatch) {

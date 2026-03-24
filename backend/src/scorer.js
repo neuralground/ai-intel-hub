@@ -480,7 +480,7 @@ function prepareAnalysis(mode, category = null, { force = false } = {}) {
   }
 
   const modeItemConfig = {
-    briefing: { minRelevance: 0.2, limit: 30, sliceCount: 20 },
+    briefing: { minRelevance: 0.4, limit: 30, sliceCount: 20 },
     risks:    { minRelevance: 0.3, limit: 20, sliceCount: 15 },
     "what-so-what-now-what": { minRelevance: 0.5, limit: 15, sliceCount: 10 },
   };
@@ -525,6 +525,8 @@ The ITEM_ID is the hex ID shown after "ID:" for each item above. Do NOT use exte
 **DEVELOPING STORIES** (items that represent evolving situations, ongoing shifts, or emerging patterns worth tracking over time)
 **STRATEGIC CONTEXT** (connect the dots: what do these items collectively signal about the direction of the field? what should the reader be thinking about?)
 **ACTION ITEMS** (specific things to investigate, prototype, escalate, or plan for — with suggested priority and urgency)
+
+IMPORTANT: Each item includes a Relevance score (0-100%). This score reflects pre-assessed importance to the reader. Strongly prefer high-relevance items (70%+) for headlines and key points. Items below 60% should only appear if they provide essential context — never feature them as headlines. Do not treat all provided items as equally important.
 
 Avoid redundancy with a risk assessment or what/so-what/now-what analysis — focus on the narrative and strategic picture.
 ${citationRule}
@@ -609,15 +611,42 @@ Items:\n${itemSummaries}`,
 
 function normalizeCitations(rawResult, sourceItems) {
   const validIds = new Set(sourceItems.map(i => i.id));
+  // Build feed_id → item ID lookup for citations that use feed IDs instead of item IDs
+  const feedIdToItemId = new Map();
+  for (const item of sourceItems) {
+    const fid = item.feed_id || item.feedId;
+    if (fid && !feedIdToItemId.has(fid)) feedIdToItemId.set(fid, item.id);
+  }
+
   return rawResult
+    // Fix "[title] (URL)" — space between ] and ( → proper markdown link
     .replace(/\[([^\]]+)\]\s+\(((?:https?:\/\/|#)[^)]+)\)/g, "[$1]($2)")
+    // Fix "[title](#ID)" missing item- prefix → add it
     .replace(/\[([^\]]+)\]\(#([a-f0-9]{8,})\)/g, (_, text, id) =>
       validIds.has(id) ? `[${text}](#item-${id})` : `[${text}]`)
+    // Fix "[title](feed-id)" — LLM used feed ID as href instead of item ID
+    .replace(/\[([^\]]+)\]\(([a-z0-9][a-z0-9_-]*)\)/g, (match, text, ref) => {
+      // Check if ref is a known feed ID
+      const itemId = feedIdToItemId.get(ref);
+      if (itemId) return `[${text}](#item-${itemId})`;
+      // Check if ref is a valid item ID (without #item- prefix)
+      if (validIds.has(ref)) return `[${text}](#item-${ref})`;
+      return `[${text}]`;
+    })
+    // Fix bare "text (#ID)" or "text (#item-ID)" without [] → wrap as link
     .replace(/(?<!\])(?<!\))\s*\(#(?:item-)?([a-f0-9]{8,})\)/g, (match, id) => {
       if (!validIds.has(id)) return match;
       return ` [↗](#item-${id})`;
     })
-    .replace(/(?<!\])(?<!\))\s*\(#feed-(https?:\/\/[^)]+)\)/g, " [↗](#feed-$1)");
+    // Fix bare "text (#feed-URL)" without [] → wrap as link
+    .replace(/(?<!\])(?<!\))\s*\(#feed-(https?:\/\/[^)]+)\)/g, " [↗](#feed-$1)")
+    // Fix bare "text (feed-id)" without [] or # → wrap as link
+    .replace(/(?<!\])(?<!\))\s*\(([a-z0-9][a-z0-9_-]*)\)/g, (match, ref) => {
+      const itemId = feedIdToItemId.get(ref);
+      if (itemId) return ` [↗](#item-${itemId})`;
+      if (validIds.has(ref)) return ` [↗](#item-${ref})`;
+      return match;
+    });
 }
 
 // ── Generate analysis briefing ──────────────────────────────────────────────
