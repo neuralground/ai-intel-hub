@@ -109,9 +109,15 @@ export default function SummarizeModal({ item, onClose }) {
             </div>
           )}
           {/* Content source warning */}
-          {meta && meta.contentSource && !meta.contentSource.startsWith("full") && (
+          {meta && meta.contentSource && !meta.contentSource.startsWith("full") && meta.contentSource !== "transcript" && (
             <div style={{ padding: "8px 12px", background: "rgba(234,179,8,0.1)", border: "1px solid rgba(234,179,8,0.3)", borderRadius: 6, marginBottom: 12, fontSize: 11, fontFamily: sans, color: "var(--text-secondary)" }}>
-              <strong style={{ color: "#D97706" }}>Limited content:</strong> The full document could not be retrieved from <a href={meta.itemUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#D97706", wordBreak: "break-all" }}>{meta.itemUrl}</a>. This summary is based on the item's feed summary only.
+              <strong style={{ color: "#D97706" }}>Limited content:</strong>{" "}
+              {meta.contentSource === "no transcript available for this video"
+                ? <>No transcript is available for this video. This summary is based on the video description only.</>
+                : meta.contentSource === "abstract only"
+                ? <>Only the abstract could be retrieved. This summary may not capture the full scope of the work.</>
+                : <>The full document could not be retrieved from <a href={meta.itemUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#D97706", wordBreak: "break-all" }}>{meta.itemUrl}</a>. This summary is based on the item's feed summary only.</>
+              }
             </div>
           )}
           {streaming && (

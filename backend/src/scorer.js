@@ -943,7 +943,8 @@ export async function generateItemSummaryStream(itemId, onChunk, signal, onFetch
   // If fetch failed and item has a cached transcript, use that
   // If no cached transcript but it's a YouTube URL, try fetching one on demand
   let transcript = item.transcript;
-  if (!fetchedContent && !transcript) {
+  const isYouTube = /(?:youtube\.com|youtu\.be)/.test(item.url || "");
+  if (!fetchedContent && !transcript && isYouTube) {
     const ytMatch = (item.url || "").match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
     if (ytMatch) {
       onProgress("Fetching video transcript...");
@@ -951,9 +952,12 @@ export async function generateItemSummaryStream(itemId, onChunk, signal, onFetch
     }
   }
   const content = fetchedContent || transcript || item.summary || "";
-  const contentSource = fetchedContent
-    ? (fetchedContent.length > 2000 ? "full document" : "abstract only")
-    : transcript ? "transcript" : "feed summary only";
+  let contentSource;
+  if (fetchedContent && fetchedContent.length > 2000) contentSource = "full document";
+  else if (fetchedContent) contentSource = "abstract only";
+  else if (transcript) contentSource = "transcript";
+  else if (isYouTube) contentSource = "no transcript available for this video";
+  else contentSource = "feed summary only";
   console.log(`[Summarize] Content source: "${contentSource}" (${content.length} chars) for: ${item.title?.slice(0, 60)}`);
 
   let relatedSection = "";
