@@ -708,7 +708,7 @@ async function fetchWithRetry(url, options = {}, retries = 1) {
   }
 }
 
-async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {}) {
+export async function fetchArticleContent(url, maxChars = 12000, onProgress = () => {}) {
   if (!url) { console.log("[Summarize] No URL provided"); return null; }
   console.log(`[Summarize] Fetching content from: ${url}`);
 
