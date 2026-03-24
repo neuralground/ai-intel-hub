@@ -139,6 +139,26 @@ describe("Summarize SSE endpoint", () => {
     }
   }, 120000);
 
+  it("sends server-side header as the first chunk", async () => {
+    const events = await readSSE(
+      `http://localhost:${port}/api/items/test-arxiv-1706/summarize/stream`
+    );
+
+    // The first chunk event should contain the server-generated header
+    const chunkEvents = events.filter(e => e.type === "chunk");
+    expect(chunkEvents.length).toBeGreaterThan(0);
+
+    const firstChunk = chunkEvents[0].text || chunkEvents[0].content || "";
+    // Server-side header should include the item title
+    expect(firstChunk).toContain("Attention Is All You Need");
+    // Should include the Authors field (not Channel, since this is a paper)
+    expect(firstChunk).toContain("**Authors:**");
+    // Should include Published date
+    expect(firstChunk).toContain("**Published:**");
+    // Should include Source link
+    expect(firstChunk).toContain("**Source:**");
+  }, 120000);
+
   it("returns error for non-existent item", async () => {
     const events = await readSSE(
       `http://localhost:${port}/api/items/nonexistent-id/summarize/stream`

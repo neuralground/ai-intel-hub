@@ -118,9 +118,13 @@ Each expanded item provides these action buttons:
 
 Clicking the **Summarize** button on an expanded item opens a modal that generates a deep LLM-powered summary of the item's content. The backend fetches the full article content from the source URL -- supporting HTML pages, PDFs, DOCX files, and other formats. For arXiv papers, the fetcher tries PDF download first, then the HTML rendering, then the arXiv API, and finally falls back to abstract scraping, ensuring the fullest possible content is retrieved.
 
-The summary streams into the modal in real time, so you can begin reading before generation is complete. The summary header includes the item's title, authors, publication date, source link, and author affiliations (extracted from the paper when available).
+**Content fetch fallbacks.** When the original source blocks automated access (e.g., Cloudflare bot protection), the app automatically tries Google Web Cache and then the Wayback Machine (Internet Archive) before giving up. A warning box indicates the specific reason content could not be retrieved: "site blocks automated access," "no transcript available," or "abstract only."
 
-**Type-aware analysis.** The depth and style of the summary adapts to the content type. Academic papers receive rigorous multi-paragraph analysis with hyperlinks to related work. Product announcements and general news receive lighter, more concise treatment. A critical analysis paragraph is included only when material concerns exist -- otherwise it is omitted to avoid filler.
+The summary streams into the modal in real time, so you can begin reading before generation is complete. The summary header -- title, authors, publication date, and source link -- is generated server-side and sent as the first streaming chunk, so it always appears regardless of which LLM model is used or how the model responds. The LLM then provides author affiliations (deduplicated by top-level organization name) and the analysis sections.
+
+**Video-specific summaries.** YouTube videos receive a dedicated summary format. The header shows Channel, Published, and Source (instead of Authors). The LLM extracts Participants (host and guests) from the content. When auto-generated captions are unavailable, the app searches the video description for URLs containing "transcript" and fetches the linked page as a fallback.
+
+**Type-aware analysis.** The depth and style of the summary adapts to the content type. Academic papers receive rigorous multi-paragraph analysis with hyperlinks to related work. Product announcements and general news receive lighter, more concise treatment. For video content, summary length is calibrated to transcript length: longer transcripts (>8K characters) produce 4-6 paragraphs, medium transcripts (>4K) produce 3-4 paragraphs, and shorter content produces proportionally briefer summaries. A critical analysis paragraph is included only when material concerns exist -- otherwise it is omitted to avoid filler.
 
 Once finished, the modal displays metadata about how the content was sourced and which model produced the summary.
 

@@ -99,8 +99,13 @@ npx -y sharp-cli -i build/icon.png -o build/icon.ico --ico
 ### Build
 
 ```bash
-# macOS: DMG + ZIP (universal binary — Intel + Apple Silicon)
+# macOS: builds arm64 DMG + ZIP, then x64 DMG + ZIP (sequentially)
 npm run electron:build:mac
+
+# macOS: single-arch builds
+npm run electron:build:mac:arm64    # Apple Silicon only
+npm run electron:build:mac:x64     # Intel only
+npm run electron:build:mac:native  # Current machine's architecture only (fastest for local testing)
 
 # Windows: NSIS installer + portable EXE (x64)
 npm run electron:build:win
@@ -112,11 +117,13 @@ npm run electron:build:linux
 npm run electron:build:all
 ```
 
+**macOS DMG build notes:** Each macOS build command runs `scripts/detach-dmg.sh` before invoking electron-builder to force-detach any mounted DMG volumes from previous builds. This prevents `hdiutil` collisions where a stale mounted volume blocks DMG creation. DMG artifacts include the architecture in the filename (e.g., `AI Intelligence Hub-1.0.0-arm64.dmg`) via the `artifactName` template in `electron-builder.yml`, so arm64 and x64 builds do not overwrite each other.
+
 Output goes to `dist-electron/`:
 
 | Platform | Files | Size |
 |----------|-------|------|
-| macOS | `.dmg` (universal), `.zip` | ~170 MB |
+| macOS | `.dmg` (per-arch: arm64, x64), `.zip` | ~170 MB each |
 | Windows | `.exe` (installer), `.exe` (portable) | ~130 MB |
 | Linux | `.AppImage`, `.deb` | ~140 MB |
 
@@ -241,11 +248,13 @@ git push origin v1.1.0
 ```
 
 This triggers the workflow, which:
-1. Builds macOS arm64 DMG + ZIP on `macos-latest`
+1. Builds macOS arm64 DMG + ZIP on `macos-latest` (separate job)
 2. Builds macOS x64 DMG + ZIP on `macos-latest` (separate job)
 3. Builds Windows NSIS installer + portable EXE on `windows-latest`
 4. Uploads all as artifacts
 5. Creates a draft GitHub Release with all installers attached
+
+The macOS arm64 and x64 builds run as separate CI jobs to avoid `hdiutil` DMG volume collisions that occur when building both architectures in the same job. Each job uses the arch-specific build script (`electron:build:mac:arm64` / `electron:build:mac:x64`).
 
 ### Manual Trigger
 

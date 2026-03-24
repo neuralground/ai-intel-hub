@@ -79,7 +79,11 @@ A shared registry of recognized organizations (AI labs, big tech companies, and 
 
 ### Content Fetching and Summarization (scorer.js)
 
-`scorer.js` exports `fetchArticleContent(url, maxChars, onProgress)` for retrieving full content from source URLs. It handles HTML pages (via Cheerio), PDFs and DOCX files (via officeparser v6 `parseOffice().toText()`), and YouTube transcripts. For arXiv papers, it tries PDF download first, then HTML rendering, then the arXiv API, then abstract scraping. The summarize endpoint (`GET /api/items/:id/summarize/stream`) uses this to feed full article text to the LLM for type-aware summary generation: academic papers get rigorous multi-paragraph analysis with related work hyperlinks; product announcements and news get lighter treatment. Summary headers include title, authors, published date, source link, and affiliations.
+`scorer.js` exports `fetchArticleContent(url, maxChars, onProgress)` for retrieving full content from source URLs. It handles HTML pages (via Cheerio), PDFs and DOCX files (via officeparser v6 `parseOffice().toText()`), and YouTube transcripts. For arXiv papers, it tries PDF download first, then HTML rendering, then the arXiv API, then abstract scraping. When direct fetch fails (Cloudflare/bot protection detected), the pipeline falls back to Google Web Cache and then the Wayback Machine before giving up. For YouTube videos, if auto-captions fail, the fetcher scrapes the video description for URLs containing "transcript" and fetches the linked page.
+
+The summarize endpoint (`GET /api/items/:id/summarize/stream`) uses this to feed full article text to the LLM for type-aware summary generation: academic papers get rigorous multi-paragraph analysis with related work hyperlinks; product announcements and news get lighter treatment; YouTube videos get a dedicated "video" prompt type with length calibrated to transcript size. Summary headers (title, authors/channel, published date, source link) are generated server-side and sent as the first streaming chunk, ensuring they always appear regardless of LLM model. The LLM provides affiliations (deduplicated by org name) and the analysis sections. Video summaries show Channel/Participants/Published/Source instead of Authors/Affiliations.
+
+**Note:** The `youtube-transcript` package must be imported from its ESM distribution path (`youtube-transcript/dist/youtube-transcript.esm.js`) due to a broken default ESM export in the package.
 
 ### Scoring
 
@@ -153,7 +157,8 @@ ai-intel-hub/
 │   └── entitlements.mac.plist   # macOS entitlements for hardened runtime
 │
 ├── scripts/
-│   └── generate-icons.js        # SVG → PNG → .icns/.ico icon generator
+│   ├── generate-icons.js        # SVG → PNG → .icns/.ico icon generator
+│   └── detach-dmg.sh            # Force-detach mounted DMG volumes before rebuild
 │
 ├── .github/workflows/
 │   └── build-electron.yml       # CI/CD: builds macOS + Windows, creates GitHub Release
@@ -488,7 +493,7 @@ Implemented: Semantic deduplication via `backend/src/embeddings.js`. Items are e
 **Complexity:** Medium-high. LinkedIn actively blocks scraping.
 
 ### ~~T12: YouTube transcript ingestion~~ — DONE
-Implemented: `fetchTranscript()` in `fetcher.js` uses the `youtube-transcript` package to extract auto-generated captions (no API key needed). Transcripts are fetched concurrently alongside video metadata for the top 10 videos per channel. Transcript text (capped at 5000 chars) is stored in a new `transcript` field on items. The summary uses a 600-char transcript excerpt instead of the video description when available. The scorer sends 500 chars of transcript (vs 200 for regular items) for better relevance scoring. Three seed YouTube channels added to default feeds (Two Minute Papers, AI Explained, Yannic Kilcher).
+Implemented: `fetchTranscript()` in `fetcher.js` uses the `youtube-transcript` package (imported from `dist/youtube-transcript.esm.js` due to broken default ESM export) to extract auto-generated captions (no API key needed). Transcripts are fetched concurrently alongside video metadata for the top 10 videos per channel. Transcript text (capped at 5000 chars) is stored in a new `transcript` field on items. The summary uses a 600-char transcript excerpt instead of the video description when available. The scorer sends 500 chars of transcript (vs 200 for regular items) for better relevance scoring. When auto-captions are unavailable, the summarize pipeline scrapes the video description for URLs containing "transcript" and fetches the linked page. Three seed YouTube channels added to default feeds (Two Minute Papers, AI Explained, Yannic Kilcher).
 
 ### T13: arXiv enhanced processing — OPEN
 **What:** For high-relevance papers (>0.8), fetch full abstracts from arXiv API and optionally process PDFs for deeper analysis.
@@ -583,6 +588,12 @@ npm run electron:dev   # Or run as desktop app with HMR
 - To manually trigger a feed refresh: `curl -X POST http://localhost:3001/api/fetch`
 - To manually trigger scoring: `curl -X POST http://localhost:3001/api/score`
 - To test analysis: `curl -X POST http://localhost:3001/api/analyze -H 'Content-Type: application/json' -d '{"mode":"briefing"}'`
+
+### Building for macOS
+- `npm run electron:build:mac` builds arm64 then x64 sequentially, running `scripts/detach-dmg.sh` before each arch build to prevent `hdiutil` collisions from stale mounted DMG volumes
+- `npm run electron:build:mac:native` builds for the current machine's arch only (faster for local testing)
+- DMG artifacts include the arch in the filename (e.g., `AI Intelligence Hub-1.0.0-arm64.dmg`) via the `artifactName` template in `electron-builder.yml`
+- The `detach-dmg.sh` script force-detaches all mounted "AI Intelligence Hub" volumes and cleans up orphaned temp DMG files
 
 ### Key conventions
 - Backend uses ES modules (`"type": "module"` in package.json)
