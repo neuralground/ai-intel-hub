@@ -855,18 +855,66 @@ export async function fetchArticleContent(url, maxChars = 12000, onProgress = ()
   if (ytMatch) {
     const videoId = ytMatch[1];
     console.log(`[Summarize] Detected YouTube video: ${videoId}`);
-    onProgress("Fetching video transcript...");
+
+    // Strategy 1: Auto-generated captions
+    onProgress("Fetching video captions...");
     try {
       const transcript = await fetchTranscript(videoId);
       if (transcript && transcript.length > 200) {
-        console.log(`[Summarize] Got YouTube transcript: ${transcript.length} chars`);
+        console.log(`[Summarize] Got YouTube captions: ${transcript.length} chars`);
         return transcript.slice(0, maxChars);
       }
-      console.log(`[Summarize] Transcript too short or unavailable`);
     } catch (err) {
-      console.log(`[Summarize] YouTube transcript failed: ${err.message}`);
+      console.log(`[Summarize] YouTube captions failed: ${err.message}`);
     }
-    // Fall through to generic fetch (won't help much for YouTube but try anyway)
+
+    // Strategy 2: Look for transcript URL in video description
+    onProgress("Checking video description for transcript link...");
+    try {
+      const pageRes = await fetchWithRetry(`https://www.youtube.com/watch?v=${videoId}`, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (pageRes.ok) {
+        const pageHtml = await pageRes.text();
+        const descMatch = pageHtml.match(/"shortDescription":"(.*?(?:\\.|[^"])*)"/);
+        if (descMatch) {
+          const desc = descMatch[1].replace(/\\n/g, "\n").replace(/\\u0026/g, "&");
+          // Find URLs containing "transcript" in the description
+          const urls = desc.match(/https?:\/\/[^\s"\\]+/g) || [];
+          const transcriptUrls = urls.filter(u => /transcript/i.test(u));
+          for (const tUrl of transcriptUrls) {
+            console.log(`[Summarize] Found transcript link in description: ${tUrl}`);
+            onProgress("Fetching linked transcript...");
+            try {
+              const { load } = await import("cheerio");
+              const tRes = await fetchWithRetry(tUrl, {
+                headers: { "User-Agent": UA },
+                signal: AbortSignal.timeout(12000),
+              });
+              if (tRes.ok) {
+                const tHtml = await tRes.text();
+                const $ = load(tHtml);
+                $("script, style, nav, header, footer").remove();
+                const text = $("article").text() || $("main").text() || $(".entry-content").text() || $("body").text();
+                const cleaned = text?.replace(/\s+/g, " ").trim();
+                if (cleaned && cleaned.length > 500) {
+                  console.log(`[Summarize] Got linked transcript: ${cleaned.length} chars from ${tUrl}`);
+                  return cleaned.slice(0, maxChars);
+                }
+              }
+            } catch (err) {
+              console.log(`[Summarize] Linked transcript fetch failed: ${err.message}`);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.log(`[Summarize] Description scrape failed: ${err.message}`);
+    }
+
+    console.log(`[Summarize] All YouTube strategies exhausted for ${videoId}`);
+    // Fall through to generic fetch
   }
 
   // ── Generic URL fetch ───────────────────────────────────────────────────
