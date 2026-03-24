@@ -71,15 +71,6 @@ jobs:
           npm install
           npm run install:all
 
-      - name: Configure signing
-        if: ${{ secrets.MAC_CERTIFICATE != '' }}
-        run: |
-          echo "CSC_LINK=${{ secrets.MAC_CERTIFICATE }}" >> $GITHUB_ENV
-          echo "CSC_KEY_PASSWORD=${{ secrets.MAC_CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
-          echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
-          echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_PASSWORD }}" >> $GITHUB_ENV
-          echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
-
       - name: Build macOS app (x64)
         run: npm run build && npx electron-builder --mac --x64
         env:
