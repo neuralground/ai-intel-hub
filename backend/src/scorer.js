@@ -960,7 +960,7 @@ ${relatedSection}`;
 
 **Source:** [${item.url || "N/A"}](${item.url || "#"})
 
-**Affiliations:** ${knownAffiliations || "[extract from the paper — list the institutional affiliations of the authors as stated in the document, e.g. universities, companies, research labs]"}
+**Affiliations:** ${knownAffiliations || "[extract ALL institutional affiliations from the paper — list EVERY university, company, and research lab mentioned in the author block. Do not omit any. For example, if authors are from MIT, Technion, Northeastern, and Harvard, list all four.]"}
 
 Do NOT restate the publication date, authors, or source in the Summary section — they are already in the header above. Proceed directly with the analysis sections.`;
 
