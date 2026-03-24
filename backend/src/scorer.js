@@ -358,6 +358,8 @@ The reader is: ${context}
 ${instructions ? `\nAdditional scoring instructions: ${instructions}\n` : ""}${feedbackSection}
 Score each item from 0.0 to 1.0 for relevance to this reader. Also provide a brief reason (one sentence) explaining why it matters to them specifically.
 
+SOURCE AUTHORITY: Factor the credibility of the source and authors into relevance scoring. For preprint repositories (arXiv, SSRN, bioRxiv), author reputation and institutional affiliation are critical signals — papers from recognized organizations, leading researchers, or multi-institutional teams should score higher than those from unknown authors or obscure affiliations. Solo-authored preprints with no notable affiliation, vague or grandiose claims, or signs of AI-generated text should be penalized (typically 0.15-0.25 lower). Official publications from established organizations (lab blogs, peer-reviewed venues, major tech companies) carry inherent authority and should not be penalized.
+
 For each item, identify organizational affiliations. Consider both the authors (if they are from known organizations) and the source (if it is an organization's official blog or publication). Return matching organization names in an "affiliations" array. Use ONLY these recognized org names:
 ${getOrgNamesForPrompt()}
 
