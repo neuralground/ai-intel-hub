@@ -960,7 +960,7 @@ ${relatedSection}`;
 
 **Source:** [${item.url || "N/A"}](${item.url || "#"})
 
-**Affiliations:** ${knownAffiliations || "[extract ALL distinct organizations from the author block. List each organization ONCE — deduplicate by name, ignoring different locations or departments within the same organization. For example: 'Dell Technologies, MIT, Stanford' not 'Dell Technologies Hopkinton, Dell Technologies Santa Clara'.]"}
+**Affiliations:** ${knownAffiliations || "[list ONLY the top-level organization names — no departments, cities, states, or countries. For example: 'National Taiwan University, Academia Sinica, University of Washington' NOT 'Graduate Institute of Electrical Engineering, National Taiwan University, Taipei, Taiwan'.]"}
 
 Do NOT restate the publication date, authors, or source in the Summary section — they are already in the header above. Proceed directly with the analysis sections.`;
 
