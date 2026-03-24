@@ -611,14 +611,30 @@ Items:\n${itemSummaries}`,
 
 function normalizeCitations(rawResult, sourceItems) {
   const validIds = new Set(sourceItems.map(i => i.id));
-  // Build feed_id → item ID lookup for citations that use feed IDs instead of item IDs
+  // Build lookups for various ways the LLM might reference items
   const feedIdToItemId = new Map();
+  const titleToItemId = new Map();
   for (const item of sourceItems) {
     const fid = item.feed_id || item.feedId;
     if (fid && !feedIdToItemId.has(fid)) feedIdToItemId.set(fid, item.id);
+    if (item.title) titleToItemId.set(item.title.toLowerCase().trim(), item.id);
   }
 
   return rawResult
+    // Clean up leaked raw item metadata: "ID: abc123 | [category] Title (95%) feed-id"
+    .replace(/ID:\s*([a-f0-9]{8,})\s*\|\s*\[[\w&\s]+\]\s*(.+?)\s*\(\d+%\)\s*[a-z0-9_-]+/g, (match, id, title) => {
+      if (validIds.has(id)) return `[${title.trim()}](#item-${id})`;
+      return title.trim();
+    })
+    // Clean up "[category] Title (95%) feed-id" without ID prefix
+    .replace(/\[(?:research|engineering|industry|policy|labs|news|AI[\w\s&]*)\]\s*(.+?)\s*\(\d+%\)\s*([a-z0-9][a-z0-9_-]*)/g, (match, title, feedId) => {
+      const itemId = feedIdToItemId.get(feedId);
+      if (itemId) return `[${title.trim()}](#item-${itemId})`;
+      // Try matching by title
+      const byTitle = titleToItemId.get(title.trim().toLowerCase());
+      if (byTitle) return `[${title.trim()}](#item-${byTitle})`;
+      return title.trim();
+    })
     // Fix "[title] (URL)" — space between ] and ( → proper markdown link
     .replace(/\[([^\]]+)\]\s+\(((?:https?:\/\/|#)[^)]+)\)/g, "[$1]($2)")
     // Fix "[title](#ID)" missing item- prefix → add it
@@ -626,10 +642,8 @@ function normalizeCitations(rawResult, sourceItems) {
       validIds.has(id) ? `[${text}](#item-${id})` : `[${text}]`)
     // Fix "[title](feed-id)" — LLM used feed ID as href instead of item ID
     .replace(/\[([^\]]+)\]\(([a-z0-9][a-z0-9_-]*)\)/g, (match, text, ref) => {
-      // Check if ref is a known feed ID
       const itemId = feedIdToItemId.get(ref);
       if (itemId) return `[${text}](#item-${itemId})`;
-      // Check if ref is a valid item ID (without #item- prefix)
       if (validIds.has(ref)) return `[${text}](#item-${ref})`;
       return `[${text}]`;
     })
