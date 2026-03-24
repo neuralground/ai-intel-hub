@@ -13,7 +13,7 @@ import {
   getItemsWithoutEmbedding, updateItemEmbedding, updateItemCluster, getRecentItemsWithEmbeddings, saveDb,
 } from "./db.js";
 import { fetchAllFeeds, fetchSingleFeed, validateFeedUrl } from "./fetcher.js";
-import { scoreItems, scoreUnscoredItems, generateAnalysis, generateAnalysisStream, analyzeFeedHealth } from "./scorer.js";
+import { scoreItems, scoreUnscoredItems, generateAnalysis, generateAnalysisStream, generateItemSummaryStream, analyzeFeedHealth } from "./scorer.js";
 import { getOrgs, getOrgLabels, addOrg, removeOrg, setOrgActive } from "./orgs.js";
 import { loadDefaultFeeds, saveDefaultFeeds } from "./default-feeds.js";
 import { detectSourceType } from "./source-types.js";
@@ -261,6 +261,29 @@ app.post("/api/items/:id/feedback", (req, res) => {
 app.delete("/api/items/:id", (req, res) => {
   const result = deleteItem(req.params.id);
   res.json({ ok: true, ...result });
+});
+
+// SSE streaming item summary endpoint
+app.get("/api/items/:id/summarize/stream", async (req, res) => {
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  const abort = new AbortController();
+  req.on("close", () => abort.abort());
+
+  try {
+    const result = await generateItemSummaryStream(
+      req.params.id,
+      (chunk) => send({ type: "chunk", text: chunk }),
+      abort.signal,
+    );
+    send({ type: "done", result: result.result, generatedAt: result.generatedAt, provider: result.provider, model: result.model, contentSource: result.contentSource });
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      send({ type: "error", message: err.message });
+    }
+  }
+  res.end();
 });
 
 // ── Stats ───────────────────────────────────────────────────────────────────

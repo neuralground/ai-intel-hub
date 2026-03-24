@@ -7,6 +7,7 @@ import AnalysisPanel from "./components/AnalysisPanel.jsx";
 import SourcesPanel from "./components/SourcesPanel.jsx";
 import SettingsPanel from "./components/SettingsPanel.jsx";
 import SavedItemsPanel from "./components/SavedItemsPanel.jsx";
+import SummarizeModal from "./components/SummarizeModal.jsx";
 
 // ── Main App ────────────────────────────────────────────────────────────────
 export default function App() {
@@ -141,6 +142,7 @@ export default function App() {
 
   // Keyboard navigation: j/k navigate, o opens source, Enter expands, s saves, d dismisses, / focuses search, ? shows help
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [summarizeItem, setSummarizeItem] = useState(null);
   useEffect(() => {
     const handler = (e) => {
       const tag = document.activeElement?.tagName;
@@ -609,6 +611,9 @@ export default function App() {
                     )}
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ padding: "5px 12px", background: "var(--accent)", borderRadius: 6, color: "white", fontSize: 11, fontFamily: mono, textDecoration: "none" }}>Open →</a>}
+                      <button onClick={e => { e.stopPropagation(); setSummarizeItem(item); }} style={{ padding: "5px 12px", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text-muted)", cursor: "pointer", fontSize: 11, fontFamily: mono }}>
+                        Summarize
+                      </button>
                       <button onClick={e => handleFeedback(e, item, 1)} title="More like this" style={{ padding: "5px 10px", background: item.feedback === 1 ? "rgba(16,185,129,0.15)" : "transparent", border: `1px solid ${item.feedback === 1 ? "#10B981" : "var(--border)"}`, borderRadius: 6, color: item.feedback === 1 ? "#10B981" : "var(--text-faint)", cursor: "pointer", fontSize: 13 }}>
                         👍
                       </button>
@@ -666,6 +671,7 @@ export default function App() {
       {showSources && <SourcesPanel feeds={feeds} onClose={() => setShowSources(false)} onRefresh={loadData} />}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} themeMode={themeMode} setThemeMode={setThemeMode} />}
       {showSaved && <SavedItemsPanel onClose={() => setShowSaved(false)} />}
+      {summarizeItem && <SummarizeModal item={summarizeItem} onClose={() => setSummarizeItem(null)} />}
 
       {/* Keyboard shortcut help modal */}
       {showKeyboardHelp && (

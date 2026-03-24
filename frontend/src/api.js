@@ -63,6 +63,18 @@ export const api = {
     return evtSource;
   },
 
+  summarizeStream: (itemId, { onChunk, onDone, onError } = {}) => {
+    const evtSource = new EventSource(`${BASE}/items/${encodeURIComponent(itemId)}/summarize/stream`);
+    evtSource.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === "chunk") onChunk?.(data.text);
+      else if (data.type === "done") { onDone?.(data); evtSource.close(); }
+      else if (data.type === "error") { onError?.(data.message); evtSource.close(); }
+    };
+    evtSource.onerror = () => { onError?.("Connection lost"); evtSource.close(); };
+    return evtSource;
+  },
+
   // Suggestions
   getSuggestions: () => request("/suggestions"),
   acceptSuggestion: (id) => request(`/suggestions/${id}/accept`, { method: "POST" }),

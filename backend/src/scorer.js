@@ -1,4 +1,4 @@
-import { getItems, getUnscoredItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds, getRecentFeedbackExamples } from "./db.js";
+import { getItems, getUnscoredItems, upsertItem, cacheAnalysis, getCachedAnalysis, getAllFeeds, getRecentFeedbackExamples, getItemById, getClusterMates } from "./db.js";
 import { discoverFeedsFromContent, discoverFeedsFromSearch } from "./fetcher.js";
 import { getFeedOrg, getOrgNamesForPrompt, getOrgLabels } from "./orgs.js";
 
@@ -680,6 +680,297 @@ export async function generateAnalysisStream(mode, category = null, { force = fa
   const itemIds = prep.sourceItemsList.map(i => i.id);
   cacheAnalysis(mode, category, result, itemIds);
   return { result, cached: false, generatedAt: new Date().toISOString(), sourceItems: prep.sourceItems };
+}
+
+// ── Content fetching for deep summarization ─────────────────────────────────
+
+async function fetchArticleContent(url, maxChars = 12000) {
+  if (!url) return null;
+  try {
+    const { load } = await import("cheerio");
+
+    // For arXiv, try the HTML version (full paper text)
+    // Match arXiv URLs in various formats: abs, pdf, html, DOI
+    const arxivMatch = url.match(/arxiv\.org\/(?:abs|pdf|html)\/(\d+\.\d+)/)
+      || url.match(/arXiv\.(\d+\.\d+)/);
+    if (arxivMatch) {
+      const paperId = arxivMatch[1];
+      const htmlUrl = `https://arxiv.org/html/${paperId}`;
+      try {
+        const res = await fetch(htmlUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (res.ok) {
+          const html = await res.text();
+          const $ = load(html);
+          // Remove scripts, styles, nav, references section
+          $("script, style, nav, header, footer, .ltx_bibliography, .ltx_appendix").remove();
+          const text = $(".ltx_page_content").text() || $("article").text() || $("main").text() || $("body").text();
+          const cleaned = text.replace(/\s+/g, " ").trim();
+          if (cleaned.length > 500) {
+            console.log(`[Summarize] Fetched arXiv HTML for ${paperId}: ${cleaned.length} chars`);
+            return cleaned.slice(0, maxChars);
+          }
+        }
+      } catch { /* fall through to abstract page */ }
+
+      // Fallback: try arXiv PDF
+      try {
+        const { parseOfficeAsync } = await import("officeparser");
+        const pdfRes = await fetch(`https://arxiv.org/pdf/${paperId}`, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+          signal: AbortSignal.timeout(20000),
+        });
+        if (pdfRes.ok) {
+          const buffer = Buffer.from(await pdfRes.arrayBuffer());
+          const text = await parseOfficeAsync(buffer);
+          const cleaned = text.replace(/\s+/g, " ").trim();
+          if (cleaned.length > 500) {
+            console.log(`[Summarize] Parsed arXiv PDF for ${paperId}: ${cleaned.length} chars`);
+            return cleaned.slice(0, maxChars);
+          }
+        }
+      } catch (err) {
+        console.log(`[Summarize] arXiv PDF parse failed for ${paperId}: ${err.message}`);
+      }
+
+      // Last resort: fetch arXiv abstract page
+      try {
+        const absRes = await fetch(`https://arxiv.org/abs/${paperId}`, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (absRes.ok) {
+          const html = await absRes.text();
+          const $ = load(html);
+          const abstract = $(".abstract").text().replace(/^Abstract:\s*/i, "").trim();
+          const title = $(".title").text().replace(/^Title:\s*/i, "").trim();
+          const authors = $(".authors").text().replace(/^Authors:\s*/i, "").trim();
+          const content = `${title}\n\nAuthors: ${authors}\n\nAbstract: ${abstract}`;
+          console.log(`[Summarize] Fetched arXiv abstract for ${paperId}: ${content.length} chars`);
+          return content.slice(0, maxChars);
+        }
+      } catch { /* fall through to generic fetch */ }
+    }
+
+    // Generic web page fetch
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; AI-Intel-Hub/1.0)" },
+      signal: AbortSignal.timeout(12000),
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+
+    const contentType = res.headers.get("content-type") || "";
+
+    // Handle binary document formats: PDF, DOCX, PPTX, XLSX, ODT
+    const docTypes = ["pdf", "msword", "officedocument", "opendocument", "presentation", "spreadsheet"];
+    if (docTypes.some(t => contentType.includes(t)) || url.match(/\.(pdf|docx?|pptx?|xlsx?|odt)(\?|$)/i)) {
+      try {
+        const { parseOfficeAsync } = await import("officeparser");
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const text = await parseOfficeAsync(buffer);
+        const cleaned = text.replace(/\s+/g, " ").trim();
+        if (cleaned.length > 100) {
+          console.log(`[Summarize] Parsed document from ${new URL(url).hostname}: ${cleaned.length} chars`);
+          return cleaned.slice(0, maxChars);
+        }
+      } catch (err) {
+        console.log(`[Summarize] Document parse failed for ${url}: ${err.message}`);
+      }
+      return null;
+    }
+
+    const html = await res.text();
+    const $ = load(html);
+    $("script, style, nav, header, footer, aside, form, iframe, .sidebar, .comments, .advertisement").remove();
+    const text = $("article").text() || $("main").text() || $(".post-content").text() || $(".entry-content").text() || $("body").text();
+    const cleaned = text.replace(/\s+/g, " ").trim();
+    if (cleaned.length > 100) {
+      console.log(`[Summarize] Fetched article content from ${new URL(url).hostname}: ${cleaned.length} chars`);
+      return cleaned.slice(0, maxChars);
+    }
+    return null;
+  } catch (err) {
+    console.log(`[Summarize] Failed to fetch content from ${url}: ${err.message}`);
+    return null;
+  }
+}
+
+// ── Single-item deep summary (streaming) ────────────────────────────────────
+
+function detectItemType(item) {
+  const url = (item.url || "").toLowerCase();
+  const feedId = (item.feed_id || "").toLowerCase();
+  const category = (item.category || "").toLowerCase();
+  const tags = (item.tags || []).map(t => t.toLowerCase());
+
+  // Academic papers
+  if (url.includes("arxiv.org") || url.includes("doi.org") || url.includes("ssrn.com")
+    || url.includes("biorxiv.org") || url.includes("openreview.net")
+    || url.includes("aclanthology.org") || url.includes("proceedings.")
+    || tags.includes("paper") || tags.includes("preprint")
+    || category === "research") {
+    return "academic";
+  }
+  // Product announcements and lab blogs
+  if (category === "labs" || category === "engineering"
+    || tags.some(t => ["release", "launch", "announcement", "product"].includes(t))) {
+    return "product";
+  }
+  // News and industry
+  return "general";
+}
+
+export async function generateItemSummaryStream(itemId, onChunk, signal) {
+  const item = getItemById(itemId);
+  if (!item) throw new Error("Item not found");
+
+  const context = getRelevanceContext();
+  const clusterMates = getClusterMates(item.cluster_id, item.id, 5);
+  const itemType = detectItemType(item);
+
+  // Fetch full article content from the source URL
+  const fetchedContent = await fetchArticleContent(item.url);
+  const content = fetchedContent || item.transcript || item.summary || "";
+  const contentSource = fetchedContent ? "full document" : item.transcript ? "transcript" : "summary only";
+
+  let relatedSection = "";
+  if (clusterMates.length > 0) {
+    relatedSection = `\n\nRELATED ITEMS (similar or duplicate coverage from other sources — reference these in the Related Work section):\n` +
+      clusterMates.map((r, i) => `${i + 1}. "${r.title}" (${r.feed_id}) — ${(r.summary || "").slice(0, 150)}`).join("\n");
+  }
+
+  const itemMeta = `Title: ${item.title}
+Authors: ${item.author || "Unknown"}
+Source: ${item.feed_id}
+URL: ${item.url || "none"}
+Published: ${item.published}
+Relevance score: ${(item.relevance * 100).toFixed(0)}%
+${item.relevance_reason ? `Relevance reason: ${item.relevance_reason}` : ""}
+Tags: ${(item.tags || []).join(", ") || "none"}
+Affiliations: ${(item.affiliations || []).join(", ") || "none"}
+
+Content (source: ${contentSource}):
+${content.slice(0, 10000)}
+${relatedSection}`;
+
+  const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header (do not alter the format):
+
+# ${item.title}
+
+**Authors:** ${item.author || "Unknown"}
+**Source:** [${item.url || "N/A"}](${item.url || "#"})
+
+Then proceed with the analysis sections below.`;
+
+  let systemPrompt, userMessage;
+
+  if (itemType === "academic") {
+    systemPrompt = `You are a senior research analyst with deep expertise in AI/ML, producing a rigorous academic paper review for: ${context}
+Write in markdown. Be thorough, nuanced, and scholarly in your analysis.`;
+
+    userMessage = `Produce a detailed academic review of this paper:
+
+${itemMeta}
+
+${headerInstruction}
+
+## Summary
+A thorough, accurate summary of the paper. Capture the key contributions, proposed methods, experimental setup, and principal findings. Distinguish between what the authors claim and what they demonstrate with evidence.
+
+## Relevance & Strategic Implications
+Why this paper matters to the reader specifically, given their role and focus areas. Identify concrete implications for their strategy, architecture decisions, or roadmap. What opportunities or risks does this research create?
+
+## Related Work & Context
+Position this paper within the broader research landscape. Reference the related items listed above (if any). Discuss how this work relates to, extends, or contradicts prior work mentioned in the paper. Note key citations and competing approaches.
+
+## Critical Analysis
+Provide a rigorous scholarly critique:
+- **Novelty**: How original is the contribution? Is this incremental or a genuine advance?
+- **Methodology**: Evaluate experimental design, baselines, datasets, and evaluation metrics. Are they appropriate and sufficient?
+- **Reproducibility**: Is there enough detail to reproduce the results? Is code or data available?
+- **Statistical rigor**: Are claims supported by the evidence? Look for cherry-picked results, missing error bars, unfair comparisons, or overgeneralized conclusions.
+- **Limitations**: What do the authors acknowledge? What do they miss? Under what conditions might these results not hold?
+- **Author credibility**: Consider affiliations, track record, and potential conflicts of interest. Is this peer-reviewed or a preprint?
+
+## Open Questions
+What are the most important unanswered questions or promising follow-up directions?
+
+Include a link to the original paper: [View paper](${item.url || "#"})`;
+
+  } else if (itemType === "product") {
+    systemPrompt = `You are a technology strategist and product analyst producing a summary for: ${context}
+Write in markdown. Focus on practical implications and strategic relevance.`;
+
+    userMessage = `Produce a summary and analysis of this product/engineering announcement:
+
+${itemMeta}
+
+${headerInstruction}
+
+## Summary
+Clear summary of what was announced, released, or changed. Capture the key features, capabilities, and stated goals.
+
+## Relevance & Strategic Implications
+Why this matters to the reader. How does it affect their technology stack, vendor relationships, competitive landscape, or strategic plans? Be specific about impact.
+
+## Related Work & Context
+Connections to the related items listed above (if any). How does this compare to competing products or alternative approaches? What market or technology trends does this reflect?
+
+## Considerations
+Practical factors to evaluate:
+- **Maturity**: Is this GA, beta, preview, or vaporware? What's the adoption risk?
+- **Vendor dynamics**: Does this create lock-in, shift pricing, or change the competitive balance?
+- **Gaps**: What's missing from the announcement? What questions should the reader ask before acting?
+
+Include a link to the original: [View source](${item.url || "#"})`;
+
+  } else {
+    systemPrompt = `You are a senior intelligence analyst producing a summary for: ${context}
+Write in markdown. Focus on accuracy and strategic relevance.`;
+
+    userMessage = `Produce a summary and analysis of this item:
+
+${itemMeta}
+
+${headerInstruction}
+
+## Summary
+Accurate, concise summary of the key points. Capture the who, what, why, and implications.
+
+## Relevance & Observations
+Why this matters to the reader specifically. Highlight strategic implications, opportunities, or risks. Be concrete about how this connects to their work.
+
+## Related Work & Context
+Connections to the related items listed above (if any). How does this fit into broader trends or ongoing developments in the field?
+
+## Considerations
+Note any important caveats:
+- **Source perspective**: Is this reporting objective, or does the source have a particular angle or interest?
+- **Completeness**: What context is missing? What other perspectives should the reader seek out?
+- **Actionability**: Are there concrete next steps the reader should consider?
+
+Include a link to the original: [View source](${item.url || "#"})`;
+  }
+
+  const provider = getAnalysisProvider();
+  const model = getAnalysisModel();
+
+  let accumulated = "";
+  for await (const chunk of streamAnalysisLLM(systemPrompt, userMessage, 3000, signal)) {
+    accumulated += chunk;
+    onChunk(chunk);
+  }
+
+  return {
+    result: accumulated,
+    contentSource,
+    generatedAt: new Date().toISOString(),
+    provider,
+    model,
+  };
 }
 
 // ── Detect stale/noisy feeds and suggest improvements ───────────────────────

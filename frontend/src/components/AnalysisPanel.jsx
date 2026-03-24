@@ -3,6 +3,7 @@ import Markdown from "react-markdown";
 import { api } from "../api.js";
 import { CATEGORIES, mono, sans, timeAgo, relColor } from "../constants.js";
 import ItemHoverPopover from "./ItemHoverPopover";
+import ExportButtons from "./ExportButtons.jsx";
 
 export default function AnalysisPanel({ category, onClose }) {
   const [mode, setMode] = useState("briefing");
@@ -16,6 +17,7 @@ export default function AnalysisPanel({ category, onClose }) {
   const [generatedAt, setGeneratedAt] = useState(null);
   const [cached, setCached] = useState(false);
   const [llmLabel, setLlmLabel] = useState("");
+  const contentRef = useRef(null);
   const evtSourceRef = useRef(null);
   const bufferRef = useRef("");
   const flushTimerRef = useRef(null);
@@ -237,28 +239,37 @@ export default function AnalysisPanel({ category, onClose }) {
           </div>
         )}
         {error && <div style={{ color: "#EF4444", fontFamily: mono, fontSize: 13 }}>⚠ {error}</div>}
-        {!loading && !streaming && result && (
+        {!loading && !streaming && result && (() => {
+          const modeLabel = modes.find(m => m.key === mode)?.label || "Analysis";
+          const metaLine = `Generated ${generatedAt ? timeAgo(generatedAt) : ""}${cached ? " (cached)" : ""} · Powered by ${llmLabel}`;
+          const metaHtml = `<p style="color:#888;font-size:11px;font-style:italic">${metaLine.replace(/·/g, "&middot;")}</p>`;
+          const markdownForExport = `# ${modeLabel}\n\n${result}\n\n---\n*${metaLine}*\n`;
+          return (
           <div style={{ marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
-            {llmLabel && <div style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic", marginBottom: 4 }}>Powered by {llmLabel}</div>}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>
-              {generatedAt ? `Generated ${timeAgo(generatedAt)}` : ""}
-              {cached && " (cached)"}
-            </span>
-            <button onClick={() => run(true)} style={{
-              padding: "3px 10px", background: "none", border: "1px solid var(--border)",
-              borderRadius: 4, color: "var(--text-muted)", fontSize: 9, fontFamily: mono, cursor: "pointer",
-            }}>Regenerate</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              {llmLabel && <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic" }}>Powered by {llmLabel}</span>}
+              <ExportButtons title={modeLabel} markdown={markdownForExport} contentRef={contentRef} metaHtml={metaHtml} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>
+                {generatedAt ? `Generated ${timeAgo(generatedAt)}` : ""}
+                {cached && " (cached)"}
+              </span>
+              <button onClick={() => run(true)} style={{
+                padding: "3px 10px", background: "none", border: "1px solid var(--border)",
+                borderRadius: 4, color: "var(--text-muted)", fontSize: 9, fontFamily: mono, cursor: "pointer",
+              }}>Regenerate</button>
+            </div>
           </div>
-          </div>
-        )}
+          );
+        })()}
         {streaming && (
           <div style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 6, height: 6, borderRadius: 3, background: "var(--accent)", animation: "pulse 1s ease-in-out infinite" }} />
             <span style={{ color: "var(--accent)", fontSize: 10, fontFamily: mono, fontWeight: 600 }}>Streaming...</span>
           </div>
         )}
-        {result && <div className="analysis-markdown" style={{ color: "var(--text-secondary)", fontSize: 13.5, lineHeight: 1.75, fontFamily: sans }}><Markdown components={{
+        {result && <div ref={contentRef} className="analysis-markdown" style={{ color: "var(--text-secondary)", fontSize: 13.5, lineHeight: 1.75, fontFamily: sans }}><Markdown components={{
           h1: ({ children }) => <h1 style={{ color: "var(--text-primary)", fontSize: 18, fontWeight: 600, fontFamily: mono, marginTop: 20, marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid var(--border)" }}>{children}</h1>,
           h2: ({ children }) => <h2 style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 600, fontFamily: mono, marginTop: 18, marginBottom: 8 }}>{children}</h2>,
           h3: ({ children }) => <h3 style={{ color: "var(--text-secondary)", fontSize: 13.5, fontWeight: 600, fontFamily: mono, marginTop: 14, marginBottom: 6 }}>{children}</h3>,
@@ -274,6 +285,17 @@ export default function AnalysisPanel({ category, onClose }) {
           blockquote: ({ children }) => <blockquote style={{ borderLeft: "3px solid var(--accent)", paddingLeft: 14, margin: "10px 0", color: "var(--text-muted)" }}>{children}</blockquote>,
           a: renderLink,
         }}>{result}</Markdown></div>}
+        {!loading && !streaming && result && (() => {
+          const modeLabel = modes.find(m => m.key === mode)?.label || "Analysis";
+          const metaLine = `Generated ${generatedAt ? timeAgo(generatedAt) : ""}${cached ? " (cached)" : ""} · Powered by ${llmLabel}`;
+          const metaHtml = `<p style="color:#888;font-size:11px;font-style:italic">${metaLine.replace(/·/g, "&middot;")}</p>`;
+          const markdownForExport = `# ${modeLabel}\n\n${result}\n\n---\n*${metaLine}*\n`;
+          return (
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)", display: "flex", justifyContent: "flex-end" }}>
+              <ExportButtons title={modeLabel} markdown={markdownForExport} contentRef={contentRef} metaHtml={metaHtml} />
+            </div>
+          );
+        })()}
       </div>
       {hoverItem && <ItemHoverPopover item={hoverItem.item} anchor={hoverItem.anchor} onClose={dismissHover} onSave={handleSaveItem} onMarkRead={handleMarkReadFromHover} onMouseEnter={clearHoverTimer} />}
     </div>

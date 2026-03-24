@@ -108,10 +108,26 @@ Click any item card to expand it. The expanded view shows:
 Each expanded item provides these action buttons:
 
 - **Open** -- opens the original article, paper, or post in your default browser.
+- **Summarize** -- generates a deep LLM summary of the item in a streaming modal. See [Summarize](#summarize) below.
 - **Thumbs up / Thumbs down** -- provide relevance feedback. Thumbs up signals "more like this" and thumbs down signals "less like this." This feedback is used to improve future scoring. See [Tips and Best Practices](#tips-and-best-practices) for more on feedback.
 - **Save** (star icon) -- bookmarks the item to your Saved collection. Saved items are preserved during daily cleanup and can be accessed from the Saved panel.
 - **Mark read** -- marks the item as read, dimming it in the list.
 - **Dismiss** -- soft-deletes the item from your view. Dismissed items no longer appear in the list but are not permanently deleted.
+
+### Summarize
+
+Clicking the **Summarize** button on an expanded item opens a modal that generates a deep LLM-powered summary of the item's content. The backend fetches the full article content from the source URL (supporting HTML pages, PDFs, DOCX files, and other formats) and sends it to the configured LLM for analysis.
+
+The summary streams into the modal in real time, so you can begin reading before generation is complete. Once finished, the modal displays metadata about how the content was sourced and which model produced the summary.
+
+The Summarize modal includes two export options:
+
+- **Save as Markdown** -- downloads the summary as a `.md` file for archiving or sharing.
+- **Save as PDF** -- opens the system print dialog to save or print the summary as a formatted PDF.
+
+### Exporting Analysis
+
+The Analysis panel also includes **Save as Markdown** and **Save as PDF** export buttons. These work the same way as in the Summarize modal, allowing you to export briefings, risk scans, and other analysis outputs for offline use or distribution.
 
 ---
 

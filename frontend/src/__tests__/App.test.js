@@ -47,6 +47,11 @@ vi.mock('../api.js', () => ({
     cleanupItems: vi.fn().mockResolvedValue({ removed: 0 }),
     rescoreAll: vi.fn().mockResolvedValue({ reset: 0, scored: 0 }),
     checkServices: vi.fn().mockResolvedValue({}),
+    summarizeStream: vi.fn().mockReturnValue({
+      close: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }),
   },
 }));
 
@@ -423,5 +428,49 @@ describe('Keyboard Navigation', () => {
     await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
 
     expect(screen.getByText('? shortcuts')).toBeInTheDocument();
+  });
+});
+
+// ── Summarize Feature ─────────────────────────────────────────────────────────
+
+describe('Summarize Feature', () => {
+  it('Summarize button appears in expanded item actions', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    // Click to expand the first item
+    fireEvent.click(screen.getByText('First Item'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Summarize')).toBeInTheDocument();
+    });
+  });
+
+  it('clicking Summarize button opens the summarize modal', async () => {
+    setupWithItems();
+    // Mock summarizeStream to simulate SSE lifecycle
+    api.summarizeStream.mockImplementation((itemId, { onDone }) => {
+      // Simulate async completion
+      setTimeout(() => {
+        onDone({ result: 'Test summary content', generatedAt: new Date().toISOString(), provider: 'anthropic', model: 'claude-sonnet', contentSource: 'html' });
+      }, 10);
+      return { close: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    });
+
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    // Expand item
+    fireEvent.click(screen.getByText('First Item'));
+    await waitFor(() => expect(screen.getByText('Summarize')).toBeInTheDocument());
+
+    // Click Summarize
+    fireEvent.click(screen.getByText('Summarize'));
+
+    // The modal should open and call summarizeStream with the item ID
+    await waitFor(() => {
+      expect(api.summarizeStream).toHaveBeenCalledWith('item-1', expect.any(Object));
+    });
   });
 });

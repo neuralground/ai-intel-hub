@@ -242,6 +242,18 @@ export function getItemCount({ category, minRelevance = 0, unread, search, criti
   return r.length;
 }
 
+export function getItemById(id) {
+  return store.items.find(i => i.id === id) || null;
+}
+
+export function getClusterMates(clusterId, excludeId, limit = 5) {
+  if (!clusterId) return [];
+  return store.items
+    .filter(i => i.cluster_id === clusterId && i.id !== excludeId && !i.dismissed)
+    .sort((a, b) => b.relevance - a.relevance)
+    .slice(0, limit);
+}
+
 export function markItem(itemId, field, value) {
   const item = store.items.find(i => i.id === itemId);
   if (item) { item[field] = value ? 1 : 0; save(); }

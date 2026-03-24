@@ -169,7 +169,18 @@ ai-intel-hub/
     └── src/
         ├── main.jsx             # React entry point
         ├── api.js               # API client (fetch wrapper, all endpoints)
-        └── App.jsx              # Full dashboard: sidebar, feed list, analysis panel, sources
+        ├── App.jsx              # Full dashboard: sidebar, feed list, analysis panel, sources
+        └── components/
+            ├── AnalysisPanel.jsx    # Briefing/risk/WSNW analysis with streaming and export
+            ├── ExportButtons.jsx    # Save as Markdown / Save as PDF export controls
+            ├── ItemHoverPopover.jsx  # Popover for citation references in analysis
+            ├── OrgBadge.jsx         # Organization affiliation badge
+            ├── SavedItemsPanel.jsx  # Saved items view with category filter
+            ├── SettingsPanel.jsx    # Settings: profile, AI engine, orgs, connections
+            ├── SourcesPanel.jsx     # Source management, health, suggestions
+            ├── SummarizeModal.jsx   # Streaming deep-summary modal for individual items
+            ├── ThemeToggle.jsx      # System/light/dark theme switcher
+            └── services.jsx         # Connected services management
 ```
 
 **Line counts (approximate):**
@@ -352,6 +363,7 @@ X accounts are stored as feeds with `type: "x-account"` but the fetcher currentl
 | POST | `/api/items/:id/read` | Mark as read |
 | POST | `/api/items/:id/save` | Toggle saved `{saved: bool}` |
 | POST | `/api/items/:id/dismiss` | Soft-delete from feed |
+| GET | `/api/items/:id/summarize/stream` | SSE endpoint: fetches full article content and streams a deep LLM summary with progress events |
 
 ### Actions
 | Method | Path | Description |
