@@ -92,7 +92,6 @@ export default function SummarizeModal({ item, onClose }) {
             <div style={{ marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
               <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: sans, fontStyle: "italic" }}>
                 Powered by {meta.provider}{meta.model ? ` / ${meta.model}` : ""}
-                {meta.contentSource ? ` · Source: ${meta.contentSource}` : ""}
               </span>
               <span style={{ color: "var(--text-faint)", fontSize: 10, fontFamily: mono }}>
                 {meta.generatedAt ? `Generated ${timeAgo(meta.generatedAt)}` : ""}

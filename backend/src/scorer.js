@@ -944,17 +944,18 @@ ${relatedSection}`;
 Then proceed with the analysis sections below.`;
 
   const contentNotice = contentSource === "full document"
-    ? "You have been given the full text of this document. Analyze it thoroughly. NEVER say you lack access to the full paper, that content is limited, or that you are working from an abstract — you have the complete text."
-    : contentSource.includes("abstract")
-    ? "You have been given the abstract/summary retrieved from the source. Analyze what is available but note clearly that this is based on the abstract, not the full paper."
-    : "Only the feed summary is available — the full document could not be retrieved. Note this limitation clearly at the start of your analysis.";
+    ? "You have the full text of this document. Analyze it thoroughly. Do NOT say you lack access, that content is limited, or that you are working from an abstract."
+    : "You have limited content (abstract or summary only). Do NOT mention this limitation in your response — the user is already informed via the UI. Do NOT speculate about what the full paper might contain.";
 
   let systemPrompt, userMessage;
+
+  const noSpeculation = `CRITICAL RULE: The Summary section must be strictly factual — only state what is explicitly present in the provided content. NEVER use phrases like "likely", "may", "probably", "the paper presumably", "the methodology appears to", or "the authors might". If information is not in the content, omit it — do not guess. Opinion, interpretation, and speculation belong ONLY in the Relevance and Critical Analysis sections.`;
 
   if (itemType === "academic") {
     systemPrompt = `You are a senior research analyst with deep expertise in AI/ML, producing a rigorous academic paper review for: ${context}
 Write in markdown. Be thorough, nuanced, and scholarly in your analysis.
-${contentNotice}`;
+${contentNotice}
+${noSpeculation}`;
 
     userMessage = `Produce a detailed academic review of this paper:
 
@@ -963,7 +964,7 @@ ${itemMeta}
 ${headerInstruction}
 
 ## Summary
-A thorough, accurate summary of the paper. Capture the key contributions, proposed methods, experimental setup, and principal findings. Distinguish between what the authors claim and what they demonstrate with evidence.
+A strictly factual summary based ONLY on what is stated in the provided text. Capture the key contributions, proposed methods, experimental setup, and principal findings. State only what the authors explicitly describe. Do not infer or speculate about content not present.
 
 ## Relevance & Strategic Implications
 Why this paper matters to the reader specifically, given their role and focus areas. Identify concrete implications for their strategy, architecture decisions, or roadmap. What opportunities or risks does this research create?
@@ -988,7 +989,8 @@ Include a link to the original paper: [View paper](${item.url || "#"})`;
   } else if (itemType === "product") {
     systemPrompt = `You are a technology strategist and product analyst producing a summary for: ${context}
 Write in markdown. Focus on practical implications and strategic relevance.
-${contentNotice}`;
+${contentNotice}
+${noSpeculation}`;
 
     userMessage = `Produce a summary and analysis of this product/engineering announcement:
 
@@ -997,7 +999,7 @@ ${itemMeta}
 ${headerInstruction}
 
 ## Summary
-Clear summary of what was announced, released, or changed. Capture the key features, capabilities, and stated goals.
+A strictly factual summary based ONLY on what is stated in the provided text. Capture what was announced, released, or changed, the key features, capabilities, and stated goals. Do not infer or speculate about content not present.
 
 ## Relevance & Strategic Implications
 Why this matters to the reader. How does it affect their technology stack, vendor relationships, competitive landscape, or strategic plans? Be specific about impact.
@@ -1016,7 +1018,8 @@ Include a link to the original: [View source](${item.url || "#"})`;
   } else {
     systemPrompt = `You are a senior intelligence analyst producing a summary for: ${context}
 Write in markdown. Focus on accuracy and strategic relevance.
-${contentNotice}`;
+${contentNotice}
+${noSpeculation}`;
 
     userMessage = `Produce a summary and analysis of this item:
 
@@ -1025,7 +1028,7 @@ ${itemMeta}
 ${headerInstruction}
 
 ## Summary
-Accurate, concise summary of the key points. Capture the who, what, why, and implications.
+A strictly factual summary based ONLY on what is stated in the provided text. Capture the who, what, why, and key points. Do not infer or speculate about content not present.
 
 ## Relevance & Observations
 Why this matters to the reader specifically. Highlight strategic implications, opportunities, or risks. Be concrete about how this connects to their work.
