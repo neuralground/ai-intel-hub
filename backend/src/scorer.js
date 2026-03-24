@@ -949,12 +949,14 @@ ${relatedSection}`;
 
   const knownAffiliations = (item.affiliations && item.affiliations.length > 0)
     ? item.affiliations.join(", ") : null;
-  const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header (each field on its own line):
+  const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header. Use a blank line between each field so they render on separate lines in markdown:
 
 # ${item.title}
 
 **Authors:** ${item.author || "Unknown"}
+
 **Source:** [${item.url || "N/A"}](${item.url || "#"})
+
 **Affiliations:** ${knownAffiliations || "[extract from the paper — list the institutional affiliations of the authors as stated in the document, e.g. universities, companies, research labs]"}
 
 Then proceed with the analysis sections below.`;
@@ -993,7 +995,9 @@ Be strictly factual — state only what the paper explicitly describes. Do not i
 Why this paper matters to the reader specifically, given their role and focus areas. Identify concrete implications for their strategy, architecture decisions, or roadmap. What opportunities or risks does this research create?
 
 ## Related Work & Context
-Position this paper within the broader research landscape. Reference the related items listed above (if any). Discuss how this work relates to, extends, or contradicts prior work mentioned in the paper. Include hyperlinks to referenced papers where possible (e.g. [Paper Title](https://arxiv.org/abs/XXXX.XXXXX) for arXiv papers, or [Paper Title](URL) for others).
+Position this paper within the broader research landscape. Reference the related items listed above (if any). Discuss how this work relates to, extends, or contradicts prior work mentioned in the paper.
+
+IMPORTANT: For every paper or work you reference, include a markdown hyperlink. Use the format [Paper Title](https://arxiv.org/abs/XXXX.XXXXX) for arXiv papers. For other works, construct a link to the most likely source (e.g. conference proceedings, project page, or a search URL like https://scholar.google.com/scholar?q=TITLE). Every reference must be clickable — do not mention a paper without linking to it.
 
 ## Critical Analysis
 Write a single concise paragraph noting any material concerns — methodology issues, missing evidence, potential biases, or important limitations the reader should be aware of. If the paper is methodologically sound and well-supported, omit this section entirely. Do not pad with generic caveats.
