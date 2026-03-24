@@ -116,7 +116,9 @@ export default function SummarizeModal({ item, onClose }) {
                 ? <>No transcript is available for this video. This summary is based on the video description only.</>
                 : meta.contentSource === "abstract only"
                 ? <>Only the abstract could be retrieved. This summary may not capture the full scope of the work.</>
-                : <>The full document could not be retrieved from <a href={meta.itemUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#D97706", wordBreak: "break-all" }}>{meta.itemUrl}</a>. This summary is based on the item's feed summary only.</>
+                : meta.contentSource?.includes("block")
+                ? <>The source site (<a href={meta.itemUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#D97706", wordBreak: "break-all" }}>{new URL(meta.itemUrl).hostname}</a>) blocks automated access. This summary is based on the feed summary only.</>
+                : <>The full content could not be retrieved from <a href={meta.itemUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#D97706", wordBreak: "break-all" }}>{meta.itemUrl}</a>. This summary is based on the feed summary only.</>
               }
             </div>
           )}

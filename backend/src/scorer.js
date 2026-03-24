@@ -918,52 +918,104 @@ export async function fetchArticleContent(url, maxChars = 12000, onProgress = ()
   }
 
   // ── Generic URL fetch ───────────────────────────────────────────────────
-  onProgress("Fetching source content...");
-  try {
-    console.log(`[Summarize] Generic fetch: ${url}`);
-    const res = await fetchWithRetry(url, {
-      headers: { "User-Agent": UA },
-      signal: AbortSignal.timeout(15000),
-      redirect: "follow",
-    });
-    console.log(`[Summarize] Response: ${res.status} ${res.headers.get("content-type") || "unknown"}`);
-    if (!res.ok) return null;
 
+  // Helper: try to extract content from an HTML response
+  async function tryExtractFromResponse(res, label) {
     const contentType = res.headers.get("content-type") || "";
 
     // Binary document formats
     const docTypes = ["pdf", "msword", "officedocument", "opendocument", "presentation", "spreadsheet"];
     if (docTypes.some(t => contentType.includes(t)) || url.match(/\.(pdf|docx?|pptx?|xlsx?|odt)(\?|$)/i)) {
       onProgress("Parsing document...");
-      try {
-        const buffer = Buffer.from(await res.arrayBuffer());
-        const text = await parseDocument(buffer);
-        const cleaned = text?.replace(/\s+/g, " ").trim();
-        if (cleaned && cleaned.length > 100) {
-          console.log(`[Summarize] Parsed document: ${cleaned.length} chars`);
-          return cleaned.slice(0, maxChars);
-        }
-      } catch (err) {
-        console.log(`[Summarize] Document parse failed: ${err.message}`);
+      const buffer = Buffer.from(await res.arrayBuffer());
+      const text = await parseDocument(buffer);
+      const cleaned = text?.replace(/\s+/g, " ").trim();
+      if (cleaned && cleaned.length > 100) {
+        console.log(`[Summarize] ${label} parsed document: ${cleaned.length} chars`);
+        return cleaned.slice(0, maxChars);
       }
       return null;
     }
 
-    // HTML page
-    onProgress("Extracting article text...");
     const html = await res.text();
+    // Detect bot-blocking pages (Cloudflare, CAPTCHA, etc.)
+    if (html.includes("Just a moment") || html.includes("g-recaptcha") || html.includes("cf-challenge")) {
+      console.log(`[Summarize] ${label} blocked by bot protection`);
+      return null;
+    }
     const cleaned = await extractHTML(html, ["article", "[role=main]", "main", ".post-content", ".entry-content", ".article-body", ".story-body", "#content", ".content", "body"]);
     if (cleaned) {
-      console.log(`[Summarize] Extracted: ${cleaned.length} chars`);
+      console.log(`[Summarize] ${label} extracted: ${cleaned.length} chars`);
       return cleaned.slice(0, maxChars);
     }
-
-    console.log(`[Summarize] No usable content extracted`);
-    return null;
-  } catch (err) {
-    console.log(`[Summarize] Generic fetch failed: ${err.message}`);
     return null;
   }
+
+  const BROWSER_HEADERS = {
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+  };
+
+  // Strategy 1: Direct fetch with full browser headers
+  onProgress("Fetching source content...");
+  try {
+    console.log(`[Summarize] Direct fetch: ${url}`);
+    const res = await fetchWithRetry(url, {
+      headers: BROWSER_HEADERS,
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
+    });
+    console.log(`[Summarize] Direct: ${res.status} ${res.headers.get("content-type") || "unknown"}`);
+    if (res.ok) {
+      const result = await tryExtractFromResponse(res, "Direct");
+      if (result) return result;
+    }
+  } catch (err) {
+    console.log(`[Summarize] Direct fetch failed: ${err.message}`);
+  }
+
+  // Strategy 2: Google Web Cache
+  onProgress("Trying Google Cache...");
+  try {
+    const cacheUrl = `https://webcache.googleusercontent.com/search?q=cache:${encodeURIComponent(url)}&strip=1`;
+    console.log(`[Summarize] Google Cache: ${cacheUrl.slice(0, 80)}...`);
+    const res = await fetchWithRetry(cacheUrl, {
+      headers: BROWSER_HEADERS,
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
+      const result = await tryExtractFromResponse(res, "Google Cache");
+      if (result) return result;
+    }
+  } catch (err) {
+    console.log(`[Summarize] Google Cache failed: ${err.message}`);
+  }
+
+  // Strategy 3: Wayback Machine (Internet Archive)
+  onProgress("Trying Wayback Machine...");
+  try {
+    const wbUrl = `https://web.archive.org/web/2/${url}`;
+    console.log(`[Summarize] Wayback: ${wbUrl.slice(0, 80)}...`);
+    const res = await fetchWithRetry(wbUrl, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(10000),
+      redirect: "follow",
+    });
+    if (res.ok) {
+      const result = await tryExtractFromResponse(res, "Wayback");
+      if (result) return result;
+    }
+  } catch (err) {
+    console.log(`[Summarize] Wayback failed: ${err.message}`);
+  }
+
+  console.log(`[Summarize] All strategies exhausted for ${url}`);
+  return null;
 }
 
 // ── Single-item deep summary (streaming) ────────────────────────────────────
@@ -1023,7 +1075,7 @@ export async function generateItemSummaryStream(itemId, onChunk, signal, onFetch
   else if (fetchedContent) contentSource = "abstract only";
   else if (transcript) contentSource = "transcript";
   else if (isYouTube) contentSource = "no transcript available for this video";
-  else contentSource = "feed summary only";
+  else contentSource = "feed summary only — site may block automated access";
   console.log(`[Summarize] Content source: "${contentSource}" (${content.length} chars) for: ${item.title?.slice(0, 60)}`);
 
   let relatedSection = "";
