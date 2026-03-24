@@ -982,6 +982,10 @@ function detectItemType(item) {
     || category === "research") {
     return "academic";
   }
+  // YouTube videos
+  if (url.includes("youtube.com") || url.includes("youtu.be") || tags.includes("video")) {
+    return "video";
+  }
   // Product announcements and lab blogs
   if (category === "labs" || category === "engineering"
     || tags.some(t => ["release", "launch", "announcement", "product"].includes(t))) {
@@ -1063,6 +1067,13 @@ Do NOT restate the publication date, authors, or source in the Summary section �
     ? "You have the full text of this document. Analyze it thoroughly. Do NOT say you lack access, that content is limited, or that you are working from an abstract."
     : "You have limited content. Do NOT mention this limitation in your response — the user is already informed via the UI. Do NOT speculate about what the full document might contain. Analyze only what is provided.";
 
+  // Calibrate summary length to source content length
+  const contentLen = content.length;
+  const summaryLength = contentLen > 8000 ? "comprehensive, 4-6 paragraphs"
+    : contentLen > 4000 ? "detailed, 3-4 paragraphs"
+    : contentLen > 1500 ? "2-3 paragraphs"
+    : "1-2 concise paragraphs";
+
   let systemPrompt, userMessage;
 
   const noSpeculation = `CRITICAL RULE: The Summary section must be strictly factual — only state what is explicitly present in the provided content. NEVER use phrases like "likely", "may", "probably", "the paper presumably", "the methodology appears to", or "the authors might". If information is not in the content, omit it — do not guess. Opinion, interpretation, and speculation belong ONLY in the Relevance and Critical Analysis sections.`;
@@ -1080,7 +1091,7 @@ ${itemMeta}
 ${headerInstruction}
 
 ## Summary
-This is the most important section — provide a comprehensive, multi-paragraph summary (at least 3-5 paragraphs for a typical paper). Cover:
+This is the most important section — provide a ${summaryLength} summary. Cover:
 - The problem being addressed and why it matters
 - The proposed approach or methodology in detail
 - Key experimental setup, datasets, and baselines
@@ -1115,7 +1126,7 @@ ${itemMeta}
 ${headerInstruction}
 
 ## Summary
-A strictly factual summary based ONLY on what is stated in the provided text. Capture what was announced, released, or changed, the key features, capabilities, and stated goals. Do not infer or speculate about content not present.
+Provide a ${summaryLength} factual summary based ONLY on what is stated in the provided text. Capture what was announced, released, or changed, the key features, capabilities, and stated goals. Do not infer or speculate about content not present.
 
 ## Relevance & Strategic Implications
 Why this matters to the reader. How does it affect their technology stack, vendor relationships, competitive landscape, or strategic plans? Be specific about impact.
@@ -1131,6 +1142,37 @@ Practical factors to evaluate:
 
 Include a link to the original: [View source](${item.url || "#"})`;
 
+  } else if (itemType === "video") {
+    systemPrompt = `You are a senior intelligence analyst producing a summary of a video for: ${context}
+Write in markdown. This is a VIDEO — never refer to it as an "article", "paper", or "post". Use terms like "the video", "the presentation", "the discussion", "the speaker(s)".
+${contentNotice}
+${noSpeculation}`;
+
+    userMessage = `Produce a summary and analysis of this video:
+
+${itemMeta}
+
+${headerInstruction}
+
+## Summary
+Provide a ${summaryLength} factual summary of the video content based ONLY on what is stated in the transcript. Cover the main topics discussed, key arguments or demonstrations, and conclusions. Do not infer or speculate about content not present. Never call this an "article".
+
+## Relevance & Observations
+Why this video matters to the reader specifically. Highlight strategic implications, opportunities, or risks. Be concrete about how this connects to their work.
+
+## Related Work & Context
+Connections to the related items listed above (if any). How does the discussion fit into broader trends or ongoing developments in the field?
+
+IMPORTANT: For every paper or work referenced in the video, include a markdown hyperlink where possible.
+
+## Considerations
+Note any important caveats:
+- **Speaker perspective**: What is the speaker's background and potential bias?
+- **Completeness**: What topics were covered superficially or omitted?
+- **Actionability**: Are there concrete next steps the reader should consider?
+
+Include a link to the original video: [Watch video](${item.url || "#"})`;
+
   } else {
     systemPrompt = `You are a senior intelligence analyst producing a summary for: ${context}
 Write in markdown. Focus on accuracy and strategic relevance.
@@ -1144,7 +1186,7 @@ ${itemMeta}
 ${headerInstruction}
 
 ## Summary
-A strictly factual summary based ONLY on what is stated in the provided text. Capture the who, what, why, and key points. Do not infer or speculate about content not present.
+Provide a ${summaryLength} factual summary based ONLY on what is stated in the provided text. Capture the who, what, why, and key points. Do not infer or speculate about content not present.
 
 ## Relevance & Observations
 Why this matters to the reader specifically. Highlight strategic implications, opportunities, or risks. Be concrete about how this connects to their work.
