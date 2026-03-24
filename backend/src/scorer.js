@@ -1158,11 +1158,11 @@ Write in markdown. Be thorough, nuanced, and scholarly in your analysis.
 ${contentNotice}
 ${noSpeculation}`;
 
-    userMessage = `Produce a detailed academic review of this paper:
-
-${itemMeta}
+    userMessage = `Produce a detailed academic review of this paper.
 
 ${headerInstruction}
+
+${itemMeta}
 
 ## Summary
 This is the most important section — provide a ${summaryLength} summary. Cover:
@@ -1193,11 +1193,11 @@ Write in markdown. Focus on practical implications and strategic relevance.
 ${contentNotice}
 ${noSpeculation}`;
 
-    userMessage = `Produce a summary and analysis of this product/engineering announcement:
-
-${itemMeta}
+    userMessage = `Produce a summary and analysis of this product/engineering announcement.
 
 ${headerInstruction}
+
+${itemMeta}
 
 ## Summary
 Provide a ${summaryLength} factual summary based ONLY on what is stated in the provided text. Capture what was announced, released, or changed, the key features, capabilities, and stated goals. Do not infer or speculate about content not present.
@@ -1222,11 +1222,11 @@ Write in markdown. This is a VIDEO — never refer to it as an "article", "paper
 ${contentNotice}
 ${noSpeculation}`;
 
-    userMessage = `Produce a summary and analysis of this video:
-
-${itemMeta}
+    userMessage = `Produce a summary and analysis of this video.
 
 ${headerInstruction}
+
+${itemMeta}
 
 ## Summary
 Provide a ${summaryLength} factual summary of the video content based ONLY on what is stated in the transcript. Cover the main topics discussed, key arguments or demonstrations, and conclusions. Do not infer or speculate about content not present. Never call this an "article".
@@ -1253,11 +1253,11 @@ Write in markdown. Focus on accuracy and strategic relevance.
 ${contentNotice}
 ${noSpeculation}`;
 
-    userMessage = `Produce a summary and analysis of this item:
-
-${itemMeta}
+    userMessage = `Produce a summary and analysis of this item.
 
 ${headerInstruction}
+
+${itemMeta}
 
 ## Summary
 Provide a ${summaryLength} factual summary based ONLY on what is stated in the provided text. Capture the who, what, why, and key points. Do not infer or speculate about content not present.
