@@ -460,10 +460,8 @@ Implemented: Semantic deduplication via `backend/src/embeddings.js`. Items are e
 **What:** LinkedIn is a primary channel for many voices. Explore RSS bridges or periodic scraping of public profiles.
 **Complexity:** Medium-high. LinkedIn actively blocks scraping.
 
-### T12: YouTube transcript ingestion — OPEN
-**What:** For tracked YouTube channels, extract transcripts via auto-generated captions and generate LLM summaries. Collapses a 60-minute video into a 2-minute scan.
-**Where:** New module `backend/src/youtube.js`. Use YouTube Data API v3 + `youtube-transcript` package.
-**Complexity:** Medium. High value.
+### ~~T12: YouTube transcript ingestion~~ — DONE
+Implemented: `fetchTranscript()` in `fetcher.js` uses the `youtube-transcript` package to extract auto-generated captions (no API key needed). Transcripts are fetched concurrently alongside video metadata for the top 10 videos per channel. Transcript text (capped at 5000 chars) is stored in a new `transcript` field on items. The summary uses a 600-char transcript excerpt instead of the video description when available. The scorer sends 500 chars of transcript (vs 200 for regular items) for better relevance scoring. Three seed YouTube channels added to default feeds (Two Minute Papers, AI Explained, Yannic Kilcher).
 
 ### T13: arXiv enhanced processing — OPEN
 **What:** For high-relevance papers (>0.8), fetch full abstracts from arXiv API and optionally process PDFs for deeper analysis.

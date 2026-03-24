@@ -369,7 +369,7 @@ No other text. Valid JSON only.`;
   const itemList = items.map((i) => ({
     id: i.id,
     title: i.title,
-    summary: (i.summary || "").slice(0, 200),
+    summary: (i.transcript || i.summary || "").slice(0, i.transcript ? 500 : 200),
     authors: i.author || "",
     source: i.feedId || i.feed_id,
     url: i.url || "",

@@ -515,5 +515,26 @@
     "url": "https://www.thealgorithmicbridge.com/feed",
     "type": "rss",
     "category": "news"
+  },
+  {
+    "id": "yt-two-minute-papers",
+    "name": "Two Minute Papers",
+    "url": "https://www.youtube.com/@TwoMinutePapers",
+    "type": "youtube",
+    "category": "research"
+  },
+  {
+    "id": "yt-ai-explained",
+    "name": "AI Explained",
+    "url": "https://www.youtube.com/@AiExplained-official",
+    "type": "youtube",
+    "category": "research"
+  },
+  {
+    "id": "yt-yannic-kilcher",
+    "name": "Yannic Kilcher",
+    "url": "https://www.youtube.com/@YannicKilcher",
+    "type": "youtube",
+    "category": "research"
   }
 ]

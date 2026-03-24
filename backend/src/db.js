@@ -87,6 +87,7 @@ export function upsertItem(item) {
     scored_at: item.scored_at || null,
     tags: item.tags || [], read: item.read ?? 0, saved: item.saved ?? 0, dismissed: item.dismissed ?? 0,
     feedback: item.feedback ?? null, feedback_boost: item.feedback_boost ?? 0,
+    transcript: item.transcript || null,
     embedding: item.embedding || null, cluster_id: item.cluster_id || null,
   };
   const idx = store.items.findIndex(i => i.id === n.id);
@@ -102,6 +103,7 @@ export function upsertItem(item) {
       scored_at: ex.scored_at || n.scored_at,
       tags: n.tags.length > 0 ? n.tags : ex.tags,
       affiliations: n.affiliations?.length > 0 ? n.affiliations : (ex.affiliations || []),
+      transcript: n.transcript || ex.transcript || null,
       embedding: n.embedding || ex.embedding || null,
       cluster_id: n.cluster_id ?? ex.cluster_id ?? null,
     };

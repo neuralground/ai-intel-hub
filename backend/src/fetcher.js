@@ -286,6 +286,22 @@ async function scrapeVideoMetadata(videoUrl) {
   }
 }
 
+// Extract auto-generated captions from a YouTube video. No API key needed.
+async function fetchTranscript(videoId) {
+  try {
+    const { YoutubeTranscript } = await import("youtube-transcript");
+    const segments = await YoutubeTranscript.fetchTranscript(videoId);
+    const text = segments.map(s => s.text).join(" ")
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+      .replace(/\[.*?\]/g, "") // remove [Music], [Applause] etc.
+      .replace(/\s+/g, " ").trim();
+    return text.slice(0, 5000) || null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchYouTubeFeed(feed) {
   const result = { items: [], error: null };
   try {
@@ -317,6 +333,24 @@ async function fetchYouTubeFeed(feed) {
       }
     }
 
+    // Fetch transcripts concurrently for top 10 videos
+    const transcriptMap = new Map();
+    const transcriptResults = await Promise.allSettled(
+      toScrape.map(async (entry) => {
+        const videoId = entry.id?.replace("yt:video:", "") || "";
+        if (!videoId) return null;
+        const transcript = await fetchTranscript(videoId);
+        return { videoId, transcript };
+      })
+    );
+    let transcriptCount = 0;
+    for (const r of transcriptResults) {
+      if (r.status === "fulfilled" && r.value?.transcript) {
+        transcriptMap.set(r.value.videoId, r.value.transcript);
+        transcriptCount++;
+      }
+    }
+
     for (const entry of entries) {
       const itemId = makeItemId(feed.id, entry);
       const published = entry.isoDate || entry.pubDate || new Date().toISOString();
@@ -324,14 +358,17 @@ async function fetchYouTubeFeed(feed) {
       const videoUrl = entry.link || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : "");
       const meta = metadataMap.get(videoUrl) || {};
 
-      // Build a rich summary: duration + views + description
+      // Build a rich summary: duration + views + transcript or description
       const parts = [];
       if (meta.durationMin) parts.push(`${meta.durationMin} min`);
       if (meta.views) parts.push(`${meta.views.toLocaleString()} views`);
       const prefix = parts.length > 0 ? `[${parts.join(" · ")}] ` : "";
+      const transcript = transcriptMap.get(videoId) || null;
       const description = meta.description || extractSummary(entry) || "";
-      const summary = description
-        ? `${prefix}${description}`
+      // Prefer transcript excerpt over description for the summary
+      const summaryBody = transcript ? transcript.slice(0, 600) : description;
+      const summary = summaryBody
+        ? `${prefix}${summaryBody}`
         : `${prefix}Video from ${channelName}`;
 
       // Merge scraped keywords with tag extraction
@@ -346,6 +383,7 @@ async function fetchYouTubeFeed(feed) {
         feedId: feed.id,
         title: (entry.title || "Untitled").trim(),
         summary,
+        transcript,
         url: videoUrl,
         author: entry.author || channelName,
         published,
@@ -355,7 +393,7 @@ async function fetchYouTubeFeed(feed) {
         tags,
       });
     }
-    console.log(`[Fetcher] YouTube ${feed.name}: ${result.items.length} videos (${metadataMap.size} with metadata)`);
+    console.log(`[Fetcher] YouTube ${feed.name}: ${result.items.length} videos (${metadataMap.size} with metadata, ${transcriptCount} with transcripts)`);
   } catch (err) {
     result.error = err.message;
     console.error(`[Fetcher] Error fetching YouTube ${feed.name}: ${err.message}`);
