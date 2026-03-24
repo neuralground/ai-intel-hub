@@ -949,17 +949,20 @@ ${relatedSection}`;
 
   const knownAffiliations = (item.affiliations && item.affiliations.length > 0)
     ? item.affiliations.join(", ") : null;
+  const pubDate = item.published ? new Date(item.published).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "Unknown";
   const headerInstruction = `IMPORTANT: Begin your response with EXACTLY this header. Use a blank line between each field so they render on separate lines in markdown:
 
 # ${item.title}
 
 **Authors:** ${item.author || "Unknown"}
 
+**Published:** ${pubDate}
+
 **Source:** [${item.url || "N/A"}](${item.url || "#"})
 
 **Affiliations:** ${knownAffiliations || "[extract from the paper — list the institutional affiliations of the authors as stated in the document, e.g. universities, companies, research labs]"}
 
-Then proceed with the analysis sections below.`;
+Do NOT restate the publication date, authors, or source in the Summary section — they are already in the header above. Proceed directly with the analysis sections.`;
 
   const contentNotice = contentSource === "full document"
     ? "You have the full text of this document. Analyze it thoroughly. Do NOT say you lack access, that content is limited, or that you are working from an abstract."
