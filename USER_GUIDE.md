@@ -347,9 +347,31 @@ To unsave an item, click the star icon again to toggle it off.
 
 ## Keyboard Shortcuts
 
+Navigate and act on items without reaching for the mouse. Press **?** at any time to see a shortcuts overlay in the app.
+
+### Item Navigation
+
 | Shortcut | Action |
 |----------|--------|
+| j / ↓ | Move focus to the next item |
+| k / ↑ | Move focus to the previous item |
+| Enter | Expand or collapse the focused item |
+| o | Open the focused item's source in a new browser tab |
+| s | Save or unsave the focused item |
+| d | Dismiss the focused item |
+
+The focused item is highlighted with a colored outline. Focus follows the visible page -- when you reach the last item, focus stays there (use the pagination controls to advance to the next page).
+
+### General
+
+| Shortcut | Action |
+|----------|--------|
+| / | Focus the search field (start typing immediately) |
+| Escape | Clear item focus, or blur the search field |
+| ? | Toggle the keyboard shortcuts help overlay |
 | Cmd+, (macOS) / Ctrl+, (Windows) | Open Settings |
+
+Keyboard shortcuts are disabled while typing in the search field or when a panel (Analysis, Sources, Settings, Saved) is open. Press Escape to return focus to the item list.
 
 ---
 

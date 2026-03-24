@@ -193,7 +193,7 @@ export default function App() {
   useEffect(() => {
     if (focusedIndex >= 0) {
       const el = document.querySelector(`[data-item-index="${focusedIndex}"]`);
-      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      if (el?.scrollIntoView) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }, [focusedIndex]);
 

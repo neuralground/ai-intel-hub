@@ -124,7 +124,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('AI INTELLIGENCE HUB')).toBeInTheDocument();
     });
-    const searchInput = screen.getByPlaceholderText('Search...');
+    const searchInput = screen.getByPlaceholderText('Search (/)...');
     expect(searchInput).toBeInTheDocument();
     fireEvent.change(searchInput, { target: { value: 'test query' } });
     expect(searchInput.value).toBe('test query');
@@ -208,5 +208,220 @@ describe('App', () => {
     await waitFor(() => {
       expect(api.refreshAll).toHaveBeenCalled();
     });
+  });
+});
+
+// ── Keyboard Navigation ──────────────────────────────────────────────────────
+
+const mockItems = [
+  {
+    id: 'item-1', title: 'First Item', summary: 'Summary one',
+    feed_id: 'f1', category: 'research', relevance: 0.9, url: 'https://example.com/1',
+    published: new Date().toISOString(), affiliations: [],
+    tags: [], read: 0, saved: 0, dismissed: 0, feedback: null,
+  },
+  {
+    id: 'item-2', title: 'Second Item', summary: 'Summary two',
+    feed_id: 'f1', category: 'research', relevance: 0.7, url: 'https://example.com/2',
+    published: new Date().toISOString(), affiliations: [],
+    tags: [], read: 0, saved: 0, dismissed: 0, feedback: null,
+  },
+  {
+    id: 'item-3', title: 'Third Item', summary: 'Summary three',
+    feed_id: 'f1', category: 'engineering', relevance: 0.6, url: 'https://example.com/3',
+    published: new Date().toISOString(), affiliations: [],
+    tags: [], read: 0, saved: 0, dismissed: 0, feedback: null,
+  },
+];
+
+function setupWithItems() {
+  api.getItems.mockResolvedValue({ items: mockItems, total: 3 });
+  api.getFeeds.mockResolvedValue([{ id: 'f1', name: 'Test Feed', active: true }]);
+  api.getStats.mockResolvedValue({ totalItems: 3, unread: 3, critical: 0, saved: 0, byCategory: [] });
+}
+
+describe('Keyboard Navigation', () => {
+  it('pressing j focuses the first item', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'j' });
+
+    const firstItemEl = screen.getByText('First Item').closest('[data-item-index]');
+    expect(firstItemEl).toHaveAttribute('data-item-index', '0');
+    expect(firstItemEl.style.outline).toContain('solid');
+  });
+
+  it('pressing j then k moves focus down then back up', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'j' }); // → index 0
+    fireEvent.keyDown(document, { key: 'j' }); // → index 1
+
+    const secondItem = screen.getByText('Second Item').closest('[data-item-index]');
+    expect(secondItem.style.outline).toContain('solid');
+
+    fireEvent.keyDown(document, { key: 'k' }); // → index 0
+
+    const firstItem = screen.getByText('First Item').closest('[data-item-index]');
+    expect(firstItem.style.outline).toContain('solid');
+    expect(secondItem.style.outline).toBe('none');
+  });
+
+  it('pressing k at the top does not go negative', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'j' }); // → index 0
+    fireEvent.keyDown(document, { key: 'k' }); // stays at 0
+    fireEvent.keyDown(document, { key: 'k' }); // stays at 0
+
+    const firstItem = screen.getByText('First Item').closest('[data-item-index]');
+    expect(firstItem.style.outline).toContain('solid');
+  });
+
+  it('pressing j at the bottom does not exceed item count', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    // Press j 10 times — should stop at last item (index 2)
+    for (let i = 0; i < 10; i++) fireEvent.keyDown(document, { key: 'j' });
+
+    const thirdItem = screen.getByText('Third Item').closest('[data-item-index]');
+    expect(thirdItem.style.outline).toContain('solid');
+  });
+
+  it('arrow keys work as alternatives to j/k', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    const firstItem = screen.getByText('First Item').closest('[data-item-index]');
+    expect(firstItem.style.outline).toContain('solid');
+
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    const secondItem = screen.getByText('Second Item').closest('[data-item-index]');
+    expect(secondItem.style.outline).toContain('solid');
+
+    fireEvent.keyDown(document, { key: 'ArrowUp' });
+    expect(firstItem.style.outline).toContain('solid');
+  });
+
+  it('Enter expands the focused item', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'j' }); // focus first item
+    fireEvent.keyDown(document, { key: 'Enter' }); // expand it
+
+    // Expanded item shows action buttons (Dismiss is always present)
+    await waitFor(() => {
+      expect(screen.getByText(/Dismiss/)).toBeInTheDocument();
+    });
+  });
+
+  it('s toggles save on focused item', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'j' }); // focus first item
+    fireEvent.keyDown(document, { key: 's' }); // save it
+
+    await waitFor(() => {
+      expect(api.toggleSave).toHaveBeenCalledWith('item-1', true);
+    });
+  });
+
+  it('d dismisses the focused item', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'j' });
+    fireEvent.keyDown(document, { key: 'd' });
+
+    await waitFor(() => {
+      expect(api.dismissItem).toHaveBeenCalledWith('item-1');
+    });
+  });
+
+  it('o opens focused item URL in new tab', async () => {
+    setupWithItems();
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {});
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'j' });
+    fireEvent.keyDown(document, { key: 'o' });
+
+    expect(openSpy).toHaveBeenCalledWith('https://example.com/1', '_blank');
+    openSpy.mockRestore();
+  });
+
+  it('/ focuses the search input', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: '/' });
+
+    const searchInput = screen.getByPlaceholderText('Search (/)...');
+    expect(document.activeElement).toBe(searchInput);
+  });
+
+  it('Escape clears focus', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: 'j' }); // focus first item
+    const firstItem = screen.getByText('First Item').closest('[data-item-index]');
+    expect(firstItem.style.outline).toContain('solid');
+
+    fireEvent.keyDown(document, { key: 'Escape' }); // clear focus
+
+    expect(firstItem.style.outline).toBe('none');
+  });
+
+  it('? toggles keyboard help modal', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    fireEvent.keyDown(document, { key: '?' });
+    expect(screen.getByText('Keyboard Shortcuts')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: '?' });
+    expect(screen.queryByText('Keyboard Shortcuts')).not.toBeInTheDocument();
+  });
+
+  it('shortcuts are suppressed when typing in search', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    const searchInput = screen.getByPlaceholderText('Search (/)...');
+    searchInput.focus();
+    fireEvent.keyDown(document, { key: 'j' });
+
+    // No item should be focused — j was typed into search
+    const firstItem = screen.getByText('First Item').closest('[data-item-index]');
+    expect(firstItem.style.outline).toBe('none');
+  });
+
+  it('shortcuts hint button appears when no panel is open and no focus', async () => {
+    setupWithItems();
+    render(React.createElement(App));
+    await waitFor(() => expect(screen.getByText('First Item')).toBeInTheDocument());
+
+    expect(screen.getByText('? shortcuts')).toBeInTheDocument();
   });
 });

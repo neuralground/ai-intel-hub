@@ -82,8 +82,8 @@ git clone <your-repo> ai-intel-hub && cd ai-intel-hub
 # Install all dependencies
 npm install && npm run install:all
 
-# Generate app icons (macOS: requires librsvg — brew install librsvg)
-npm run electron:icons
+# Icons are pre-built in build/ — no generation needed
+# (To regenerate after design changes, see ELECTRON.md)
 
 # Build for your platform
 npm run electron:build:mac    # → dist-electron/*.dmg
