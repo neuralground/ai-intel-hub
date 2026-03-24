@@ -75,22 +75,28 @@ npm run electron:start
 
 ## Building Installers
 
-### Step 1: Generate App Icons
+### Icons (pre-built)
+
+App icons are pre-built and committed to the repo — no generation step is needed for normal builds. The `build/` directory contains:
+
+- `build/icon.svg` — source template (gradient + delta symbol)
+- `build/icon.png` — 1024x1024 PNG (Linux, electron-builder source)
+- `build/icon.icns` — macOS icon bundle (generated via `sips` + `iconutil`)
+- `build/icon.ico` — Windows icon in proper ICO format with multi-size PNG entries (256/48/32/16, generated via `sharp`)
+
+**Regenerating icons** (only needed if the icon design changes):
 
 ```bash
-# macOS — requires librsvg
-brew install librsvg
+# Regenerate PNG + macOS .icns from SVG (requires librsvg on macOS)
+brew install librsvg    # if not already installed
 npm run electron:icons
+
+# Regenerate Windows .ico from PNG (requires sharp)
+npx -y sharp-cli -i build/icon.png -o build/icon.ico --ico
+# Or use Node.js with sharp directly — see commit 319c908 for the approach used
 ```
 
-This generates from the SVG template in `build/icon.svg`:
-- `build/icon.png` — 1024x1024 PNG (source for all platforms)
-- `build/icon.icns` — macOS icon bundle
-- electron-builder auto-generates `.ico` for Windows from the PNG
-
-If `rsvg-convert` is not available, create a 1024x1024 PNG manually at `build/icon.png`. electron-builder will convert it to platform formats automatically.
-
-### Step 2: Build
+### Build
 
 ```bash
 # macOS: DMG + ZIP (universal binary — Intel + Apple Silicon)
@@ -235,10 +241,11 @@ git push origin v1.1.0
 ```
 
 This triggers the workflow, which:
-1. Builds macOS universal DMG on `macos-latest`
-2. Builds Windows NSIS installer on `windows-latest`
-3. Uploads both as artifacts
-4. Creates a draft GitHub Release with both installers attached
+1. Builds macOS arm64 DMG + ZIP on `macos-latest`
+2. Builds macOS x64 DMG + ZIP on `macos-latest` (separate job)
+3. Builds Windows NSIS installer + portable EXE on `windows-latest`
+4. Uploads all as artifacts
+5. Creates a draft GitHub Release with all installers attached
 
 ### Manual Trigger
 

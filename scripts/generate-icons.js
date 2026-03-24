@@ -5,15 +5,16 @@
  * Creates a 1024x1024 PNG icon using an SVG template, then converts it to:
  *   - build/icon.png    (1024x1024 PNG — Linux, electron-builder source)
  *   - build/icon.icns   (macOS icon bundle)
- *   - build/icon.ico    (Windows icon)
  *
  * Requirements:
+ *   - rsvg-convert (via `brew install librsvg` on macOS) for SVG→PNG
  *   - macOS: `sips` (built-in) + `iconutil` (built-in) for .icns
- *   - Windows: requires a PNG-to-ICO tool or manual conversion
- *   - Cross-platform: can use `png2icons` npm package
+ *
+ * This script does NOT generate icon.ico (Windows). The .ico is generated
+ * separately using `sharp` and committed to the repo. See ELECTRON.md for
+ * regeneration instructions.
  *
  * If conversion tools are unavailable, the script creates the PNG only.
- * electron-builder will auto-convert PNG to platform-specific formats.
  */
 
 import fs from "fs";
