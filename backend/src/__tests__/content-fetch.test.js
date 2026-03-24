@@ -79,7 +79,7 @@ describe("arXiv content fetching", () => {
     await fetchArticleContent(stablePaper, 12000, (msg) => progressMessages.push(msg));
     expect(progressMessages.length).toBeGreaterThan(0);
     // Should include at least one fetch strategy message
-    expect(progressMessages.some(m => m.toLowerCase().includes("fetching"))).toBe(true);
+    expect(progressMessages.some(m => m.toLowerCase().includes("download") || m.toLowerCase().includes("fetch"))).toBe(true);
   }, 30000);
 
   it("respects maxChars limit", async () => {
