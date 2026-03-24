@@ -912,6 +912,7 @@ export async function generateItemSummaryStream(itemId, onChunk, signal, onFetch
   const contentSource = fetchedContent
     ? (fetchedContent.length > 2000 ? "full document" : "abstract/summary from source")
     : item.transcript ? "transcript" : "item summary only — full content could not be retrieved";
+  console.log(`[Summarize] Content source: "${contentSource}" (${content.length} chars) for: ${item.title?.slice(0, 60)}`);
 
   let relatedSection = "";
   if (clusterMates.length > 0) {
@@ -929,7 +930,7 @@ ${item.relevance_reason ? `Relevance reason: ${item.relevance_reason}` : ""}
 Tags: ${(item.tags || []).join(", ") || "none"}
 Affiliations: ${(item.affiliations || []).join(", ") || "none"}
 
-Content (${contentSource === "full document" ? "THE FULL DOCUMENT HAS BEEN RETRIEVED AND IS PROVIDED BELOW — base your analysis on the complete text, do not say you lack access to the full paper" : contentSource === "transcript" ? "video transcript provided" : "only the abstract/summary is available"}):
+FULL TEXT (${content.length} characters retrieved from source):
 ${content.slice(0, 10000)}
 ${relatedSection}`;
 
@@ -942,11 +943,18 @@ ${relatedSection}`;
 
 Then proceed with the analysis sections below.`;
 
+  const contentNotice = contentSource === "full document"
+    ? "You have been given the full text of this document. Analyze it thoroughly. NEVER say you lack access to the full paper, that content is limited, or that you are working from an abstract — you have the complete text."
+    : contentSource.includes("abstract")
+    ? "You have been given the abstract/summary retrieved from the source. Analyze what is available but note clearly that this is based on the abstract, not the full paper."
+    : "Only the feed summary is available — the full document could not be retrieved. Note this limitation clearly at the start of your analysis.";
+
   let systemPrompt, userMessage;
 
   if (itemType === "academic") {
     systemPrompt = `You are a senior research analyst with deep expertise in AI/ML, producing a rigorous academic paper review for: ${context}
-Write in markdown. Be thorough, nuanced, and scholarly in your analysis.`;
+Write in markdown. Be thorough, nuanced, and scholarly in your analysis.
+${contentNotice}`;
 
     userMessage = `Produce a detailed academic review of this paper:
 
@@ -979,7 +987,8 @@ Include a link to the original paper: [View paper](${item.url || "#"})`;
 
   } else if (itemType === "product") {
     systemPrompt = `You are a technology strategist and product analyst producing a summary for: ${context}
-Write in markdown. Focus on practical implications and strategic relevance.`;
+Write in markdown. Focus on practical implications and strategic relevance.
+${contentNotice}`;
 
     userMessage = `Produce a summary and analysis of this product/engineering announcement:
 
@@ -1006,7 +1015,8 @@ Include a link to the original: [View source](${item.url || "#"})`;
 
   } else {
     systemPrompt = `You are a senior intelligence analyst producing a summary for: ${context}
-Write in markdown. Focus on accuracy and strategic relevance.`;
+Write in markdown. Focus on accuracy and strategic relevance.
+${contentNotice}`;
 
     userMessage = `Produce a summary and analysis of this item:
 
